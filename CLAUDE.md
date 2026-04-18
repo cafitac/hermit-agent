@@ -20,8 +20,9 @@ pytest   # conftest.py auto-excludes Ollama-dependent tests
 ```
 
 ## Run Scripts
-- `./gateway.sh` — start Gateway server
-- `./mcp-server.sh` — start MCP server
+- `./bin/gateway.sh` — start Gateway server
+- `./bin/mcp-server.sh` — start MCP server
+- `./bin/hermit.sh` — standalone Hermit CLI/TUI
 
 ## Session Routine
 Plan first (`/ralplan`), verify before exit (`pytest tests/`), wrap with `/session-wrap`.

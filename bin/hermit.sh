@@ -18,7 +18,7 @@ case "$SCRIPT" in
   /*) ;;
   *) SCRIPT="$PWD/$SCRIPT" ;;
 esac
-HERMIT_DIR=$(CDPATH= cd -- "$(dirname -- "$SCRIPT")" && pwd)
+HERMIT_DIR=$(CDPATH= cd -- "$(dirname -- "$SCRIPT")/.." && pwd)
 
 VENV_DIR="${HERMIT_VENV_DIR:-$HERMIT_DIR/.venv}"
 

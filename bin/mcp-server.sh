@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # HermitAgent MCP Server startup script (Gateway proxy mode)
 # Usage:
-#   ./mcp-server.sh              # stdio mode (direct Claude Code connection)
-#   ./mcp-server.sh --http       # HTTP mode (Docker/LaunchAgent)
-#   ./mcp-server.sh --http 3737  # HTTP mode + custom port
-#   ./mcp-server.sh --stop       # Stop
-#   ./mcp-server.sh --status     # Check status
+#   ./bin/mcp-server.sh              # stdio mode (direct Claude Code connection)
+#   ./bin/mcp-server.sh --http       # HTTP mode (Docker/LaunchAgent)
+#   ./bin/mcp-server.sh --http 3737  # HTTP mode + custom port
+#   ./bin/mcp-server.sh --stop       # Stop
+#   ./bin/mcp-server.sh --status     # Check status
 
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 # ── Python path discovery ─────────────────────────────────────────────────
 # Override with HERMIT_VENV_DIR if your venv lives outside the project root.

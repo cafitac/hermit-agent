@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # HermitAgent AI Gateway startup script
 # Usage:
-#   ./gateway.sh              # foreground (log to terminal)
-#   ./gateway.sh --daemon     # background (nohup)
-#   ./gateway.sh --stop       # Stop
+#   ./bin/gateway.sh              # foreground (log to terminal)
+#   ./bin/gateway.sh --daemon     # background (nohup)
+#   ./bin/gateway.sh --stop       # Stop
 
 set -euo pipefail
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 
 # ── Python path discovery ─────────────────────────────────────────────────
 # Override with HERMIT_VENV_DIR if your venv lives outside the project root.

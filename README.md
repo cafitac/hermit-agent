@@ -91,7 +91,7 @@ What the installer does automatically:
 - **Prompts `Generate a random gateway API key now?`** If you accept, it applies the schema in `hermit_agent/gateway/migrations/001_initial.sql` to `~/.hermit/gateway.db`, inserts a freshly-generated `hermit-mcp-<random>` key, and patches `gateway_api_key` in your settings file.
 - **Prompts `Pull a local coding model via ollama?`** (skipped automatically if `ollama` is not installed). Accepting pulls `qwen3-coder:30b` (~18 GB).
 - Symlinks the four bundled `-hermit` slash commands into `~/.claude/commands/`.
-- **Prompts `Register Hermit MCP server in ~/.claude.json?`** with three choices: (a) project-specific, (b) user-wide, (c) skip. On accept, merges a `hermit-channel` stdio entry pointing at `./mcp-server.sh` into `~/.claude.json` (backup: `~/.claude.json.backup-<ts>`). Safe on re-runs — an identical entry is detected and left alone.
+- **Prompts `Register Hermit MCP server in ~/.claude.json?`** with three choices: (a) project-specific, (b) user-wide, (c) skip. On accept, merges a `hermit-channel` stdio entry pointing at `./bin/mcp-server.sh` into `~/.claude.json` (backup: `~/.claude.json.backup-<ts>`). Safe on re-runs — an identical entry is detected and left alone.
 - Prints any "Pending manual steps" at the end — e.g. a reminder to launch Claude Code with `--dangerously-load-development-channels server:hermit-channel` so the channel capability is enabled.
 
 Useful flags:
@@ -144,8 +144,8 @@ If you skipped the registration prompt (or want to adjust the scope later), see 
 ## Quick start — CC + Hermit (the recommended shape)
 
 ```bash
-./gateway.sh --daemon         # executor LLM relay, :8765
-./mcp-server.sh               # MCP stdio — register this in ~/.claude/settings.json
+./bin/gateway.sh --daemon         # executor LLM relay, :8765
+./bin/mcp-server.sh               # MCP stdio — register this in ~/.claude/settings.json
 ```
 
 Then in Claude Code:
@@ -159,8 +159,8 @@ Claude interviews you about the ticket, writes the plan, and delegates the imple
 ### Standalone (no Claude Code)
 
 ```bash
-./hermit.sh "fix the flaky test in tests/test_api.py"   # one-shot CLI
-./hermit.sh                                              # TUI (needs HERMIT_UI_DIR)
+./bin/hermit.sh "fix the flaky test in tests/test_api.py"   # one-shot CLI
+./bin/hermit.sh                                              # TUI (needs HERMIT_UI_DIR)
 ```
 
 ### Configuration

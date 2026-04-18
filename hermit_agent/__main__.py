@@ -36,7 +36,7 @@ def parse_args():
     parser.add_argument("--max-turns", type=int, default=50, help="Max agent turns (default: 50)")
     parser.add_argument("--max-context", type=int, default=32000, help="Max context tokens (default: 32000)")
     parser.add_argument("--fallback-model", default=None, help="Fallback model after 3 consecutive failures")
-    parser.add_argument("--api-key", default=os.environ.get("HERMIT_API_KEY"), help="Bearer token for ollama-proxy auth")
+    parser.add_argument("--api-key", default=os.environ.get("HERMIT_API_KEY"), help="Bearer token for the Hermit gateway (needed when the gateway is reached over ngrok or similar)")
     parser.add_argument(
         "--channel",
         choices=["cli", "none"],

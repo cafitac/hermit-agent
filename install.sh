@@ -184,7 +184,7 @@ done
 #     entry and skip (idempotent).
 if [ "$SKIP_MCP_REGISTER" -eq 0 ]; then
   CLAUDE_JSON="$HOME/.claude.json"
-  MCP_COMMAND="$PROJECT_DIR/mcp-server.sh"
+  MCP_COMMAND="$PROJECT_DIR/bin/mcp-server.sh"
   printf "\033[1;36m▸\033[0m Register Hermit MCP server in ~/.claude.json?\n"
   printf "   (a) Project-specific — which project path? [default: %s]\n" "$PROJECT_DIR"
   printf "   (b) User-wide (all Claude Code sessions)\n"
@@ -309,7 +309,7 @@ say "Sanity check — importing hermit_agent"
 "$VENV_PY" -c 'import hermit_agent; print("  version:", hermit_agent.__version__ if hasattr(hermit_agent, "__version__") else "dev")'
 
 say "Done. Next steps:"
-echo "  1. Start the gateway:  ./gateway.sh --daemon"
+echo "  1. Start the gateway:  ./bin/gateway.sh --daemon"
 echo "  2. Register MCP server in Claude Code — see docs/cc-setup.md"
 echo "  3. In Claude Code, try one of the bundled reference skills"
 echo "     (e.g. /feature-develop-hermit <task>), or read"

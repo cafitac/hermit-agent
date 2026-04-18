@@ -39,7 +39,7 @@ $HERMIT_CHECKPOINT_CONFIG  (env override)
 ### Auto-selection
 
 If `--strategy` is absent, query the gateway's active model
-(`./gateway.sh --status` or `GET /health → active_models[0]`) and look
+(`./bin/gateway.sh --status` or `GET /health → active_models[0]`) and look
 it up in the config's `model_strategy_map`:
 
 - Prefix or substring match (e.g. `glm-5.1` → `glm` → `aggressive`)
@@ -48,7 +48,7 @@ it up in the config's `model_strategy_map`:
 ## Prerequisites
 
 - `gh` CLI authenticated (or skip the GitHub steps if you don't use it)
-- Hermit gateway + MCP server running (`./gateway.sh --status`)
+- Hermit gateway + MCP server running (`./bin/gateway.sh --status`)
 - Current branch is the PR branch, or the worktree already exists
 
 ## Workflow

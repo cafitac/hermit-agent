@@ -6,7 +6,7 @@ This is the setup that makes `/feature-develop-hermit`, `/code-apply-hermit`, et
 
 ```bash
 ./install.sh          # one-shot: venv, deps, default settings
-./gateway.sh --daemon # FastAPI relay on :8765
+./bin/gateway.sh --daemon # FastAPI relay on :8765
 ```
 
 Verify:
@@ -50,7 +50,7 @@ Edit `~/.claude.json` and add under the project's `mcpServers` block:
       "mcpServers": {
         "hermit-channel": {
           "type": "stdio",
-          "command": "/absolute/path/to/hermit-agent/mcp-server.sh"
+          "command": "/absolute/path/to/hermit-agent/bin/mcp-server.sh"
         }
       }
     }
@@ -103,10 +103,10 @@ Claude will interview you briefly, write a plan, then delegate implementation to
 | Symptom | Fix |
 |---|---|
 | `/mcp` shows `hermit` as failed | Check `~/.hermit/gateway.log` for a 401 or connection refused; re-mint the API key |
-| `mcp__hermit__run_task` hangs | Gateway not running (`./gateway.sh --daemon`) or wrong `gateway_url` |
+| `mcp__hermit__run_task` hangs | Gateway not running (`./bin/gateway.sh --daemon`) or wrong `gateway_url` |
 | Claude Code shows no push notifications | Start Claude Code with `--dangerously-load-development-channels server:hermit-channel` |
 | Wrong model picked | `HERMIT_MODEL` env or the `model` key in settings — names containing `:` route to ollama, anything else goes through `llm_url` |
-| MCP server won't start | `./mcp-server.sh` alone should print `ready`; if it fails, run with `HERMIT_DEBUG=1` |
+| MCP server won't start | `./bin/mcp-server.sh` alone should print `ready`; if it fails, run with `HERMIT_DEBUG=1` |
 
 ## How tokens actually get saved
 

@@ -11,7 +11,7 @@ Examples: `123`, `123 P1 P2 P3`.
 
 - `--model <model_name>` — which executor model Hermit should run.
   Defaults to the gateway's active model
-  (`./gateway.sh --status` to see the current pick).
+  (`./bin/gateway.sh --status` to see the current pick).
 
 ## Prerequisites
 

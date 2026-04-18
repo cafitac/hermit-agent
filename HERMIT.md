@@ -26,6 +26,6 @@ hermit-agent/
 pytest tests/
 
 # Run via launcher (CLI or TUI)
-./hermit.sh "your message"    # single-message CLI mode
-./hermit.sh                    # interactive TUI (requires HERMIT_UI_DIR or co-located UI)
+./bin/hermit.sh "your message"    # single-message CLI mode
+./bin/hermit.sh                    # interactive TUI (requires HERMIT_UI_DIR or co-located UI)
 ```

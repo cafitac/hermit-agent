@@ -148,7 +148,7 @@ can emit notifications without re-plumbing the MCP context.
 See [docs/cc-setup.md](../cc-setup.md). The short version:
 
 1. Register one MCP server under the name `hermit-channel` in
-   `~/.claude.json`, pointing at `./mcp-server.sh`.
+   `~/.claude.json`, pointing at `./bin/mcp-server.sh`.
 2. Start Claude Code with
    `--dangerously-load-development-channels server:hermit-channel`
    so CC loads the `claude/channel` capability.
