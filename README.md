@@ -91,15 +91,19 @@ What the installer does automatically:
 - **Prompts `Generate a random gateway API key now?`** If you accept, it applies the schema in `hermit_agent/gateway/migrations/001_initial.sql` to `~/.hermit/gateway.db`, inserts a freshly-generated `hermit-mcp-<random>` key, and patches `gateway_api_key` in your settings file.
 - **Prompts `Pull a local coding model via ollama?`** (skipped automatically if `ollama` is not installed). Accepting pulls `qwen3-coder:30b` (~18 GB).
 - Symlinks the four bundled `-hermit` slash commands into `~/.claude/commands/`.
-- Prints any "Pending manual steps" at the end — e.g. if you declined the API key prompt, it reminds you to generate one later.
+- **Prompts `Register Hermit MCP server in ~/.claude.json?`** with three choices: (a) project-specific, (b) user-wide, (c) skip. On accept, merges a `hermit-channel` stdio entry pointing at `./mcp-server.sh` into `~/.claude.json` (backup: `~/.claude.json.backup-<ts>`). Safe on re-runs — an identical entry is detected and left alone.
+- Prints any "Pending manual steps" at the end — e.g. a reminder to launch Claude Code with `--dangerously-load-development-channels server:hermit-channel` so the channel capability is enabled.
 
 Useful flags:
 
 ```bash
-./install.sh --no-api-key  # skip the API key prompt (use placeholder)
-./install.sh --no-ollama   # skip the ollama prompt
-./install.sh --skip-venv   # reuse an existing .venv
+./install.sh --no-api-key        # skip the API key prompt (use placeholder)
+./install.sh --no-ollama         # skip the ollama prompt
+./install.sh --skip-venv         # reuse an existing .venv
+./install.sh --no-mcp-register   # skip the ~/.claude.json registration prompt
 ```
+
+Every prompt is idempotent: re-running the installer detects the existing API key, MCP entry, and ollama model and reports them unchanged instead of duplicating.
 
 ### Pick an executor LLM
 
@@ -129,7 +133,13 @@ Either re-run `./install.sh` (it detects a placeholder and re-prompts), or mint 
 
 ### Wire it into Claude Code
 
-`install.sh` only prepares the server side. Registering Hermit with Claude Code is a separate manual step — see [docs/cc-setup.md § 3](docs/cc-setup.md) for the `~/.claude.json` block and the `--dangerously-load-development-channels server:hermit-channel` flag.
+If you accepted the installer's MCP registration prompt, the `hermit-channel` stdio entry is already in `~/.claude.json` — the remaining piece is launching Claude Code with `--dangerously-load-development-channels server:hermit-channel` so the channel capability is enabled. A shell alias works well:
+
+```bash
+alias cc='claude --dangerously-load-development-channels server:hermit-channel'
+```
+
+If you skipped the registration prompt (or want to adjust the scope later), see [docs/cc-setup.md § 3](docs/cc-setup.md) for the exact `~/.claude.json` block.
 
 ## Quick start — CC + Hermit (the recommended shape)
 

@@ -12,6 +12,7 @@
 #   ./install.sh --no-ollama     # skip the ollama prompt
 #   ./install.sh --skip-venv     # reuse an existing .venv
 #   ./install.sh --no-api-key    # skip the gateway API key prompt
+#   ./install.sh --no-mcp-register # skip the ~/.claude.json MCP registration prompt
 
 set -euo pipefail
 
@@ -23,13 +24,15 @@ SETTINGS_FILE="$SETTINGS_DIR/settings.json"
 SKIP_OLLAMA=0
 SKIP_VENV=0
 SKIP_API_KEY=0
+SKIP_MCP_REGISTER=0
 for arg in "$@"; do
   case "$arg" in
     --no-ollama) SKIP_OLLAMA=1 ;;
     --skip-venv) SKIP_VENV=1 ;;
     --no-api-key) SKIP_API_KEY=1 ;;
+    --no-mcp-register) SKIP_MCP_REGISTER=1 ;;
     -h|--help)
-      sed -n '2,15p' "$0"
+      sed -n '2,16p' "$0"
       exit 0
       ;;
   esac
@@ -174,6 +177,132 @@ for f in "$PROJECT_DIR"/.claude/commands/*-hermit.md; do
     warn "Skipped $name — a regular file already exists at $target (not overwritten)."
   fi
 done
+
+# 7.5 optional: register the Hermit MCP server in ~/.claude.json so
+#     Claude Code picks it up automatically. We never overwrite existing
+#     non-Hermit entries, and re-runs of install.sh detect an identical
+#     entry and skip (idempotent).
+if [ "$SKIP_MCP_REGISTER" -eq 0 ]; then
+  CLAUDE_JSON="$HOME/.claude.json"
+  MCP_COMMAND="$PROJECT_DIR/mcp-server.sh"
+  printf "\033[1;36m▸\033[0m Register Hermit MCP server in ~/.claude.json?\n"
+  printf "   (a) Project-specific — which project path? [default: %s]\n" "$PROJECT_DIR"
+  printf "   (b) User-wide (all Claude Code sessions)\n"
+  printf "   (c) Skip (register manually later)\n"
+  printf "   [A/b/c]: "
+  read -r mcp_choice || mcp_choice="c"
+  mcp_choice="$(echo "${mcp_choice:-a}" | tr '[:upper:]' '[:lower:]')"
+
+  case "$mcp_choice" in
+    a|"")
+      printf "   Project path [%s]: " "$PROJECT_DIR"
+      read -r target_project || target_project=""
+      target_project="${target_project:-$PROJECT_DIR}"
+      # Normalize: expand ~ and make absolute
+      target_project="$(eval echo "$target_project")"
+      if [ ! -d "$target_project" ]; then
+        warn "Project path does not exist: $target_project — skipping."
+        PENDING_STEPS+=("Register Hermit MCP in ~/.claude.json manually (docs/cc-setup.md § 3).")
+      else
+        target_project="$(cd "$target_project" && pwd)"
+        python3 - "$CLAUDE_JSON" "$target_project" "$MCP_COMMAND" project <<'PYEOF'
+import json, os, shutil, sys
+from datetime import datetime
+
+path, target, command, scope = sys.argv[1:5]
+entry = {"type": "stdio", "command": command}
+name = "hermit-channel"
+
+if os.path.exists(path):
+    try:
+        data = json.load(open(path))
+    except json.JSONDecodeError:
+        print(f"FAIL: {path} is not valid JSON. Leave it alone.", file=sys.stderr)
+        sys.exit(2)
+    # backup
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    shutil.copyfile(path, f"{path}.backup-{ts}")
+else:
+    data = {}
+
+if not isinstance(data, dict):
+    print("FAIL: ~/.claude.json root is not an object.", file=sys.stderr)
+    sys.exit(2)
+
+projects = data.setdefault("projects", {})
+proj = projects.setdefault(target, {})
+mcp_servers = proj.setdefault("mcpServers", {})
+existing = mcp_servers.get(name)
+if existing == entry:
+    print("UNCHANGED")
+    sys.exit(0)
+
+mcp_servers[name] = entry
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+print("REGISTERED")
+PYEOF
+        rc=$?
+        if [ "$rc" = "0" ]; then
+          say "Hermit MCP registered at project scope: $target_project"
+        elif [ "$rc" = "2" ]; then
+          warn "Could not update $CLAUDE_JSON (see message above)."
+          PENDING_STEPS+=("Register Hermit MCP in $CLAUDE_JSON manually (docs/cc-setup.md § 3).")
+        fi
+      fi
+      ;;
+    b)
+      python3 - "$CLAUDE_JSON" "$MCP_COMMAND" <<'PYEOF'
+import json, os, shutil, sys
+from datetime import datetime
+
+path, command = sys.argv[1:3]
+entry = {"type": "stdio", "command": command}
+name = "hermit-channel"
+
+if os.path.exists(path):
+    try:
+        data = json.load(open(path))
+    except json.JSONDecodeError:
+        print(f"FAIL: {path} is not valid JSON.", file=sys.stderr)
+        sys.exit(2)
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
+    shutil.copyfile(path, f"{path}.backup-{ts}")
+else:
+    data = {}
+
+if not isinstance(data, dict):
+    print("FAIL: ~/.claude.json root is not an object.", file=sys.stderr)
+    sys.exit(2)
+
+mcp_servers = data.setdefault("mcpServers", {})
+existing = mcp_servers.get(name)
+if existing == entry:
+    print("UNCHANGED")
+    sys.exit(0)
+
+mcp_servers[name] = entry
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+    f.write("\n")
+print("REGISTERED")
+PYEOF
+      rc=$?
+      if [ "$rc" = "0" ]; then
+        say "Hermit MCP registered user-wide in $CLAUDE_JSON"
+      elif [ "$rc" = "2" ]; then
+        warn "Could not update $CLAUDE_JSON (see message above)."
+        PENDING_STEPS+=("Register Hermit MCP in $CLAUDE_JSON manually (docs/cc-setup.md § 3).")
+      fi
+      ;;
+    *)
+      PENDING_STEPS+=("Register Hermit MCP in ~/.claude.json (docs/cc-setup.md § 3).")
+      ;;
+  esac
+  # Dev-channels flag reminder — we do not edit shell rc files.
+  PENDING_STEPS+=("Start Claude Code with \`--dangerously-load-development-channels server:hermit-channel\` so CC loads the channel capability. (Shell alias example in README.)")
+fi
 
 # 8. sanity check
 say "Sanity check — importing hermit_agent"
