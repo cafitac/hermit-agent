@@ -81,22 +81,55 @@ The bundled skills still give Claude the full interview phase before delegating.
 ```bash
 git clone https://github.com/cafitac/hermit-agent.git
 cd hermit-agent
-./install.sh          # venv + deps + default ~/.hermit/settings.json
+./install.sh
 ```
 
-Pick at least one executor:
+What the installer does automatically:
+
+- Creates a project-local `.venv`, bootstraps `uv` inside it, and runs `uv pip install -e '.[test]'`.
+- Writes a default `~/.hermit/settings.json` (model `glm-5.1`, gateway URL `http://localhost:8765`, etc.).
+- **Prompts `Generate a random gateway API key now?`** If you accept, it applies the schema in `hermit_agent/gateway/migrations/001_initial.sql` to `~/.hermit/gateway.db`, inserts a freshly-generated `hermit-mcp-<random>` key, and patches `gateway_api_key` in your settings file.
+- **Prompts `Pull a local coding model via ollama?`** (skipped automatically if `ollama` is not installed). Accepting pulls `qwen3-coder:30b` (~18 GB).
+- Symlinks the four bundled `-hermit` slash commands into `~/.claude/commands/`.
+- Prints any "Pending manual steps" at the end — e.g. if you declined the API key prompt, it reminds you to generate one later.
+
+Useful flags:
 
 ```bash
-# Option A — local ollama, $0
-brew install ollama && ollama pull qwen3-coder:30b
-# (install.sh will prompt to run this for you)
-
-# Option B — z.ai Coding Plan (flat-rate)
-# Paste your key into ~/.hermit/settings.json:
-#   {"model": "glm-5.1", "gateway_api_key": "hermit-mcp-..."}
+./install.sh --no-api-key  # skip the API key prompt (use placeholder)
+./install.sh --no-ollama   # skip the ollama prompt
+./install.sh --skip-venv   # reuse an existing .venv
 ```
 
-See [docs/cc-setup.md](docs/cc-setup.md) for the full Claude Code MCP registration flow (minting the gateway API key, editing `~/.claude.json`, loading the dev channel).
+### Pick an executor LLM
+
+**ollama (local, $0)** — either accept the installer prompt, or:
+
+```bash
+brew install ollama
+ollama pull qwen3-coder:30b
+```
+
+**z.ai Coding Plan (flat-rate subscription)** — add your z.ai key to `~/.hermit/settings.json`:
+
+```json
+{
+  "gateway_url": "http://localhost:8765",
+  "gateway_api_key": "hermit-mcp-…",    // set by install.sh
+  "llm_api_key": "<your z.ai key>",     // you paste this
+  "model": "glm-5.1"
+}
+```
+
+Two keys, two layers: `gateway_api_key` authenticates Claude Code against the local Hermit gateway, `llm_api_key` authenticates the gateway against the upstream LLM provider.
+
+### Skipped the API key prompt?
+
+Either re-run `./install.sh` (it detects a placeholder and re-prompts), or mint one manually — see [docs/cc-setup.md § 2](docs/cc-setup.md). Hermit will refuse to run until `gateway_api_key` is a real value, not `CHANGE_ME_AFTER_FIRST_RUN`.
+
+### Wire it into Claude Code
+
+`install.sh` only prepares the server side. Registering Hermit with Claude Code is a separate manual step — see [docs/cc-setup.md § 3](docs/cc-setup.md) for the `~/.claude.json` block and the `--dangerously-load-development-channels server:hermit-channel` flag.
 
 ## Quick start — CC + Hermit (the recommended shape)
 

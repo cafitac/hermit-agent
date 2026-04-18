@@ -3,13 +3,15 @@
 #
 # Creates a project-local venv, bootstraps uv inside it, installs the
 # Python package via uv, writes a default ~/.hermit/settings.json if
-# missing, and (optionally) pulls a local ollama coding model.
+# missing, optionally mints a gateway API key in ~/.hermit/gateway.db,
+# and (optionally) pulls a local ollama coding model.
 # Idempotent — safe to re-run.
 #
 # Usage:
 #   ./install.sh                 # interactive
 #   ./install.sh --no-ollama     # skip the ollama prompt
 #   ./install.sh --skip-venv     # reuse an existing .venv
+#   ./install.sh --no-api-key    # skip the gateway API key prompt
 
 set -euo pipefail
 
@@ -20,16 +22,20 @@ SETTINGS_FILE="$SETTINGS_DIR/settings.json"
 
 SKIP_OLLAMA=0
 SKIP_VENV=0
+SKIP_API_KEY=0
 for arg in "$@"; do
   case "$arg" in
     --no-ollama) SKIP_OLLAMA=1 ;;
     --skip-venv) SKIP_VENV=1 ;;
+    --no-api-key) SKIP_API_KEY=1 ;;
     -h|--help)
-      sed -n '2,13p' "$0"
+      sed -n '2,15p' "$0"
       exit 0
       ;;
   esac
 done
+
+PENDING_STEPS=()
 
 say()  { printf "\033[1;36m▸\033[0m %s\n" "$*"; }
 warn() { printf "\033[1;33m!\033[0m %s\n" "$*" >&2; }
@@ -87,7 +93,53 @@ else
   "compact_instructions": ""
 }
 EOF
-  warn "Edit $SETTINGS_FILE — set gateway_api_key (see docs/cc-setup.md) and pick a model."
+fi
+
+# 5.5 optional: generate a random gateway API key, persist to gateway.db,
+#     and patch settings.json. The gateway DB schema lives in migrations/;
+#     we apply it with sqlite3 so the installer does not have to start the
+#     gateway first.
+if [ "$SKIP_API_KEY" -eq 0 ]; then
+  current_key=$(python3 -c "import json; print(json.load(open('$SETTINGS_FILE')).get('gateway_api_key',''))" 2>/dev/null || echo "")
+  if [ "$current_key" != "" ] && [ "$current_key" != "CHANGE_ME_AFTER_FIRST_RUN" ]; then
+    say "Gateway API key already set in settings.json — skipping generation."
+  elif ! command -v sqlite3 >/dev/null; then
+    warn "sqlite3 not on PATH — skipping API key generation."
+    PENDING_STEPS+=("Install sqlite3 and generate a gateway API key (see docs/cc-setup.md step 2).")
+  else
+    printf "\033[1;36m▸\033[0m Generate a random gateway API key now? [Y/n] "
+    read -r reply || reply="n"
+    if [[ -z "$reply" || "$reply" =~ ^[Yy]$ ]]; then
+      GATEWAY_DB="$SETTINGS_DIR/gateway.db"
+      MIGRATION_FILE="$PROJECT_DIR/hermit_agent/gateway/migrations/001_initial.sql"
+      if [ ! -f "$MIGRATION_FILE" ]; then
+        warn "Migration file not found at $MIGRATION_FILE — skipping."
+        PENDING_STEPS+=("Generate a gateway API key manually (see docs/cc-setup.md step 2).")
+      else
+        sqlite3 "$GATEWAY_DB" < "$MIGRATION_FILE" >/dev/null 2>&1 || true
+        NEW_KEY="hermit-mcp-$(openssl rand -base64 24 2>/dev/null | tr -dc 'A-Za-z0-9' | head -c 32)"
+        if [ -z "$NEW_KEY" ] || [ "$NEW_KEY" = "hermit-mcp-" ]; then
+          NEW_KEY="hermit-mcp-$(python3 -c 'import secrets,string; print("".join(secrets.choice(string.ascii_letters+string.digits) for _ in range(32)))')"
+        fi
+        if sqlite3 "$GATEWAY_DB" "INSERT INTO api_keys(api_key, user) VALUES ('$NEW_KEY', 'local');" >/dev/null 2>&1; then
+          python3 - "$SETTINGS_FILE" "$NEW_KEY" <<'PYEOF'
+import json, sys
+path, key = sys.argv[1], sys.argv[2]
+data = json.load(open(path))
+data["gateway_api_key"] = key
+open(path, "w").write(json.dumps(data, indent=2) + "\n")
+PYEOF
+          say "Generated API key and updated $SETTINGS_FILE."
+        else
+          warn "sqlite INSERT failed — leaving gateway_api_key unchanged."
+          PENDING_STEPS+=("Generate a gateway API key manually (see docs/cc-setup.md step 2).")
+        fi
+      fi
+    else
+      say "Skipped API key generation — using placeholder value."
+      PENDING_STEPS+=("Generate a gateway API key (docs/cc-setup.md step 2) and replace \"CHANGE_ME_AFTER_FIRST_RUN\" in $SETTINGS_FILE.")
+    fi
+  fi
 fi
 
 # 6. optional: ollama model pull. Keep this non-fatal — users with a
@@ -133,3 +185,11 @@ echo "  2. Register MCP server in Claude Code — see docs/cc-setup.md"
 echo "  3. In Claude Code, try one of the bundled reference skills"
 echo "     (e.g. /feature-develop-hermit <task>), or read"
 echo "     docs/hermit-variants.md and fork your own."
+
+if [ ${#PENDING_STEPS[@]} -gt 0 ]; then
+  echo
+  warn "Pending manual steps (install skipped these):"
+  for step in "${PENDING_STEPS[@]}"; do
+    echo "   - $step"
+  done
+fi
