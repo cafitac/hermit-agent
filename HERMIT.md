@@ -8,10 +8,11 @@
 ```
 hermit-agent/
 ├── hermit_agent/     # HermitAgent agent package (Python)
+├── bin/              # launchers: gateway.sh, mcp-server.sh, hermit.sh
 ├── tests/            # tests
 ├── src/              # Claude Code original source (read-only, modifications prohibited)
 ├── docs/             # architecture analysis docs
-├── GAP_TRACKER.md    # feature implementation status
+├── scripts/          # demo / benchmark / harness helpers
 └── pyproject.toml    # package configuration
 ```
 
