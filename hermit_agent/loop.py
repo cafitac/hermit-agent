@@ -469,6 +469,8 @@ class AgentLoop:
         system_prompt: str | None = None,
         on_tool_result: "Callable[[str, str, bool], None] | None" = None,
         response_language: str = "English",
+        seed_handoff: bool = True,
+        auto_wrap: bool = True,
     ):
         self.llm = llm
         self.emitter = AgentEventEmitter()
@@ -494,6 +496,8 @@ class AgentLoop:
         os.makedirs(self.scratchpad_dir, exist_ok=True)
         base_prompt = system_prompt if system_prompt is not None else _STATIC_SYSTEM_PROMPT
         self.response_language = response_language
+        self.seed_handoff = seed_handoff
+        self.auto_wrap = auto_wrap
         if response_language.strip().lower() in ("auto", "match", ""):
             lang_directive = "Respond in the same language the user used in their most recent message."
         else:
@@ -658,6 +662,7 @@ class AgentLoop:
                 cwd=self.cwd,
                 session_id=self.session_id,
                 modified_files=list(self.auto_agents.modified_files),
+                messages=self.messages,
             )
         except Exception:
             pass
@@ -977,6 +982,32 @@ class AgentLoop:
                 return classify_response
             # NEED_TOOLS -> proceed with full context + tools
 
+        # Seed injection — only on coding path (NEED_TOOLS), first turn, best-effort
+        if not self._context_injected:
+            seed_handoff = getattr(self, "seed_handoff", True)
+            env_disable = os.environ.get("HERMIT_SEED_HANDOFF", "1").lower() in ("0", "false", "no", "off")
+            if seed_handoff and not env_disable:
+                try:
+                    max_ctx = getattr(self.context_manager, "max_context_tokens", 32000)
+                except Exception:
+                    max_ctx = 32000
+                if max_ctx >= 16000:
+                    from pathlib import Path
+                    from .session_wrap import _pick_latest_handoff, _load_consumed, _mark_consumed
+                    handoffs_dir = Path(self.cwd) / ".hermit" / "handoffs"
+                    try:
+                        consumed = _load_consumed(handoffs_dir)
+                        handoff_path = _pick_latest_handoff(handoffs_dir, consumed)
+                        if handoff_path:
+                            content = handoff_path.read_text(encoding="utf-8", errors="replace")
+                            # Hard cap 2000 chars
+                            if len(content) > 2000:
+                                content = content[:2000] + "\n\n[...handoff truncated...]"
+                            user_message = f"<session-handoff>\n{content}\n</session-handoff>\n\n{user_message}"
+                            _mark_consumed(handoffs_dir, handoff_path.name)
+                    except Exception:
+                        pass  # seed is best-effort
+
         # Inject dynamic context on first turn (git status, etc. -- does not affect KV cache)
         if not self._context_injected and self._dynamic_context:
             user_message = f"<context>\n{self._dynamic_context}\n</context>\n\n{user_message}"
@@ -1073,7 +1104,30 @@ class AgentLoop:
                 token_count = estimate_messages_tokens(self.messages)
                 trigger_point = int(self.context_manager.threshold * self.context_manager.compact_start_ratio)
                 self.emitter.compact_notice(token_count, self.context_manager.threshold, compact_level, trigger_point=trigger_point)
+
+                # Hook: save fallback handoff BEFORE compact mutates messages (L2+)
+                _seed_enabled = os.environ.get("HERMIT_SEED_HANDOFF", "1").lower() not in ("0", "false", "no", "off")
+                if _seed_enabled and getattr(self, "seed_handoff", True) and compact_level >= 2:
+                    try:
+                        from .session_wrap import save_pre_compact_snapshot
+                        save_pre_compact_snapshot(self.messages, self.session_id, cwd=self.cwd)
+                    except Exception as _e:
+                        if hasattr(self.emitter, "log_exception"):
+                            self.emitter.log_exception(_e)
+
                 self.messages = self.context_manager.compact(self.messages)
+
+                # Hook: on Level 4, save rich handoff if LLM summary succeeded
+                if _seed_enabled and getattr(self, "seed_handoff", True) and compact_level == 4:
+                    try:
+                        first = self.messages[0] if self.messages else {}
+                        first_content = first.get("content", "")
+                        if isinstance(first_content, str) and first_content.startswith("[Conversation summary]"):
+                            from .session_wrap import build_handoff_rich, save_handoff
+                            rich = build_handoff_rich(self.messages, self.session_id)
+                            save_handoff(rich, session_id=self.session_id, cwd=self.cwd, prefix="auto-compact-")
+                    except Exception:
+                        pass  # Handoff is best-effort; compact still succeeded
                 # Re-inject project config after compression -- Claude Code's system-reminder pattern.
                 # Prevents HERMIT.md rules injected during skill execution from being lost to compression.
                 reminder_parts: list[str] = []

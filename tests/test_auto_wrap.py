@@ -1,8 +1,8 @@
 """Automatically save handoff on HermitAgent shutdown.
 
-Policy (intentionally opt-in — no change to existing behavior):
-- Default off (no-op without env var)
-- Activated only when `HERMIT_AUTO_WRAP=1`
+Policy (default ON):
+- Default on (saves unless explicitly opted out)
+- Opt-out: set `HERMIT_AUTO_WRAP` to one of {0, false, no, off}
 - Save only when modified_files exist (prevents handoff accumulation in empty sessions)
 
 Red-Green:
@@ -23,12 +23,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from hermit_agent.session_wrap import maybe_auto_wrap
 
 
-def test_no_action_when_env_var_missing():
+def test_saves_when_env_var_missing():
+    """Default ON: saves when HERMIT_AUTO_WRAP is unset."""
     with tempfile.TemporaryDirectory() as tmp:
         with patch.dict(os.environ, {}, clear=True):
             path = maybe_auto_wrap(cwd=tmp, session_id="s1", modified_files=["a.py"])
-        assert path is None
-        assert not (Path(tmp) / ".hermit" / "handoffs").exists()
+        assert path is not None
+        assert path.exists()
 
 
 def test_no_action_when_no_modified_files():
@@ -62,7 +63,15 @@ def test_env_var_truthy_values():
 
 def test_env_var_falsy_values():
     with tempfile.TemporaryDirectory() as tmp:
-        for val in ("0", "false", "no", "off", ""):
+        for val in ("0", "false", "no", "off"):
             with patch.dict(os.environ, {"HERMIT_AUTO_WRAP": val}):
                 path = maybe_auto_wrap(cwd=tmp, session_id="s", modified_files=["a.py"])
             assert path is None, f"expected no-op for value {val!r}"
+
+
+def test_saves_when_env_var_empty_string():
+    """Empty string is not in _FALSY — treated as default ON."""
+    with tempfile.TemporaryDirectory() as tmp:
+        with patch.dict(os.environ, {"HERMIT_AUTO_WRAP": ""}):
+            path = maybe_auto_wrap(cwd=tmp, session_id="s", modified_files=["a.py"])
+        assert path is not None

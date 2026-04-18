@@ -78,6 +78,8 @@ def _run_agent_sync(
         cwd=os.getcwd(),
         permission_mode=PermissionMode.ALLOW_READ,
         max_turns=max_turns,
+        seed_handoff=cfg.get("seed_handoff", True),
+        auto_wrap=cfg.get("auto_wrap", True),
     )
     if system_msg:
         agent.system_prompt = system_msg

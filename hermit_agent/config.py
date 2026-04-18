@@ -39,6 +39,8 @@ DEFAULTS: dict[str, Any] = {
     # Free-form extra directive appended to the compaction prompt. Empty string
     # disables injection — matches upstream "compact instructions" behaviour.
     "compact_instructions": "",
+    "seed_handoff": True,
+    "auto_wrap": True,
 }
 
 _KNOWN_KEYS = set(DEFAULTS)
@@ -53,6 +55,8 @@ _ENV_MAP = {
     "Z_AI_API_KEY": "llm_api_key",
     "HERMIT_LANG": "response_language",
     "HERMIT_COMPACT_INSTRUCTIONS": "compact_instructions",
+    "HERMIT_SEED_HANDOFF": "seed_handoff",
+    "HERMIT_AUTO_WRAP": "auto_wrap",
 }
 
 
@@ -100,6 +104,13 @@ def load_settings(cwd: str | None = None) -> dict[str, Any]:
         val = os.environ.get(env_key, "")
         if val:
             settings[setting_key] = val
+
+    # 4. Coerce boolean keys (env vars arrive as strings)
+    _BOOL_KEYS = {"seed_handoff", "auto_wrap"}
+    for k in _BOOL_KEYS:
+        val = settings.get(k)
+        if isinstance(val, str):
+            settings[k] = val.lower() not in {"0", "false", "no", "off"}
 
     return settings
 

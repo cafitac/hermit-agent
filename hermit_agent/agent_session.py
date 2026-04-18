@@ -83,8 +83,10 @@ class AgentSessionBase(ABC):
 
     def _setup_agent(self) -> None:
         """Common AgentLoop initialization."""
+        from .config import load_settings
         from .loop import AgentLoop
         tools = self._setup_tools()
+        _cfg = load_settings(cwd=self.cwd)
         self._agent = AgentLoop(
             llm=self.llm,
             tools=tools,
@@ -92,6 +94,8 @@ class AgentSessionBase(ABC):
             permission_mode=self.permission_mode,
             max_context_tokens=self.max_context_tokens,
             on_tool_result=self._make_progress_hook(),
+            seed_handoff=_cfg.get("seed_handoff", True),
+            auto_wrap=_cfg.get("auto_wrap", True),
         )
         self._agent.MAX_TURNS = self.max_turns
         self._setup_permission_checker()

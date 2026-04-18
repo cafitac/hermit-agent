@@ -287,7 +287,15 @@ def main() -> None:
     parser.add_argument("--base-url", default=None)
     parser.add_argument("--yolo", action="store_true")
     parser.add_argument("--max-context", type=int, default=None)
+    parser.add_argument(
+        "--no-seed",
+        action="store_true",
+        help="Disable auto-seed of previous-session handoff (sets HERMIT_SEED_HANDOFF=0)",
+    )
     args = parser.parse_args()
+
+    if args.no_seed:
+        os.environ["HERMIT_SEED_HANDOFF"] = "0"
 
     if not args.gateway_url or not args.gateway_api_key:
         sys.stderr.write(
