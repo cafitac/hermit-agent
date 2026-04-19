@@ -39,6 +39,7 @@ dependencies = [
     "html2text",
     "ddgs",
     "httpx",
+    "requests",
     # mcp pin: the channel-notification path uses the private
     # `ServerSession._write_stream.send(...)` attribute (see
     # .omc/plans/bun-channel-merge.md ADR). Pin the major version until
