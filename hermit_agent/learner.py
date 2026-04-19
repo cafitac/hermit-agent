@@ -22,11 +22,12 @@ from pathlib import Path
 # Constants
 # ---------------------------------------------------------------------------
 
-LEARNED_FEEDBACK_DIR = os.path.expanduser("~/.hermit/skills/learned-feedback")
-PENDING_DIR = os.path.join(LEARNED_FEEDBACK_DIR, "pending")
-APPROVED_DIR = os.path.join(LEARNED_FEEDBACK_DIR, "approved")
-DEPRECATED_DIR = os.path.join(LEARNED_FEEDBACK_DIR, "deprecated")
-AUTO_LEARNED_DIR = os.path.expanduser("~/.hermit/skills/auto-learned")
+# Deprecated: use Learner(root=cwd).learned_feedback_dir etc.
+LEARNED_FEEDBACK_DIR = ".hermit/skills/learned-feedback"
+PENDING_DIR = ".hermit/skills/learned-feedback/pending"
+APPROVED_DIR = ".hermit/skills/learned-feedback/approved"
+DEPRECATED_DIR = ".hermit/skills/learned-feedback/deprecated"
+AUTO_LEARNED_DIR = ".hermit/skills/auto-learned"
 
 # Deprecation criteria
 MIN_USES_BEFORE_EVAL = 5   # evaluate success_rate only after N or more uses
@@ -145,6 +146,7 @@ def _write_skill_file(path: str, meta: SkillMeta, body: str) -> None:
 
 
 def _skill_path(status: str, name: str) -> str:
+    """Legacy helper — prefer Learner._skill_path() for project-local paths."""
     dirs = {"pending": PENDING_DIR, "approved": APPROVED_DIR, "deprecated": DEPRECATED_DIR}
     return os.path.join(dirs.get(status, APPROVED_DIR), f"{name}.md")
 
@@ -194,10 +196,25 @@ class Learner:
     pending  → (pytest passes) → approved → (tracked during use) → deprecated
     """
 
-    def __init__(self, llm=None):
+    def __init__(self, llm=None, root: str | None = None):
         self.llm = llm
-        for d in (PENDING_DIR, APPROVED_DIR, DEPRECATED_DIR, AUTO_LEARNED_DIR):
+        self.root = root or os.getcwd()
+        self.learned_feedback_dir = os.path.join(self.root, ".hermit", "skills", "learned-feedback")
+        self.pending_dir = os.path.join(self.learned_feedback_dir, "pending")
+        self.approved_dir = os.path.join(self.learned_feedback_dir, "approved")
+        self.deprecated_dir = os.path.join(self.learned_feedback_dir, "deprecated")
+        self.auto_learned_dir = os.path.join(self.root, ".hermit", "skills", "auto-learned")
+        for d in (self.pending_dir, self.approved_dir, self.deprecated_dir, self.auto_learned_dir):
             os.makedirs(d, exist_ok=True)
+
+    def _skill_path(self, status: str, name: str) -> str:
+        dirs = {"pending": self.pending_dir, "approved": self.approved_dir, "deprecated": self.deprecated_dir}
+        return os.path.join(dirs.get(status, self.approved_dir), f"{name}.md")
+
+    @staticmethod
+    def should_run(session_kind: str | None) -> bool:
+        """Return False for gateway/MCP sessions."""
+        return session_kind not in ('gateway', 'mcp')
 
     # ------------------------------------------------------------------
     # Skill extraction (LLM-based)
@@ -355,7 +372,7 @@ If no clear reusable pattern exists, respond: NONE"""
             print(f"\033[31m  [Learner] skill blocked ({name}): {reason}\033[0m")
             return None
 
-        path = os.path.join(AUTO_LEARNED_DIR, f"{name}.md")
+        path = os.path.join(self.auto_learned_dir, f"{name}.md")
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_text(content)
         _add_hub_backlink(path, "_hub_auto")
@@ -372,7 +389,7 @@ If no clear reusable pattern exists, respond: NONE"""
             return None
 
         # skip if already in approved
-        if os.path.exists(_skill_path("approved", name)):
+        if os.path.exists(self._skill_path("approved", name)):
             return None
 
         meta = SkillMeta(
@@ -402,7 +419,7 @@ If no clear reusable pattern exists, respond: NONE"""
 {skill_data.get('bad_pattern', '')}
 ```
 """
-        path = _skill_path("pending", name)
+        path = self._skill_path("pending", name)
         _write_skill_file(path, meta, body)
         return path
 
@@ -445,8 +462,8 @@ If no clear reusable pattern exists, respond: NONE"""
 
     def _promote(self, name: str) -> None:
         """Move pending → approved."""
-        src = _skill_path("pending", name)
-        dst = _skill_path("approved", name)
+        src = self._skill_path("pending", name)
+        dst = self._skill_path("approved", name)
         if not os.path.exists(src):
             return
         parsed = _parse_skill_file(src)
@@ -481,10 +498,9 @@ If no clear reusable pattern exists, respond: NONE"""
         verify_results = verify_results or {}
 
         for name in skill_names:
-            # prefer approved; fall back to auto-learned
-            path = _skill_path("approved", name)
+            path = self._skill_path("approved", name)
             if not os.path.exists(path):
-                path = os.path.join(AUTO_LEARNED_DIR, f"{name}.md")
+                path = os.path.join(self.auto_learned_dir, f"{name}.md")
             if not os.path.exists(path):
                 continue
             parsed = _parse_skill_file(path)
@@ -518,9 +534,9 @@ If no clear reusable pattern exists, respond: NONE"""
         Called after task completion for skills that were injected but not reflected in the result.
         """
         for name in skill_names:
-            path = _skill_path("approved", name)
+            path = self._skill_path("approved", name)
             if not os.path.exists(path):
-                path = os.path.join(AUTO_LEARNED_DIR, f"{name}.md")
+                path = os.path.join(self.auto_learned_dir, f"{name}.md")
             if not os.path.exists(path):
                 continue
             parsed = _parse_skill_file(path)
@@ -542,7 +558,7 @@ If no clear reusable pattern exists, respond: NONE"""
           Stage 2 (deprecated): continued failures while in needs_review state → auto-deprecate
         """
         deprecated = []
-        targets = list(Path(APPROVED_DIR).glob("*.md")) + list(Path(AUTO_LEARNED_DIR).glob("*.md"))
+        targets = list(Path(self.approved_dir).glob("*.md")) + list(Path(self.auto_learned_dir).glob("*.md"))
         for p in targets:
             parsed = _parse_skill_file(str(p))
             if not parsed:
@@ -584,7 +600,7 @@ If no clear reusable pattern exists, respond: NONE"""
 
             if should_deprecate:
                 meta.status = "deprecated"
-                dst = _skill_path("deprecated", meta.name)
+                dst = self._skill_path("deprecated", meta.name)
                 _write_skill_file(dst, meta, body + f"\n\n<!-- deprecated: {reason} -->")
                 os.remove(str(p))
                 deprecated.append(meta.name)
@@ -620,9 +636,9 @@ If no clear reusable pattern exists, respond: NONE"""
         results: dict[str, bool | None] = {}
 
         for name in skill_names:
-            path = _skill_path("approved", name)
+            path = self._skill_path("approved", name)
             if not os.path.exists(path):
-                path = os.path.join(AUTO_LEARNED_DIR, f"{name}.md")
+                path = os.path.join(self.auto_learned_dir, f"{name}.md")
 
             meta = None
             if os.path.exists(path):
@@ -672,7 +688,7 @@ If no clear reusable pattern exists, respond: NONE"""
         Returns: [(name, body), ...]
         """
         result = []
-        search_dirs = [APPROVED_DIR, AUTO_LEARNED_DIR]
+        search_dirs = [self.approved_dir, self.auto_learned_dir]
         for search_dir in search_dirs:
             for p in Path(search_dir).glob("*.md"):
                 parsed = _parse_skill_file(str(p))
@@ -698,10 +714,10 @@ If no clear reusable pattern exists, respond: NONE"""
     # ------------------------------------------------------------------
 
     def status_report(self) -> str:
-        pending = len(list(Path(PENDING_DIR).glob("*.md")))
-        approved = list(Path(APPROVED_DIR).glob("*.md"))
-        deprecated = len(list(Path(DEPRECATED_DIR).glob("*.md")))
-        auto_learned = len(list(Path(AUTO_LEARNED_DIR).glob("*.md")))
+        pending = len(list(Path(self.pending_dir).glob("*.md")))
+        approved = list(Path(self.approved_dir).glob("*.md"))
+        deprecated = len(list(Path(self.deprecated_dir).glob("*.md")))
+        auto_learned = len(list(Path(self.auto_learned_dir).glob("*.md")))
 
         lines = [
             f"[Learned Skills] pending:{pending} approved:{len(approved)} "
@@ -715,9 +731,14 @@ If no clear reusable pattern exists, respond: NONE"""
                     f"  • {meta.name}: {meta.success_rate:.0%} "
                     f"({meta.success_count}✓/{meta.fail_count}✗, {meta.use_count}x)"
                 )
-        for p in Path(AUTO_LEARNED_DIR).glob("*.md"):
+        for p in Path(self.auto_learned_dir).glob("*.md"):
             parsed = _parse_skill_file(str(p))
             if parsed:
                 meta, _ = parsed
                 lines.append(f"  ✦ {meta.name} [auto] ({meta.use_count}x)")
         return "\n".join(lines)
+
+
+def learner_enabled_for(session_kind: str | None) -> bool:
+    """Module-level helper — returns False for gateway/MCP sessions."""
+    return Learner.should_run(session_kind)
