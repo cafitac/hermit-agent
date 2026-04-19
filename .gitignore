@@ -41,6 +41,7 @@ prd.json
 
 # Claude Code local-only settings (shared settings .claude/settings.json, rules/, skills/, hooks/ are committed)
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # Sensitive information (never commit)
 .env
