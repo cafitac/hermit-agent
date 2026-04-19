@@ -96,6 +96,7 @@ class AgentSessionBase(ABC):
             on_tool_result=self._make_progress_hook(),
             seed_handoff=_cfg.get("seed_handoff", True),
             auto_wrap=_cfg.get("auto_wrap", True),
+            session_kind=getattr(self, '_session_kind', None),
         )
         self._agent.MAX_TURNS = self.max_turns
         self._setup_permission_checker()
@@ -200,6 +201,7 @@ class MCPAgentSession(AgentSessionBase):
     """
 
     _session_mode = 'gateway'
+    _session_kind = 'gateway'
 
     def __init__(
         self,
@@ -312,6 +314,9 @@ class BridgeAgentSession(AgentSessionBase):
     - emitter event handler connection
     """
 
+    _session_mode = 'bridge'
+    _session_kind = 'tui'
+
     def __init__(
         self,
         llm: "LLMClientBase",
@@ -356,6 +361,8 @@ class BridgeAgentSession(AgentSessionBase):
 
     def _auto_pytest_and_learn(self, agent: "AgentLoop") -> None:
         """Run pytest + record learnings after skill completion. Executed in background."""
+        if getattr(self, '_session_kind', None) in ('gateway', 'mcp'):
+            return
         def _run():
             try:
                 from .learner import Learner
@@ -403,6 +410,9 @@ class CLIAgentSession(AgentSessionBase):
     - streaming: uses AgentLoop streaming mode
     - Self-learning included (verify_cmd only, no pytest unlike BridgeAgentSession)
     """
+
+    _session_mode = 'single'
+    _session_kind = 'cli'
 
     _session_mode = 'single'
 

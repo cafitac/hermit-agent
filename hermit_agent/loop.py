@@ -472,6 +472,7 @@ class AgentLoop:
         seed_handoff: bool = True,
         auto_wrap: bool = True,
         session_id: str | None = None,
+        session_kind: str | None = None,
     ):
         self.llm = llm
         self.emitter = AgentEventEmitter()
@@ -509,6 +510,7 @@ class AgentLoop:
         self.turn_count = 0
         self._tool_call_count = 0  # cumulative tool call count in session (self-learning trigger)
         self.session_id = session_id if session_id is not None else uuid.uuid4().hex[:12]
+        self.session_kind = session_kind
         self.streaming = True
         self.pending_user_messages: list[str] = []  # btw: queue of user messages received mid-run
         self._used_extended_tools = False  # whether extended tools were used (dynamic tool loading)
@@ -675,7 +677,9 @@ class AgentLoop:
 
                 kb = KBLearner(cwd=self.cwd, llm=self.llm)
                 pytest_passed = bool(getattr(self, "_last_test_passed", False))
-                kb.extract_and_save(self.messages, pytest_passed=pytest_passed)
+                facts = kb.extract_from_conversation(self.messages, pytest_passed=pytest_passed)
+                for fact in (facts or []):
+                    kb.save_pending(fact)
         except Exception:
             pass
 
@@ -1345,6 +1349,8 @@ class AgentLoop:
 
     def _maybe_trigger_learner(self) -> None:
         """Try self-learning skill extraction after completing a 5+ tool call task (background, non-blocking)."""
+        if self.session_kind in ('gateway', 'mcp'):
+            return
         if self._tool_call_count < 5:
             return
         count = self._tool_call_count
