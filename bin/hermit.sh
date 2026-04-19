@@ -34,6 +34,19 @@ fi
 VENV_PYTHON="$VENV_DIR/bin/python"
 VENV_SITE=$(ls -d "$VENV_DIR"/lib/python*/site-packages 2>/dev/null | head -1)
 
+# Auto-start the gateway if it isn't already listening. The standalone
+# CLI can run without it, but keeping the gateway warm means that if the
+# user hops into a Claude Code session next, MCP/run_task traffic lands
+# on something alive. Opt out with HERMIT_AUTO_GATEWAY=0.
+if [ "${HERMIT_AUTO_GATEWAY:-1}" != "0" ]; then
+  _GW_URL="${HERMIT_GATEWAY_URL:-http://127.0.0.1:8765}"
+  if ! curl -sf --max-time 1 "$_GW_URL/health" >/dev/null 2>&1; then
+    echo "hermit: gateway not reachable at $_GW_URL — starting daemon..." >&2
+    "$HERMIT_DIR/bin/gateway.sh" --daemon >/dev/null 2>&1 || \
+      echo "hermit: gateway --daemon failed (see ~/.hermit/gateway.log); continuing anyway." >&2
+  fi
+fi
+
 # UI location fallback order:
 #   1. $HERMIT_UI_DIR (explicit override)
 #   2. $HERMIT_DIR/hermit-ui (nested — monorepo layout)
