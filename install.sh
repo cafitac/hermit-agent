@@ -13,6 +13,7 @@
 #   ./install.sh --skip-venv     # reuse an existing .venv
 #   ./install.sh --no-api-key    # skip the gateway API key prompt
 #   ./install.sh --no-mcp-register # skip the ~/.claude.json MCP registration prompt
+#   ./install.sh --no-alias      # skip the shell-rc alias prompt
 
 set -euo pipefail
 
@@ -25,14 +26,17 @@ SKIP_OLLAMA=0
 SKIP_VENV=0
 SKIP_API_KEY=0
 SKIP_MCP_REGISTER=0
+SKIP_ALIAS=0
+MCP_REGISTERED_BY_INSTALLER=0
 for arg in "$@"; do
   case "$arg" in
     --no-ollama) SKIP_OLLAMA=1 ;;
     --skip-venv) SKIP_VENV=1 ;;
     --no-api-key) SKIP_API_KEY=1 ;;
     --no-mcp-register) SKIP_MCP_REGISTER=1 ;;
+    --no-alias) SKIP_ALIAS=1 ;;
     -h|--help)
-      sed -n '2,16p' "$0"
+      sed -n '2,17p' "$0"
       exit 0
       ;;
   esac
@@ -246,6 +250,7 @@ PYEOF
         rc=$?
         if [ "$rc" = "0" ]; then
           say "Hermit MCP registered at project scope: $target_project"
+          MCP_REGISTERED_BY_INSTALLER=1
         elif [ "$rc" = "2" ]; then
           warn "Could not update $CLAUDE_JSON (see message above)."
           PENDING_STEPS+=("Register Hermit MCP in $CLAUDE_JSON manually (docs/cc-setup.md § 3).")
@@ -291,6 +296,7 @@ PYEOF
       rc=$?
       if [ "$rc" = "0" ]; then
         say "Hermit MCP registered user-wide in $CLAUDE_JSON"
+        MCP_REGISTERED_BY_INSTALLER=1
       elif [ "$rc" = "2" ]; then
         warn "Could not update $CLAUDE_JSON (see message above)."
         PENDING_STEPS+=("Register Hermit MCP in $CLAUDE_JSON manually (docs/cc-setup.md § 3).")
@@ -304,16 +310,91 @@ PYEOF
   PENDING_STEPS+=("Start Claude Code with \`--dangerously-load-development-channels server:hermit-channel\` so CC loads the channel capability. (Shell alias example in README.)")
 fi
 
+# 7.75 optional: add `hermit` alias to the user's shell rc so they can
+#      run `hermit` from anywhere without worrying about the path moving.
+if [ "$SKIP_ALIAS" -eq 0 ]; then
+  HERMIT_BIN="$PROJECT_DIR/bin/hermit.sh"
+
+  # Detect shell rc: honour $SHELL first, then fall back by probing.
+  RC_FILE=""
+  case "${SHELL:-}" in
+    */zsh)  [ -f "$HOME/.zshrc" ]  && RC_FILE="$HOME/.zshrc" ;;
+    */bash) [ -f "$HOME/.bashrc" ] && RC_FILE="$HOME/.bashrc" ;;
+  esac
+  if [ -z "$RC_FILE" ]; then
+    for candidate in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.profile"; do
+      [ -f "$candidate" ] && { RC_FILE="$candidate"; break; }
+    done
+  fi
+
+  if [ -z "$RC_FILE" ]; then
+    PENDING_STEPS+=("No shell rc found — add manually: alias hermit=\"$HERMIT_BIN\"")
+  else
+    EXPECTED_LINE="alias hermit=\"$HERMIT_BIN\""
+    # Any existing `alias hermit=` line? (tolerant of quoting and whitespace.)
+    EXISTING_LINE="$(grep -n '^[[:space:]]*alias[[:space:]]\+hermit=' "$RC_FILE" | head -1 || true)"
+    if [ -n "$EXISTING_LINE" ]; then
+      EXISTING_TARGET="$(printf '%s' "$EXISTING_LINE" | sed -E 's/.*alias[[:space:]]+hermit=//' | tr -d "\"'" | sed -E 's/[[:space:]]+$//')"
+      if [ "$EXISTING_TARGET" = "$HERMIT_BIN" ]; then
+        say "hermit alias in $RC_FILE already points at $HERMIT_BIN — leaving it alone."
+      else
+        printf "\033[1;36m▸\033[0m hermit alias in %s points at %s.\n" "$RC_FILE" "$EXISTING_TARGET"
+        printf "   Update it to %s? [Y/n] " "$HERMIT_BIN"
+        read -r alias_reply || alias_reply="y"
+        alias_reply="$(echo "${alias_reply:-y}" | tr '[:upper:]' '[:lower:]')"
+        if [ "$alias_reply" = "y" ] || [ "$alias_reply" = "yes" ]; then
+          LINE_NO="${EXISTING_LINE%%:*}"
+          # Backup + in-place rewrite of just that line.
+          cp "$RC_FILE" "$RC_FILE.backup-$(date +%Y%m%d-%H%M%S)"
+          # Use a sed that is portable across BSD (macOS) and GNU.
+          python3 - "$RC_FILE" "$LINE_NO" "$EXPECTED_LINE" <<'PYEOF'
+import sys
+path, line_no, new_line = sys.argv[1], int(sys.argv[2]), sys.argv[3]
+with open(path, "r", encoding="utf-8") as f:
+    lines = f.readlines()
+lines[line_no - 1] = new_line + "\n"
+with open(path, "w", encoding="utf-8") as f:
+    f.writelines(lines)
+PYEOF
+          say "Updated hermit alias in $RC_FILE to $HERMIT_BIN"
+          PENDING_STEPS+=("Run \`source $RC_FILE\` (or restart your shell) to pick up the updated hermit alias.")
+        else
+          PENDING_STEPS+=("Existing hermit alias points at stale path — update manually: $EXPECTED_LINE")
+        fi
+      fi
+    else
+      printf "\033[1;36m▸\033[0m Add \`hermit\` alias to %s? [Y/n] " "$RC_FILE"
+      read -r alias_reply || alias_reply="y"
+      alias_reply="$(echo "${alias_reply:-y}" | tr '[:upper:]' '[:lower:]')"
+      if [ "$alias_reply" = "y" ] || [ "$alias_reply" = "yes" ]; then
+        {
+          printf "\n# Added by hermit-agent install.sh\n"
+          printf "%s\n" "$EXPECTED_LINE"
+        } >> "$RC_FILE"
+        say "Added hermit alias to $RC_FILE"
+        PENDING_STEPS+=("Run \`source $RC_FILE\` (or restart your shell) to pick up the hermit alias.")
+      else
+        PENDING_STEPS+=("Add manually: $EXPECTED_LINE")
+      fi
+    fi
+  fi
+fi
+
 # 8. sanity check
 say "Sanity check — importing hermit_agent"
 "$VENV_PY" -c 'import hermit_agent; print("  version:", hermit_agent.__version__ if hasattr(hermit_agent, "__version__") else "dev")'
 
 say "Done. Next steps:"
-echo "  1. Start the gateway:  ./bin/gateway.sh --daemon"
-echo "  2. Register MCP server in Claude Code — see docs/cc-setup.md"
-echo "  3. In Claude Code, try one of the bundled reference skills"
-echo "     (e.g. /feature-develop-hermit <task>), or read"
-echo "     docs/hermit-variants.md and fork your own."
+echo "  1. Start the gateway:  ./bin/gateway.sh --daemon  (auto-started by \`hermit\` too)"
+if [ "$MCP_REGISTERED_BY_INSTALLER" -eq 1 ]; then
+  echo "  2. Launch Claude Code with \`--dangerously-load-development-channels server:hermit-channel\`"
+  echo "     then try /feature-develop-hermit <task>. See docs/hermit-variants.md for more skills."
+else
+  echo "  2. Register MCP server in Claude Code — see docs/cc-setup.md"
+  echo "  3. In Claude Code, try one of the bundled reference skills"
+  echo "     (e.g. /feature-develop-hermit <task>), or read"
+  echo "     docs/hermit-variants.md and fork your own."
+fi
 
 if [ ${#PENDING_STEPS[@]} -gt 0 ]; then
   echo

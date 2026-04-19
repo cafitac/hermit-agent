@@ -92,7 +92,8 @@ What the installer does automatically:
 - **Prompts `Pull a local coding model via ollama?`** (skipped automatically if `ollama` is not installed). Accepting pulls `qwen3-coder:30b` (~18 GB).
 - Symlinks the four bundled `-hermit` slash commands into `~/.claude/commands/`.
 - **Prompts `Register Hermit MCP server in ~/.claude.json?`** with three choices: (a) project-specific, (b) user-wide, (c) skip. On accept, merges a `hermit-channel` stdio entry pointing at `./bin/mcp-server.sh` into `~/.claude.json` (backup: `~/.claude.json.backup-<ts>`). Safe on re-runs — an identical entry is detected and left alone.
-- Prints any "Pending manual steps" at the end — e.g. a reminder to launch Claude Code with `--dangerously-load-development-channels server:hermit-channel` so the channel capability is enabled.
+- **Prompts `Add hermit alias to <rc-file>?`** so you can run `hermit` from any shell. If an existing alias points to an old path (e.g. before the `bin/` move), the installer offers to update it.
+- Prints any "Pending manual steps" at the end — e.g. a reminder to launch Claude Code with `--dangerously-load-development-channels server:hermit-channel`.
 
 Useful flags:
 
@@ -101,9 +102,14 @@ Useful flags:
 ./install.sh --no-ollama         # skip the ollama prompt
 ./install.sh --skip-venv         # reuse an existing .venv
 ./install.sh --no-mcp-register   # skip the ~/.claude.json registration prompt
+./install.sh --no-alias          # skip the shell-rc alias prompt
 ```
 
-Every prompt is idempotent: re-running the installer detects the existing API key, MCP entry, and ollama model and reports them unchanged instead of duplicating.
+Every prompt is idempotent: re-running the installer detects the existing API key, MCP entry, alias, and ollama model and reports them unchanged instead of duplicating.
+
+To reverse everything: `./uninstall.sh` walks back through the same steps with per-item prompts (`--yes` accepts all; `--keep-data` leaves `~/.hermit/` alone). Ollama models are never deleted — remove manually with `ollama rm <model>`.
+
+The `hermit` launcher transparently starts the gateway daemon if it isn't already running (`HERMIT_AUTO_GATEWAY=0` opts out), so you never need to remember to run `./bin/gateway.sh --daemon` first.
 
 ### Pick an executor LLM
 
