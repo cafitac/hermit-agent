@@ -67,7 +67,7 @@ def _get_adapter(platform: str) -> ProviderAdapter:
             base_url=cfg.get("ollama_url", "http://localhost:11434/v1"),
         )
     elif platform == "z.ai":
-        llm_url = cfg.get("llm_url", "https://api.z.ai/api/paas/v4")
+        llm_url = cfg.get("llm_url", "https://api.z.ai/api/coding/paas/v4")
         adapter = ZaiAdapter(
             openai_base_url=llm_url,
             anthropic_base_url=_derive_anthropic_base_url(llm_url),

@@ -257,7 +257,7 @@ if [ "$LOCAL_MODEL_READY" -eq 0 ]; then
   if [ -z "$EXISTING_KEY" ]; then
     # Provider catalogue: "<slug>|<label>|<llm_url>|<default_model>"
     PROVIDERS=(
-      "zai|z.ai (GLM-5.1, Anthropic-compatible)|https://api.z.ai/api/paas/v4|glm-5.1"
+      "zai|z.ai (GLM-5.1, Anthropic-compatible)|https://api.z.ai/api/coding/paas/v4|glm-5.1"
     )
     printf "\033[1;36m▸\033[0m No local model configured. Pick an external provider?\n"
     idx=1
