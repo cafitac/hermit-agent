@@ -126,36 +126,49 @@ def _emit_alternatives(current_model: str) -> None:
     )
 
 
-# (a) External model needs an API key. `:` in the model name means
-#     ollama (local); anything else is a cloud provider.
-if model and ":" not in model and not api_key:
+gateway_api_key = cfg.get("gateway_api_key", "")
+
+# (a) CLI authenticates against the local gateway. Without
+#     gateway_api_key the request is rejected 401 before routing.
+if not gateway_api_key or gateway_api_key == "CHANGE_ME_AFTER_FIRST_RUN":
     print(
-        f"No API key configured for external model '{model}' ({llm_url}).\n"
-        f"  Fix: re-run ./install.sh and pick a provider, or add\n"
-        f"  \"llm_api_key\": \"...\" to ~/.hermit/settings.json."
+        "No gateway_api_key in ~/.hermit/settings.json.\n"
+        "  Fix: re-run ./install.sh (answer 'Y' to the API key prompt), or mint one manually (docs/cc-setup.md § 2)."
     )
-    _emit_alternatives(model)
     sys.exit(0)
 
-# (b) Ask the gateway whether it can actually reach the LLM.
+# (b) Ask the gateway whether it can actually reach the upstream LLM
+#     for the requested model. /health reports the aggregated LLM
+#     component as 'major' when the configured upstream is down OR
+#     when there is no credential for the resolved platform.
 try:
     r = urllib.request.urlopen(f"{gw_url}/health", timeout=2.0)
     health = json.loads(r.read())
 except Exception:
-    # Gateway itself not reachable — harmless for the standalone CLI;
-    # the run will fail with its own clearer error if needed.
+    # Gateway itself not reachable — the run will fail with a
+    # clearer connection error later.
     sys.exit(0)
 
 llm = health.get("components", {}).get("llm", {})
 if llm.get("status") == "major":
     err = llm.get("error") or "endpoint unreachable"
-    print(
-        f"Gateway reports the configured LLM is unreachable:\n"
-        f"  url:   {llm.get('url', llm_url)}\n"
-        f"  error: {err}\n"
-        f"  Fix: check llm_url / llm_api_key in ~/.hermit/settings.json,\n"
-        f"  mount the ollama model storage, or pick a different provider."
-    )
+    # External model path: if the gateway has no llm_api_key and the
+    # requested model routes there, say so plainly instead of hiding
+    # behind a generic 'endpoint unreachable'.
+    if model and ":" not in model and not api_key:
+        print(
+            f"Gateway has no upstream credential for external model '{model}'.\n"
+            f"  Fix: set \"llm_api_key\" in ~/.hermit/settings.json (this is the gateway's own key for z.ai / external provider),\n"
+            f"  or re-run ./install.sh and pick a provider at the prompt."
+        )
+    else:
+        print(
+            f"Gateway reports the configured LLM is unreachable:\n"
+            f"  url:   {llm.get('url', llm_url)}\n"
+            f"  error: {err}\n"
+            f"  Fix: check llm_url / llm_api_key (gateway-side) in ~/.hermit/settings.json,\n"
+            f"  mount the ollama model storage, or pick a different model."
+        )
     _emit_alternatives(model)
 PYEOF
 )"

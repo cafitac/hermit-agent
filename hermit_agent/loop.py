@@ -977,7 +977,12 @@ class AgentLoop:
         if not self._context_injected and not self.messages:
             classify_response = self._classify_with_minimal_call(user_message)
             if classify_response is not None:
-                # Simple question -> return classification response as-is
+                # Simple question -> return classification response as-is.
+                # Emit it via the streaming channel when streaming is on,
+                # so `hermit "..."` shows the answer. main() skips
+                # print(result) when streaming=True.
+                if getattr(self, "streaming", False):
+                    self.emitter.text(classify_response)
                 self._log_session_outcome()
                 return classify_response
             # NEED_TOOLS -> proceed with full context + tools
@@ -1513,6 +1518,10 @@ class AgentLoop:
                         self.emitter.status_update(reasoning=False)
                         _reasoning_started = False
                     full_content += chunk.text
+                    # Emit to the UI/terminal as tokens arrive — matches
+                    # Claude Code's `-p` streaming UX. The emitter's
+                    # terminal fallback prints with flush.
+                    self.emitter.text(chunk.text)
                 elif chunk.type == "tool_call_done" and chunk.tool_call:
                     tool_calls.append(chunk.tool_call)
 

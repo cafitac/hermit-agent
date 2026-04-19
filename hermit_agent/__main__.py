@@ -29,7 +29,7 @@ _GATEWAY_DEFAULT_URL = "http://localhost:8765/v1"
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="HermitAgent — Local LLM Coding Agent")
     parser.add_argument("message", nargs="?", help="Single message to process")
-    parser.add_argument("--model", default="qwen3-coder:30b", help="Model name (default: qwen3-coder:30b)")
+    parser.add_argument("--model", default=None, help="Model name. Default: HERMIT_MODEL env var, else 'model' in ~/.hermit/settings.json.")
     parser.add_argument(
         "--base-url",
         default=_GATEWAY_DEFAULT_URL,
@@ -45,7 +45,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-turns", type=int, default=50, help="Max agent turns (default: 50)")
     parser.add_argument("--max-context", type=int, default=32000, help="Max context tokens (default: 32000)")
     parser.add_argument("--fallback-model", default=None, help="Fallback model after 3 consecutive failures")
-    parser.add_argument("--api-key", default=os.environ.get("HERMIT_API_KEY"), help="Bearer token for the Hermit gateway (needed when the gateway is reached over ngrok or similar)")
+    parser.add_argument("--api-key", default=None, help="Bearer token for the Hermit gateway. Default: HERMIT_API_KEY env var, else gateway_api_key from ~/.hermit/settings.json.")
     parser.add_argument(
         "--channel",
         choices=["cli", "none"],
@@ -83,8 +83,30 @@ def run_single(agent: AgentLoop, message: str):
         sys.exit(1)
 
 
+def _resolve_api_key(args) -> str | None:
+    if args.api_key:
+        return args.api_key
+    env = os.environ.get("HERMIT_API_KEY")
+    if env:
+        return env
+    try:
+        from .config import load_settings
+        return load_settings(cwd=os.getcwd()).get("gateway_api_key") or None
+    except Exception:
+        return None
+
+
+def _resolve_model(args) -> str:
+    if args.model:
+        return args.model
+    from .config import load_settings
+    return load_settings(cwd=os.getcwd()).get("model") or "qwen3-coder:30b"
+
+
 def main():
     args = parse_args()
+    args.api_key = _resolve_api_key(args)
+    args.model = _resolve_model(args)
 
     if args.yolo:
         perm_mode = PermissionMode.YOLO
@@ -126,6 +148,11 @@ def main():
             result = session.run(args.message)
             if not session._agent or not session._agent.streaming:
                 print(result)
+            else:
+                # Streaming tokens are emitted with end="" for real-time
+                # display; terminate with a newline so shells don't paint
+                # the "missing newline" marker (zsh `%`, bash `↵`).
+                print()
             if session._agent and session._agent.messages:
                 try:
                     save_session(
