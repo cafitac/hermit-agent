@@ -192,6 +192,19 @@ async def query_usage(user: str | None, days: int = 7) -> list[dict]:
         return [dict(r) for r in await cursor.fetchall()]
 
 
+async def allowed_platforms(api_key: str) -> set[str]:
+    """Return the set of platform slugs this key is allowed to access.
+
+    Returns an empty set when the key has no rows (default-deny).
+    """
+    async with aiosqlite.connect(DB_PATH) as db:
+        rows = await db.execute_fetchall(
+            "SELECT platform_slug FROM api_key_platform WHERE api_key = ?",
+            (api_key,),
+        )
+        return {r[0] for r in rows}
+
+
 async def query_recent_tasks(limit: int = 20) -> list[dict]:
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row

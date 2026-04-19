@@ -118,3 +118,42 @@ Claude will interview you briefly, write a plan, then delegate implementation to
 ```
 
 The Hermit MCP server truncates long task results (head 2000 + tail 1000 by default, configurable via `check_task(full=true)` when Claude actually needs the full log), so the orchestrator session never balloons.
+
+## Alternative: bypass MCP and point Claude Code at the gateway directly
+
+The flow above (`CC → MCP hermit-channel → HermitAgent`) is the recommended integration, and `install.sh` configures exactly this. HermitAgent's gateway also exposes an Anthropic-native endpoint (`/anthropic/v1/messages`) that Claude Code can use directly — but this is an **alternative for advanced users**, not the sanctioned path.
+
+To use it, set (for example in `~/.claude/settings.json` or a per-project env override — `install.sh` does NOT set these for you):
+
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "http://localhost:8765/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "hermit-mcp-…",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-5.1",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-5.1-air",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5.1"
+  }
+}
+```
+
+The gateway routes the incoming Anthropic request by model name: `glm-*` is proxied to z.ai's `/api/anthropic` natively; a `name:tag` (ollama) model is translated via HermitAgent's Anthropic↔OpenAI translator.
+
+**Tradeoffs (important):**
+- (+) You get the Claude Code UI talking to your chosen upstream.
+- (−) Claude Code becomes just a chat UI — its built-in tools, permission modes, TodoWrite, and slash-command skills run against the upstream directly.
+- (−) HermitAgent itself is not in the loop — none of its skills, hooks, session-wrap, or MCP task-queue features fire. You are effectively using the gateway as a plain reverse proxy.
+- (−) Rate limits and token budgets follow the upstream (z.ai, ollama), not Anthropic's native quotas.
+- (−) The ollama-via-Anthropic path currently rejects `tool_use` / `tool_result` content blocks with HTTP 400 (text-only translator in v1).
+
+### OpenAI-SDK share via `/v1/chat/completions`
+
+The OpenAI-native path is the better option when you want to hand inference out over the network — e.g. sharing local ollama with a collaborator via ngrok. Mint a platform-scoped friend key (`./install.sh --generate-friend-key` issues a `local`-only token) and connect with any OpenAI-compatible client:
+
+```python
+from openai import OpenAI
+client = OpenAI(base_url="https://<ngrok>.ngrok.app/v1", api_key="<friend-key>")
+client.chat.completions.create(model="qwen3-coder:30b", messages=[...])
+```
+
+The friend key gets 403 if it asks for a non-local model (e.g. `glm-5.1`); operator keys reach every platform in `api_key_platform`.

@@ -169,6 +169,32 @@ Claude interviews you about the ticket, writes the plan, and delegates the imple
 ./bin/hermit.sh                                              # TUI (needs HERMIT_UI_DIR)
 ```
 
+### Two API endpoints
+
+The gateway exposes the same upstream providers behind two wire-format-specific paths. Model routing (`name:tag` → local ollama, `glm-*` → z.ai, extensible) is identical between them.
+
+- **`/v1/chat/completions` — OpenAI-native** (primary sharing surface)
+  Used by the `hermit` CLI, anything speaking the OpenAI SDK, and ngrok-exposed friends. Tier-gated via per-key platform ACL.
+  ```python
+  from openai import OpenAI
+  client = OpenAI(base_url="https://<ngrok>.ngrok.app/v1", api_key="<friend-key>")
+  ```
+
+- **`/anthropic/v1/messages` — Anthropic-native** *(alternative, not recommended as the Claude Code path)*
+  Enables pointing Claude Code at the gateway via `ANTHROPIC_BASE_URL=http://localhost:8765/anthropic` + `ANTHROPIC_AUTH_TOKEN=<gateway-key>`. z.ai is passthrough; ollama goes through a text-only Anthropic↔OpenAI translator (tool_use returns 400 in v1).
+  **Use only if you understand the tradeoff.** This bypasses HermitAgent entirely — Claude Code drives and your CC-side tools/permissions are all that apply. The recommended integration remains `CC → MCP (hermit-channel) → HermitAgent`, which `install.sh` already sets up.
+
+**Platform ACL (operator vs friend):**
+```
+Operator key (install.sh --generate-api-key, the default)
+  → platforms: local, z.ai, anthropic, codex   (full access)
+
+Friend key (install.sh --generate-friend-key)
+  → platforms: local                            (local ollama only; 403 for glm-*)
+```
+
+A key with zero rows in `api_key_platform` is denied everything (default-deny).
+
 ### Configuration
 
 Priority: CLI flag > env var > `<cwd>/.hermit/settings.json` > `~/.hermit/settings.json` > defaults.
@@ -186,6 +212,10 @@ Priority: CLI flag > env var > `<cwd>/.hermit/settings.json` > `~/.hermit/settin
 ```
 
 `ollama_max_loaded` is how many distinct models the gateway lets ollama hold in memory simultaneously — if a request targets a not-yet-loaded model while the budget is already full, the gateway returns **503** with `Retry-After` instead of letting ollama swap itself into an OOM. `external_max_concurrent` caps in-flight requests to external providers (z.ai, OpenAI, …); excess requests queue rather than fail. This is the replacement for the old `ollama-proxy` — the gateway itself is safe to expose (e.g. via ngrok).
+
+**Field semantics after the proxy refactor:**
+- `gateway_url` / `gateway_api_key` — **client-facing**. What the `hermit` CLI (and any other client) sends to authenticate against the local gateway.
+- `llm_api_key` / `llm_url` — **gateway-internal, upstream**. What the gateway itself uses to talk to z.ai (or any configured external provider) on your behalf. Clients never see or need these.
 
 ## Architecture (short version)
 

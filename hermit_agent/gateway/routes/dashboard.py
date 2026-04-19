@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
 
-from ..auth import get_current_user
+from ..auth import AuthContext, get_current_user
 from ..db import query_usage, query_recent_tasks, list_api_keys, create_api_key, delete_api_key, lookup_api_key
 from ..errors import ErrorCode, gateway_error
 
@@ -76,7 +76,7 @@ async def auth_login(
 async def api_usage(
     user: str | None = None,
     days: int = 7,
-    current_user: str = Depends(get_current_user),
+    auth: AuthContext = Depends(get_current_user),
 ):
     data = await query_usage(user=user, days=days)
     return {"data": data, "days": days, "user": user}
@@ -91,7 +91,7 @@ class ApiKeyRequest(BaseModel):
 
 
 @router.get("/api/keys")
-async def api_list_keys(current_user: str = Depends(get_current_user)):
+async def api_list_keys(auth: AuthContext = Depends(get_current_user)):
     keys = await list_api_keys()
     # Show only last 4 characters of api_key
     for k in keys:
@@ -102,13 +102,13 @@ async def api_list_keys(current_user: str = Depends(get_current_user)):
 
 
 @router.post("/api/keys")
-async def api_create_key(req: ApiKeyRequest, current_user: str = Depends(get_current_user)):
+async def api_create_key(req: ApiKeyRequest, auth: AuthContext = Depends(get_current_user)):
     await create_api_key(req.api_key, req.user)
     return {"status": "ok", "user": req.user}
 
 
 @router.delete("/api/keys/{api_key}")
-async def api_delete_key(api_key: str, current_user: str = Depends(get_current_user)):
+async def api_delete_key(api_key: str, auth: AuthContext = Depends(get_current_user)):
     deleted = await delete_api_key(api_key)
     if not deleted:
         raise gateway_error(ErrorCode.TASK_NOT_FOUND)

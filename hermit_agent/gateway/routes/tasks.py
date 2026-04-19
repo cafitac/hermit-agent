@@ -10,7 +10,7 @@ from .._singletons import sse_manager
 from ..task_store import (
     GatewayTaskState, acquire_worker_slot, create_task, get_task,
 )
-from ..auth import get_current_user
+from ..auth import AuthContext, get_current_user
 from ..errors import ErrorCode, gateway_error
 from ..task_runner import run_task_async
 
@@ -110,7 +110,7 @@ async def list_models():
 async def create_task_endpoint(
     req: TaskRequest,
     background: BackgroundTasks,
-    user: str = Depends(get_current_user),
+    auth: AuthContext = Depends(get_current_user),
 ):
     # Handle slash commands immediately (bypass AgentLoop)
     task_text = req.task.strip()
@@ -138,7 +138,7 @@ async def create_task_endpoint(
         task_id=task_id,
         task=req.task,
         cwd=cwd,
-        user=user,
+        user=auth.user,
         model=model,
         max_turns=req.max_turns,
         state=state,
@@ -150,7 +150,7 @@ async def create_task_endpoint(
 @router.get("/tasks/{task_id}/stream")
 async def stream_task(
     task_id: str,
-    user: str = Depends(get_current_user),
+    auth: AuthContext = Depends(get_current_user),
 ):
     state = get_task(task_id)
     if not state:
@@ -171,7 +171,7 @@ async def stream_task(
 async def reply_task(
     task_id: str,
     req: ReplyRequest,
-    user: str = Depends(get_current_user),
+    auth: AuthContext = Depends(get_current_user),
 ):
     from ..sse import SSEEvent
 
@@ -192,7 +192,7 @@ async def reply_task(
 @router.delete("/tasks/{task_id}")
 async def cancel_task(
     task_id: str,
-    user: str = Depends(get_current_user),
+    auth: AuthContext = Depends(get_current_user),
 ):
     state = get_task(task_id)
     if not state:
@@ -209,7 +209,7 @@ async def cancel_task(
 @router.get("/tasks/{task_id}")
 async def get_task_status(
     task_id: str,
-    user: str = Depends(get_current_user),
+    auth: AuthContext = Depends(get_current_user),
 ):
     state = get_task(task_id)
     if not state:

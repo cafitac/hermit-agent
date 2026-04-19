@@ -6,7 +6,10 @@ Usage:
   hermit_agent "message" --channel cli    # CLI channel (stdin/stdout, Standalone mode)
   hermit_agent --model qwen3:14b         # Specify model
   hermit_agent --yolo                    # Run without permission checks
-  hermit_agent --base-url http://server/v1  # Use remote Ollama API
+  hermit_agent --base-url http://server/v1  # Use remote Hermit gateway or custom endpoint
+
+# CLI default base-url targets the local Hermit gateway.
+# Bypass by setting HERMIT_LLM_URL or --base-url.
 """
 
 from __future__ import annotations
@@ -20,12 +23,18 @@ from .llm_client import create_llm_client
 from .permissions import PermissionMode
 from .session import save_session
 
+_GATEWAY_DEFAULT_URL = "http://localhost:8765/v1"
 
-def parse_args():
+
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="HermitAgent — Local LLM Coding Agent")
     parser.add_argument("message", nargs="?", help="Single message to process")
     parser.add_argument("--model", default="qwen3-coder:30b", help="Model name (default: qwen3-coder:30b)")
-    parser.add_argument("--base-url", default="http://localhost:11434/v1", help="API base URL")
+    parser.add_argument(
+        "--base-url",
+        default=_GATEWAY_DEFAULT_URL,
+        help="API base URL (default: local Hermit gateway at http://localhost:8765/v1)",
+    )
     parser.add_argument("--cwd", default=os.getcwd(), help="Working directory")
     parser.add_argument("--yolo", action="store_true", help="Skip all permission checks")
     parser.add_argument("--ask", action="store_true", help="Ask permission for every tool")
@@ -43,7 +52,12 @@ def parse_args():
         default="none",
         help="Channel interface (cli: stdin/stdout bidirectional, none: existing mode)"
     )
-    return parser.parse_args()
+    return parser
+
+
+def parse_args(argv=None):
+    """Parse CLI arguments. Pass argv list for testing; omit to read sys.argv."""
+    return _build_parser().parse_args(argv)
 
 
 def run_single(agent: AgentLoop, message: str):

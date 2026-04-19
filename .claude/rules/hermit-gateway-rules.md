@@ -5,7 +5,10 @@ Applies only to `hermit_agent/gateway/` package.
 ## Gateway Responsibilities (Included) [P1]
 
 - LLM relay (Ollama/z.ai/OpenAI compatible) — protocol conversion + routing.
-- Model routing: name-prefix-based provider selection.
+- Model routing: name-prefix-based provider selection via `hermit_agent/gateway/routing.py::resolve_platform` (`name:tag` → ollama, `glm-*` → z.ai; extensible).
+- **Two wire-format endpoints**: `/v1/chat/completions` (OpenAI-native) + `/anthropic/v1/messages` (Anthropic-native). Both go through the same provider adapter layer.
+- **Per-key platform ACL**: `platforms` + `api_key_platform` tables with default-deny semantics. A key with zero rows is forbidden from all platforms.
+- **Anthropic↔OpenAI text-only translator** (`hermit_agent/gateway/providers/anthropic_translator.py`) — bridges ollama (OpenAI-only) to the Anthropic endpoint. `tool_use` / `tool_result` → 400 in v1.
 - Token-saving classifier, 429 failover, prompt cache hints, rate limit, auth token management.
 
 ## Gateway Responsibilities (Excluded) [P1]

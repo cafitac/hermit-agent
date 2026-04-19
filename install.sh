@@ -8,12 +8,14 @@
 # Idempotent — safe to re-run.
 #
 # Usage:
-#   ./install.sh                 # interactive
-#   ./install.sh --no-ollama     # skip the ollama prompt
-#   ./install.sh --skip-venv     # reuse an existing .venv
-#   ./install.sh --no-api-key    # skip the gateway API key prompt
-#   ./install.sh --no-mcp-register # skip the ~/.claude.json MCP registration prompt
-#   ./install.sh --no-alias      # skip the shell-rc alias prompt
+#   ./install.sh                    # interactive
+#   ./install.sh --no-ollama        # skip the ollama prompt
+#   ./install.sh --skip-venv        # reuse an existing .venv
+#   ./install.sh --no-api-key       # skip the gateway API key prompt
+#   ./install.sh --no-mcp-register  # skip the ~/.claude.json MCP registration prompt
+#   ./install.sh --no-alias         # skip the shell-rc alias prompt
+#   ./install.sh --generate-friend-key  # mint a scoped friend key (local platform only)
+#   ./install.sh --dry-run          # only run the settings sanity check, then exit
 
 set -euo pipefail
 
@@ -28,6 +30,8 @@ SKIP_API_KEY=0
 SKIP_MCP_REGISTER=0
 SKIP_ALIAS=0
 MCP_REGISTERED_BY_INSTALLER=0
+GENERATE_FRIEND_KEY=0
+DRY_RUN=0
 for arg in "$@"; do
   case "$arg" in
     --no-ollama) SKIP_OLLAMA=1 ;;
@@ -35,8 +39,10 @@ for arg in "$@"; do
     --no-api-key) SKIP_API_KEY=1 ;;
     --no-mcp-register) SKIP_MCP_REGISTER=1 ;;
     --no-alias) SKIP_ALIAS=1 ;;
+    --generate-friend-key) GENERATE_FRIEND_KEY=1 ;;
+    --dry-run) DRY_RUN=1 ;;
     -h|--help)
-      sed -n '2,17p' "$0"
+      sed -n '2,19p' "$0"
       exit 0
       ;;
   esac
@@ -46,6 +52,39 @@ PENDING_STEPS=()
 
 say()  { printf "\033[1;36m▸\033[0m %s\n" "$*"; }
 warn() { printf "\033[1;33m!\033[0m %s\n" "$*" >&2; }
+
+# 0. Settings rename sanity check (US-008).
+#    Warn when an existing settings.json carries a non-empty llm_api_key but
+#    the platform ACL tables (migration 002) are not yet present — this is the
+#    shape from before the two-endpoint model was introduced.
+GATEWAY_DB_CHECK="$HOME/.hermit/gateway.db"
+SETTINGS_FILE_CHECK="$HOME/.hermit/settings.json"
+if [ -f "$SETTINGS_FILE_CHECK" ]; then
+  _existing_llm_key="$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$SETTINGS_FILE_CHECK'))
+    print(d.get('llm_api_key', ''))
+except Exception:
+    print('')
+" 2>/dev/null || true)"
+  if [ -n "$_existing_llm_key" ]; then
+    # Check whether migration 002 has been applied (api_key_platform table exists).
+    _acl_present=0
+    if [ -f "$GATEWAY_DB_CHECK" ] && command -v sqlite3 >/dev/null; then
+      _tbl="$(sqlite3 "$GATEWAY_DB_CHECK" "SELECT name FROM sqlite_master WHERE type='table' AND name='api_key_platform';" 2>/dev/null || true)"
+      [ -n "$_tbl" ] && _acl_present=1
+    fi
+    if [ "$_acl_present" -eq 0 ]; then
+      warn "Please review: your llm_api_key now represents the gateway's upstream provider credential (z.ai, etc.), not your client-facing gateway key. If you previously used llm_api_key for a different purpose, edit ~/.hermit/settings.json. See docs/cc-setup.md § new-two-endpoint-model."
+    fi
+  fi
+fi
+
+# --dry-run: only run the sanity check above, then exit.
+if [ "$DRY_RUN" -eq 1 ]; then
+  exit 0
+fi
 
 # 1. Python version check
 if ! command -v python3 >/dev/null; then
@@ -124,11 +163,26 @@ if [ "$SKIP_API_KEY" -eq 0 ]; then
         PENDING_STEPS+=("Generate a gateway API key manually (see docs/cc-setup.md step 2).")
       else
         sqlite3 "$GATEWAY_DB" < "$MIGRATION_FILE" >/dev/null 2>&1 || true
+        # Apply migration 002 (platform ACL tables) — idempotent via IF NOT EXISTS.
+        MIGRATION_002="$PROJECT_DIR/hermit_agent/gateway/migrations/002_platform_acl.sql"
+        if [ -f "$MIGRATION_002" ]; then
+          _acl_already=0
+          _tbl2="$(sqlite3 "$GATEWAY_DB" "SELECT name FROM sqlite_master WHERE type='table' AND name='api_key_platform';" 2>/dev/null || true)"
+          [ -n "$_tbl2" ] && _acl_already=1
+          if [ "$_acl_already" -eq 1 ]; then
+            say "Platform ACL tables already present — skipping migration 002."
+          else
+            sqlite3 "$GATEWAY_DB" < "$MIGRATION_002" >/dev/null 2>&1 || true
+            say "Applied migration 002 (platform ACL)."
+          fi
+        fi
         NEW_KEY="hermit-mcp-$(openssl rand -base64 24 2>/dev/null | tr -dc 'A-Za-z0-9' | head -c 32)"
         if [ -z "$NEW_KEY" ] || [ "$NEW_KEY" = "hermit-mcp-" ]; then
           NEW_KEY="hermit-mcp-$(python3 -c 'import secrets,string; print("".join(secrets.choice(string.ascii_letters+string.digits) for _ in range(32)))')"
         fi
         if sqlite3 "$GATEWAY_DB" "INSERT INTO api_keys(api_key, user) VALUES ('$NEW_KEY', 'local');" >/dev/null 2>&1; then
+          # Backfill platform access for the new operator key (all 4 platforms = full access).
+          sqlite3 "$GATEWAY_DB" "INSERT INTO api_key_platform SELECT '$NEW_KEY', slug FROM platforms ON CONFLICT DO NOTHING;" >/dev/null 2>&1 || true
           python3 - "$SETTINGS_FILE" "$NEW_KEY" <<'PYEOF'
 import json, sys
 path, key = sys.argv[1], sys.argv[2]
@@ -145,6 +199,34 @@ PYEOF
     else
       say "Skipped API key generation — using placeholder value."
       PENDING_STEPS+=("Generate a gateway API key (docs/cc-setup.md step 2) and replace \"CHANGE_ME_AFTER_FIRST_RUN\" in $SETTINGS_FILE.")
+    fi
+  fi
+fi
+
+# 5.6 optional: generate a scoped "friend key" (local platform only).
+#     Activated by --generate-friend-key flag. The key is NOT written to
+#     settings.json — it is printed for the operator to hand out.
+if [ "$GENERATE_FRIEND_KEY" -eq 1 ]; then
+  GATEWAY_DB="$SETTINGS_DIR/gateway.db"
+  MIGRATION_FILE="$PROJECT_DIR/hermit_agent/gateway/migrations/001_initial.sql"
+  MIGRATION_002="$PROJECT_DIR/hermit_agent/gateway/migrations/002_platform_acl.sql"
+  if ! command -v sqlite3 >/dev/null; then
+    warn "sqlite3 not on PATH — cannot generate friend key."
+  elif [ ! -f "$MIGRATION_FILE" ]; then
+    warn "Migration 001 not found — cannot generate friend key."
+  else
+    sqlite3 "$GATEWAY_DB" < "$MIGRATION_FILE" >/dev/null 2>&1 || true
+    [ -f "$MIGRATION_002" ] && sqlite3 "$GATEWAY_DB" < "$MIGRATION_002" >/dev/null 2>&1 || true
+    _ts="$(date +%s)"
+    FRIEND_KEY="hermit-friend-$(openssl rand -base64 24 2>/dev/null | tr -dc 'A-Za-z0-9' | head -c 32)"
+    if [ -z "$FRIEND_KEY" ] || [ "$FRIEND_KEY" = "hermit-friend-" ]; then
+      FRIEND_KEY="hermit-friend-$(python3 -c 'import secrets,string; print("".join(secrets.choice(string.ascii_letters+string.digits) for _ in range(32)))')"
+    fi
+    if sqlite3 "$GATEWAY_DB" "INSERT INTO api_keys(api_key, user) VALUES ('$FRIEND_KEY', 'friend-$_ts');" >/dev/null 2>&1; then
+      sqlite3 "$GATEWAY_DB" "INSERT INTO api_key_platform(api_key, platform_slug) VALUES ('$FRIEND_KEY', 'local') ON CONFLICT DO NOTHING;" >/dev/null 2>&1 || true
+      printf "FRIEND_KEY=%s\n" "$FRIEND_KEY"
+    else
+      warn "sqlite INSERT failed — could not generate friend key."
     fi
   fi
 fi
