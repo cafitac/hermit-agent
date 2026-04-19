@@ -54,6 +54,22 @@ confirm() {
 }
 
 # ──────────────────────────────────────────────────────────────
+# 0. Stop running daemons first (before we touch the venv —
+#    the start scripts cache import paths that break once .venv
+#    is gone, so stopping here keeps the rest of the run clean).
+# ──────────────────────────────────────────────────────────────
+if pgrep -f 'hermit_agent\.gateway' >/dev/null 2>&1; then
+  if confirm "Stop running gateway daemon?"; then
+    "$PROJECT_DIR/bin/gateway.sh" --stop || true
+  fi
+fi
+if pgrep -f 'hermit_agent\.mcp_server' >/dev/null 2>&1; then
+  if confirm "Stop running MCP server?"; then
+    "$PROJECT_DIR/bin/mcp-server.sh" --stop || true
+  fi
+fi
+
+# ──────────────────────────────────────────────────────────────
 # 1. ~/.hermit/ — settings, gateway.db, handoffs, logs
 # ──────────────────────────────────────────────────────────────
 if [ -d "$HERMIT_HOME" ]; then
@@ -214,20 +230,8 @@ PYEOF
   esac
 done
 
-# ──────────────────────────────────────────────────────────────
-# 6. Any running processes (gateway/mcp daemons)
-# ──────────────────────────────────────────────────────────────
-if pgrep -f 'hermit_agent\.gateway' >/dev/null 2>&1; then
-  if confirm "Stop running gateway daemon?"; then
-    "$PROJECT_DIR/bin/gateway.sh" --stop || true
-  fi
-fi
-if pgrep -f 'hermit_agent\.mcp_server' >/dev/null 2>&1; then
-  if confirm "Stop running MCP server?"; then
-    "$PROJECT_DIR/bin/mcp-server.sh" --stop || true
-  fi
-fi
-
 say "Uninstall complete."
 echo "  - Ollama models are untouched. Run \`ollama rm qwen3-coder:30b\` (or similar) to reclaim disk."
 echo "  - The repo itself is untouched. Delete the project directory manually if you no longer need it."
+echo "  - Your current shell has a cached \`hermit\` alias. Run \`unalias hermit\`"
+echo "    (or \`source ~/.zshrc\` / open a new shell) so it stops pointing at the old path."

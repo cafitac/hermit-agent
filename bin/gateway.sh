@@ -8,7 +8,47 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# ── Python path discovery ─────────────────────────────────────────────────
+# ── Settings (needed up front so --stop/--status work without Python) ──
+HOST="${HERMIT_GATEWAY_HOST:-0.0.0.0}"
+PORT="${HERMIT_GATEWAY_PORT:-8765}"
+LOG_DIR="$HOME/.hermit"
+LOG_FILE="$LOG_DIR/gateway.log"
+PID_FILE="$LOG_DIR/gateway.pid"
+
+mkdir -p "$LOG_DIR"
+
+# --stop / --status do not need a working Python install. Handle them
+# before the venv discovery so uninstall (which may have already removed
+# the venv) can still tell us to stop the daemon.
+case "${1:-}" in
+    --stop)
+        if [ -f "$PID_FILE" ]; then
+            PID=$(cat "$PID_FILE")
+            if kill "$PID" 2>/dev/null; then
+                echo "Gateway stopped (PID $PID)"
+                rm -f "$PID_FILE"
+            else
+                echo "Gateway not running (stale PID $PID)"
+                rm -f "$PID_FILE"
+            fi
+        else
+            PID=$(ps aux | grep '[h]ermit_agent.gateway' | awk '{print $2}' | head -1)
+            if [ -n "$PID" ]; then
+                kill "$PID"
+                echo "Gateway stopped (PID $PID)"
+            else
+                echo "Gateway not running"
+            fi
+        fi
+        exit 0
+        ;;
+    --status)
+        curl -s "http://127.0.0.1:$PORT/health" | python3 -m json.tool 2>/dev/null || echo "Gateway not responding"
+        exit 0
+        ;;
+esac
+
+# ── Python path discovery (start paths need this) ─────────────────────
 # Override with HERMIT_VENV_DIR if your venv lives outside the project root.
 PYTHON=""
 for candidate in \
@@ -28,39 +68,8 @@ if [ -z "$PYTHON" ]; then
     exit 1
 fi
 
-# ── Settings ──────────────────────────────────────────────────────────────
-HOST="${HERMIT_GATEWAY_HOST:-0.0.0.0}"
-PORT="${HERMIT_GATEWAY_PORT:-8765}"
-LOG_DIR="$HOME/.hermit"
-LOG_FILE="$LOG_DIR/gateway.log"
-PID_FILE="$LOG_DIR/gateway.pid"
-
-mkdir -p "$LOG_DIR"
-
-# ── Command handling ──────────────────────────────────────────────────────
+# ── Command handling (start paths only) ──────────────────────────────
 case "${1:-}" in
-    --stop)
-        if [ -f "$PID_FILE" ]; then
-            PID=$(cat "$PID_FILE")
-            if kill "$PID" 2>/dev/null; then
-                echo "Gateway stopped (PID $PID)"
-                rm -f "$PID_FILE"
-            else
-                echo "Gateway not running (stale PID $PID)"
-                rm -f "$PID_FILE"
-            fi
-        else
-            # No PID file; search for process
-            PID=$(ps aux | grep '[h]ermit_agent.gateway' | awk '{print $2}' | head -1)
-            if [ -n "$PID" ]; then
-                kill "$PID"
-                echo "Gateway stopped (PID $PID)"
-            else
-                echo "Gateway not running"
-            fi
-        fi
-        ;;
-
     --daemon)
         echo "Starting HermitAgent AI Gateway (daemon) on $HOST:$PORT ..."
         echo "  Python: $PYTHON"
@@ -78,10 +87,6 @@ case "${1:-}" in
             rm -f "$PID_FILE"
             exit 1
         fi
-        ;;
-
-    --status)
-        curl -s "http://127.0.0.1:$PORT/health" | python3 -m json.tool 2>/dev/null || echo "Gateway not responding"
         ;;
 
     *)
