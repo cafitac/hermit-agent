@@ -155,10 +155,10 @@ if [ -d "$CC_CMDS_DIR" ]; then
 fi
 
 # ──────────────────────────────────────────────────────────────
-# 4. ~/.claude.json — remove hermit-channel MCP entry
+# 4. ~/.claude.json — remove every Hermit MCP entry (current + legacy)
 # ──────────────────────────────────────────────────────────────
 if [ -f "$CLAUDE_JSON" ]; then
-  if confirm "Remove hermit-channel MCP entry from $CLAUDE_JSON?"; then
+  if confirm "Remove Hermit MCP entries (hermit-channel + legacy hermit) from $CLAUDE_JSON?"; then
     python3 - "$CLAUDE_JSON" <<'PYEOF'
 import json, os, shutil, sys
 from datetime import datetime
@@ -173,14 +173,20 @@ except Exception as e:
 ts = datetime.now().strftime("%Y%m%d-%H%M%S")
 shutil.copyfile(path, f"{path}.backup-{ts}")
 
-name = "hermit-channel"
-removed = False
+# Names to scrub:
+#   - "hermit-channel": current single-source-of-truth registration
+#   - "hermit": legacy HTTP entry left over from older installs that
+#     used a separate :3737 daemon (now consolidated into hermit-channel)
+NAMES = ("hermit-channel", "hermit")
+removed = []
 
 # Top-level mcpServers (user-wide).
 servers = data.get("mcpServers")
-if isinstance(servers, dict) and name in servers:
-    del servers[name]
-    removed = True
+if isinstance(servers, dict):
+    for name in NAMES:
+        if name in servers:
+            del servers[name]
+            removed.append(f"mcpServers.{name}")
     if not servers:
         del data["mcpServers"]
 
@@ -191,24 +197,27 @@ if isinstance(projects, dict):
         if not isinstance(proj, dict):
             continue
         pservers = proj.get("mcpServers")
-        if isinstance(pservers, dict) and name in pservers:
-            del pservers[name]
-            removed = True
-            if not pservers:
-                del proj["mcpServers"]
+        if not isinstance(pservers, dict):
+            continue
+        for name in NAMES:
+            if name in pservers:
+                del pservers[name]
+                removed.append(f"projects[{proj_name}].mcpServers.{name}")
+        if not pservers:
+            del proj["mcpServers"]
 
 if not removed:
-    print("UNCHANGED (no hermit-channel entry found)")
+    print("UNCHANGED (no hermit MCP entry found)")
     sys.exit(0)
 
 with open(path, "w") as f:
     json.dump(data, f, indent=2)
     f.write("\n")
-print("REMOVED")
+print("REMOVED: " + ", ".join(removed))
 PYEOF
     rc=$?
     if [ "$rc" = "0" ]; then
-      say "hermit-channel removed from $CLAUDE_JSON (backup written)"
+      say "Hermit MCP entries removed from $CLAUDE_JSON (backup written)"
     elif [ "$rc" = "2" ]; then
       warn "Could not parse $CLAUDE_JSON — leaving it alone."
     fi

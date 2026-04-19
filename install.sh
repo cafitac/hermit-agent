@@ -390,76 +390,17 @@ done
 if [ "$SKIP_MCP_REGISTER" -eq 0 ]; then
   CLAUDE_JSON="$HOME/.claude.json"
   MCP_COMMAND="$PROJECT_DIR/bin/mcp-server.sh"
-  printf "\033[1;36m▸\033[0m Register Hermit MCP server in ~/.claude.json?\n"
-  printf "   (a) Project-specific — which project path? [default: %s]\n" "$PROJECT_DIR"
-  printf "   (b) User-wide (all Claude Code sessions)\n"
-  printf "   (c) Skip (register manually later)\n"
-  printf "   [A/b/c]: "
-  read -r mcp_choice || mcp_choice="c"
-  mcp_choice="$(echo "${mcp_choice:-a}" | tr '[:upper:]' '[:lower:]')"
+  # Single MCP registration (user-wide, stdio). Channel notifications require
+  # stdio (HTTP cannot push to CC), and one user-wide entry covers every
+  # Claude Code session in any directory — no need to manage per-project
+  # entries or a separate HTTP daemon. Power users who really want a
+  # project-scoped or HTTP MCP can edit ~/.claude.json by hand later.
+  printf "\033[1;36m▸\033[0m Register Hermit MCP user-wide in ~/.claude.json? [Y/n]: "
+  read -r mcp_choice || mcp_choice="n"
+  mcp_choice="$(echo "${mcp_choice:-y}" | tr '[:upper:]' '[:lower:]')"
 
-  case "$mcp_choice" in
-    a|"")
-      printf "   Project path [%s]: " "$PROJECT_DIR"
-      read -r target_project || target_project=""
-      target_project="${target_project:-$PROJECT_DIR}"
-      # Normalize: expand ~ and make absolute
-      target_project="$(eval echo "$target_project")"
-      if [ ! -d "$target_project" ]; then
-        warn "Project path does not exist: $target_project — skipping."
-        PENDING_STEPS+=("Register Hermit MCP in ~/.claude.json manually (docs/cc-setup.md § 3).")
-      else
-        target_project="$(cd "$target_project" && pwd)"
-        python3 - "$CLAUDE_JSON" "$target_project" "$MCP_COMMAND" project <<'PYEOF'
-import json, os, shutil, sys
-from datetime import datetime
-
-path, target, command, scope = sys.argv[1:5]
-entry = {"type": "stdio", "command": command}
-name = "hermit-channel"
-
-if os.path.exists(path):
-    try:
-        data = json.load(open(path))
-    except json.JSONDecodeError:
-        print(f"FAIL: {path} is not valid JSON. Leave it alone.", file=sys.stderr)
-        sys.exit(2)
-    # backup
-    ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-    shutil.copyfile(path, f"{path}.backup-{ts}")
-else:
-    data = {}
-
-if not isinstance(data, dict):
-    print("FAIL: ~/.claude.json root is not an object.", file=sys.stderr)
-    sys.exit(2)
-
-projects = data.setdefault("projects", {})
-proj = projects.setdefault(target, {})
-mcp_servers = proj.setdefault("mcpServers", {})
-existing = mcp_servers.get(name)
-if existing == entry:
-    print("UNCHANGED")
-    sys.exit(0)
-
-mcp_servers[name] = entry
-with open(path, "w") as f:
-    json.dump(data, f, indent=2)
-    f.write("\n")
-print("REGISTERED")
-PYEOF
-        rc=$?
-        if [ "$rc" = "0" ]; then
-          say "Hermit MCP registered at project scope: $target_project"
-          MCP_REGISTERED_BY_INSTALLER=1
-        elif [ "$rc" = "2" ]; then
-          warn "Could not update $CLAUDE_JSON (see message above)."
-          PENDING_STEPS+=("Register Hermit MCP in $CLAUDE_JSON manually (docs/cc-setup.md § 3).")
-        fi
-      fi
-      ;;
-    b)
-      python3 - "$CLAUDE_JSON" "$MCP_COMMAND" <<'PYEOF'
+  if [ "$mcp_choice" = "y" ] || [ "$mcp_choice" = "yes" ]; then
+    python3 - "$CLAUDE_JSON" "$MCP_COMMAND" <<'PYEOF'
 import json, os, shutil, sys
 from datetime import datetime
 
@@ -482,9 +423,31 @@ if not isinstance(data, dict):
     print("FAIL: ~/.claude.json root is not an object.", file=sys.stderr)
     sys.exit(2)
 
+# Drop legacy duplicates that older installs may have left behind: the
+# project-scoped "hermit-channel" entry under projects/<path>/mcpServers,
+# and any HTTP "hermit" entry pointing at a local port. The user-wide
+# stdio entry below is now the single source of truth.
+removed_legacy = []
+for proj_path, proj in (data.get("projects") or {}).items():
+    pservers = proj.get("mcpServers")
+    if not isinstance(pservers, dict):
+        continue
+    for legacy_name in ("hermit-channel", "hermit"):
+        if legacy_name in pservers:
+            removed_legacy.append(f"projects[{proj_path}].mcpServers.{legacy_name}")
+            del pservers[legacy_name]
+    if not pservers:
+        proj.pop("mcpServers", None)
+
 mcp_servers = data.setdefault("mcpServers", {})
+# Also scrub a legacy user-wide "hermit" HTTP entry if present.
+if "hermit" in mcp_servers and isinstance(mcp_servers["hermit"], dict) \
+        and mcp_servers["hermit"].get("type") in ("http", "sse"):
+    removed_legacy.append("mcpServers.hermit (legacy HTTP)")
+    del mcp_servers["hermit"]
+
 existing = mcp_servers.get(name)
-if existing == entry:
+if existing == entry and not removed_legacy:
     print("UNCHANGED")
     sys.exit(0)
 
@@ -492,21 +455,22 @@ mcp_servers[name] = entry
 with open(path, "w") as f:
     json.dump(data, f, indent=2)
     f.write("\n")
-print("REGISTERED")
+if removed_legacy:
+    print("REGISTERED (cleaned legacy entries: " + ", ".join(removed_legacy) + ")")
+else:
+    print("REGISTERED")
 PYEOF
-      rc=$?
-      if [ "$rc" = "0" ]; then
-        say "Hermit MCP registered user-wide in $CLAUDE_JSON"
-        MCP_REGISTERED_BY_INSTALLER=1
-      elif [ "$rc" = "2" ]; then
-        warn "Could not update $CLAUDE_JSON (see message above)."
-        PENDING_STEPS+=("Register Hermit MCP in $CLAUDE_JSON manually (docs/cc-setup.md § 3).")
-      fi
-      ;;
-    *)
-      PENDING_STEPS+=("Register Hermit MCP in ~/.claude.json (docs/cc-setup.md § 3).")
-      ;;
-  esac
+    rc=$?
+    if [ "$rc" = "0" ]; then
+      say "Hermit MCP registered user-wide in $CLAUDE_JSON"
+      MCP_REGISTERED_BY_INSTALLER=1
+    elif [ "$rc" = "2" ]; then
+      warn "Could not update $CLAUDE_JSON (see message above)."
+      PENDING_STEPS+=("Register Hermit MCP in $CLAUDE_JSON manually (docs/cc-setup.md § 3).")
+    fi
+  else
+    PENDING_STEPS+=("Register Hermit MCP in ~/.claude.json (docs/cc-setup.md § 3).")
+  fi
   # Dev-channels flag reminder — we do not edit shell rc files.
   PENDING_STEPS+=("Start Claude Code with \`--dangerously-load-development-channels server:hermit-channel\` so CC loads the channel capability. (Shell alias example in README.)")
 fi

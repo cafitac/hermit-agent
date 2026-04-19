@@ -22,7 +22,6 @@ Log monitoring:
 from __future__ import annotations
 
 import asyncio
-import contextvars
 import json
 import os
 import sys
@@ -56,8 +55,22 @@ def _log(line: str) -> None:
 
 # ── stdio channel notification (native MCP) ───────────────────────────────────
 
-_current_session: contextvars.ContextVar = contextvars.ContextVar("_current_session", default=None)
-_current_loop: contextvars.ContextVar = contextvars.ContextVar("_current_loop", default=None)
+# Module-level globals (NOT ContextVar) so notifications fired from the SSE
+# bridge background thread can find the active session/loop. ContextVar values
+# do NOT propagate to threads spawned outside the asyncio task context, which
+# silently dropped every channel notification before this fix.
+_current_session = None  # type: ignore[assignment]
+_current_loop = None     # type: ignore[assignment]
+_session_lock = threading.Lock()
+
+
+def _set_active_session(session, loop) -> None:
+    """Record the active stdio MCP session + asyncio loop for cross-thread
+    channel notifications. Called from every MCP tool handler."""
+    global _current_session, _current_loop
+    with _session_lock:
+        _current_session = session
+        _current_loop = loop
 
 
 async def _send_channel_notification(session, content: str, meta: dict) -> None:
@@ -72,21 +85,26 @@ async def _send_channel_notification(session, content: str, meta: dict) -> None:
         method="notifications/claude/channel",
         params={"content": content, "meta": meta},
     )
+    _log(f"[channel] -> write_stream.send type={meta.get('kind')} task={str(meta.get('task_id',''))[:8]}")
     await session._write_stream.send(SessionMessage(message=JSONRPCMessage(notif)))
+    _log(f"[channel] <- write_stream.send ok type={meta.get('kind')}")
 
 
 def _fire_channel_notification_sync(content: str, meta: dict) -> None:
-    session = _current_session.get()
-    loop = _current_loop.get()
+    with _session_lock:
+        session = _current_session
+        loop = _current_loop
     if session is None or loop is None:
         _log("[channel] no active session/loop — notification dropped")
         return
+    _log(f"[channel] scheduling coroutine type={meta.get('kind')} task={str(meta.get('task_id',''))[:8]}")
     try:
         fut = asyncio.run_coroutine_threadsafe(
             _send_channel_notification(session, content, meta),
             loop,
         )
         fut.result(timeout=5)
+        _log(f"[channel] coroutine completed type={meta.get('kind')}")
     except Exception as e:
         _log(f"[channel] send failed: {e}")
 
@@ -94,55 +112,43 @@ def _fire_channel_notification_sync(content: str, meta: dict) -> None:
 _NOTIFY_TIMEOUT = 10       # seconds
 
 
+# meta keys policy:
+#   - "source": NEVER include — CC auto-sets <channel source="..."> from the
+#     registered MCP server name (so notifications/claude/channel from this
+#     server appear as <channel source="hermit-channel">). Including a custom
+#     "source" field collided with that auto-tag and CC silently dropped the
+#     frame (root cause of the original "channel not delivering" bug, paired
+#     with the contextvar leak fix above).
+#   - "type": renamed to "kind" — "type" was treated as a reserved field.
+#   - The remaining keys (task_id, kind, question/options/message) become
+#     XML attributes on the <channel> tag in the Claude message stream.
+
 def _notify_channel(task_id: str, question: str, options: list[str]) -> None:
-    content = f"<question>{question}</question>"
-    meta = {
-        "task_id": task_id,
-        "type": "waiting",
-        "source": "hermit",
-        "question": question,
-        "options": options,
-    }
-    _fire_channel_notification_sync(content, meta)
+    meta = {"task_id": task_id, "kind": "waiting"}
+    if options:
+        meta["options"] = ",".join(options)
+    _fire_channel_notification_sync(question, meta)
 
 
 def _notify_done(task_id: str, message: str | None = None) -> None:
-    content = f"<done>{message or ''}</done>"
-    meta = {
-        "task_id": task_id,
-        "type": "done",
-        "source": "hermit",
-        "message": message,
-    }
-    _fire_channel_notification_sync(content, meta)
+    meta = {"task_id": task_id, "kind": "done"}
+    _fire_channel_notification_sync(message or "task done", meta)
 
 
 def _notify_reply(task_id: str, message: str) -> None:
-    content = f"<reply>{message}</reply>"
-    meta = {
-        "task_id": task_id,
-        "type": "reply",
-        "source": "hermit",
-        "message": message,
-    }
-    _fire_channel_notification_sync(content, meta)
+    meta = {"task_id": task_id, "kind": "reply"}
+    _fire_channel_notification_sync(message, meta)
 
 
 def _notify_error(task_id: str, message: str) -> None:
-    content = f"<error>{message}</error>"
-    meta = {
-        "task_id": task_id,
-        "type": "error",
-        "source": "hermit",
-        "message": message,
-    }
-    _fire_channel_notification_sync(content, meta)
+    meta = {"task_id": task_id, "kind": "error"}
+    _fire_channel_notification_sync(message, meta)
 
 
 def _notify_running(task_id: str) -> None:
     _fire_channel_notification_sync(
-        "<running/>",
-        {"task_id": task_id, "type": "running", "source": "hermit"},
+        "task running",
+        {"task_id": task_id, "kind": "running"},
     )
 
 
@@ -544,8 +550,7 @@ def _build_mcp_app(host: str = "0.0.0.0", port: int = 3737) -> "FastMCP":
         """Register a task_id. Stdio per-session makes per-port routing unnecessary;
         this exists for backward compatibility with .claude/commands/*-hermit.md."""
         _log(f"[register_task] task_id={task_id[:8]}")
-        _current_session.set(mcp_app.get_context().session)
-        _current_loop.set(asyncio.get_running_loop())
+        _set_active_session(mcp_app.get_context().session, asyncio.get_running_loop())
         return f"registered:{task_id}"
 
     @mcp_app.tool(description=TOOLS[0]["description"])
@@ -557,8 +562,7 @@ def _build_mcp_app(host: str = "0.0.0.0", port: int = 3737) -> "FastMCP":
         background: bool = False,
     ) -> str:
         """Run a coding task using a local LLM (delegated to Gateway)."""
-        _current_session.set(mcp_app.get_context().session)
-        _current_loop.set(asyncio.get_running_loop())
+        _set_active_session(mcp_app.get_context().session, asyncio.get_running_loop())
         _log(f"[req] run_task cwd={cwd} bg={background} model={model or 'default'}")
 
         if not _gateway_health_check():
@@ -619,8 +623,7 @@ def _build_mcp_app(host: str = "0.0.0.0", port: int = 3737) -> "FastMCP":
     @mcp_app.tool(description=TOOLS[1]["description"])
     async def reply_task(task_id: str, message: str) -> str:
         """Send a reply to HermitAgent."""
-        _current_session.set(mcp_app.get_context().session)
-        _current_loop.set(asyncio.get_running_loop())
+        _set_active_session(mcp_app.get_context().session, asyncio.get_running_loop())
         _log(f"[req] reply_task task_id={task_id} msg={message[:60]}")
 
         try:
@@ -647,8 +650,7 @@ def _build_mcp_app(host: str = "0.0.0.0", port: int = 3737) -> "FastMCP":
     @mcp_app.tool(description=TOOLS[2]["description"])
     async def check_task(task_id: str, full: bool = False) -> str:
         """Check the current status of a background task."""
-        _current_session.set(mcp_app.get_context().session)
-        _current_loop.set(asyncio.get_running_loop())
+        _set_active_session(mcp_app.get_context().session, asyncio.get_running_loop())
         _log(f"[req] check_task task_id={task_id} full={full}")
 
         try:
