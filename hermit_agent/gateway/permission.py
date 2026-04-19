@@ -17,7 +17,7 @@ class GatewayPermissionChecker:
       Otherwise → deny
     """
 
-    def __init__(self, mode, question_queue, reply_queue, notify_fn=None, notify_running_fn=None, permission_notify_fn=None):
+    def __init__(self, mode, question_queue, reply_queue, notify_fn=None, notify_running_fn=None, permission_notify_fn=None, on_mode_change=None):
         from hermit_agent.permissions import PermissionMode
         self.mode = mode
         self._q_in = question_queue        # Queue for questions (→ hermit-channel)
@@ -25,6 +25,7 @@ class GatewayPermissionChecker:
         self._notify_fn = notify_fn        # SSE callback for ask_user_question waiting state
         self._notify_running_fn = notify_running_fn  # Running notification callback after consuming reply
         self._permission_notify_fn = permission_notify_fn or notify_fn  # SSE callback for bash permission_ask
+        self.on_mode_change = on_mode_change  # Callback fired when mode flips to YOLO
 
     def check(self, tool_name: str, arguments: dict, is_read_only: bool) -> bool:
         from hermit_agent.permissions import PermissionMode, _tool_summary
@@ -97,7 +98,11 @@ class GatewayPermissionChecker:
             return False
 
         answer = answer.strip().lower()
-        if answer in ("yolo", "always", "2"):
+        if 'yolo' in answer or 'always' in answer or answer == '2':
             self.mode = PermissionMode.YOLO
+            if self.on_mode_change is not None:
+                self.on_mode_change(self.mode)
             return True
-        return answer in ("", "y", "yes", "1")
+        if answer == 'no' or answer.startswith('no'):
+            return False
+        return answer in ('', 'y', 'yes', '1') or 'yes' in answer or 'once' in answer

@@ -158,6 +158,16 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
     session_dir = SessionStore().create_session(mode='tui', session_id=session_id, cwd=args.cwd)
     session_logger = _SessionLogger(session_dir=session_dir)
 
+    # ── Auto-recap on stale TUI startup ──
+    try:
+        from .skills.recap import should_auto_recap, generate_recap
+        if should_auto_recap(args.cwd):
+            recap_text = generate_recap(args.cwd)
+            if recap_text and recap_text != 'No recent session found.':
+                _send({"type": "text", "content": "[Auto-recap of last session]\n" + recap_text})
+    except Exception:
+        pass
+
 
     def _stdin_reader() -> None:
         for raw_line in sys.stdin:

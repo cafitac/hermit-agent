@@ -260,6 +260,12 @@ class MCPAgentSession(AgentSessionBase):
         super()._setup_agent()
         if self._emitter_handler is not None and self._agent is not None:
             self._agent.emitter.set_handler(self._emitter_handler)
+        # Wire GatewayPermissionChecker YOLO mode change → AgentLoop's PermissionChecker
+        if self._permission_checker is not None and self._agent is not None:
+            if hasattr(self._permission_checker, 'on_mode_change'):
+                agent_checker = getattr(self._agent, 'permission_checker', None)
+                if agent_checker is not None and hasattr(agent_checker, 'mode'):
+                    self._permission_checker.on_mode_change = lambda m: setattr(agent_checker, 'mode', m)
 
     def _make_progress_hook(self):
         return self._make_progress_hook_fn(self._task_id)
