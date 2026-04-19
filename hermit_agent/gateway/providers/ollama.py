@@ -7,6 +7,12 @@ import httpx
 
 from .base import ProviderAdapter
 
+# 2-hour read window — LLM streams can legitimately sit idle for tens
+# of seconds between tokens (cold-start, queue wait). The httpx default
+# 5s would kill every slow response; None would risk an infinite hang,
+# so we cap at 7200s.
+_CLIENT_TIMEOUT = httpx.Timeout(connect=10.0, read=7200.0, write=30.0, pool=5.0)
+
 
 class OllamaAdapter(ProviderAdapter):
     """Forwards requests to a local Ollama instance via its OpenAI-compatible API.
@@ -21,12 +27,12 @@ class OllamaAdapter(ProviderAdapter):
     async def forward_openai(self, req_body: dict, stream: bool) -> AsyncIterator[bytes]:
         url = f"{self._base_url}/chat/completions"
         if stream:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=_CLIENT_TIMEOUT) as client:
                 async with client.stream("POST", url, json=req_body) as resp:
                     async for chunk in resp.aiter_bytes():
                         yield chunk
         else:
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=_CLIENT_TIMEOUT) as client:
                 resp = await client.post(url, json=req_body)
                 yield resp.content
 
