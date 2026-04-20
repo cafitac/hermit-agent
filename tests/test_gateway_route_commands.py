@@ -67,6 +67,46 @@ async def test_create_task_endpoint_schedules_background_work_for_normal_tasks()
 
 
 @pytest.mark.anyio
+async def test_create_task_endpoint_preserves_explicit_startup_values():
+    from hermit_agent.gateway._singletons import sse_manager
+    from hermit_agent.gateway.routes.tasks import TaskRequest, create_task_endpoint
+    from hermit_agent.gateway.task_store import delete_task, get_task
+
+    background = BackgroundTasks()
+    result = await create_task_endpoint(
+        req=TaskRequest(
+            task="do work",
+            cwd="/tmp/project",
+            model="glm-5.1",
+            max_turns=9,
+            parent_session_id="parent-123",
+        ),
+        background=background,
+        auth=SimpleNamespace(user="tester"),
+    )
+    task_id = result["task_id"]
+    state = get_task(task_id)
+
+    try:
+        assert result == {"task_id": task_id, "status": "running"}
+        assert state is not None
+        assert state.parent_session_id == "parent-123"
+        assert len(background.tasks) == 1
+        scheduled = background.tasks[0]
+        assert scheduled.kwargs["task_id"] == task_id
+        assert scheduled.kwargs["task"] == "do work"
+        assert scheduled.kwargs["cwd"] == "/tmp/project"
+        assert scheduled.kwargs["user"] == "tester"
+        assert scheduled.kwargs["model"] == "glm-5.1"
+        assert scheduled.kwargs["max_turns"] == 9
+        assert scheduled.kwargs["state"] is state
+        assert task_id in sse_manager._queues
+    finally:
+        delete_task(task_id)
+        sse_manager._queues.pop(task_id, None)
+
+
+@pytest.mark.anyio
 async def test_create_task_endpoint_returns_server_busy_error_when_no_worker_slot(monkeypatch):
     from hermit_agent.gateway.routes import tasks as tasks_mod
     from hermit_agent.gateway.routes.tasks import TaskRequest, create_task_endpoint
