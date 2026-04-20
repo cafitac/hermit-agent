@@ -123,43 +123,25 @@ class TelegramChannel(ChannelInterface):
             import sys
             print(f"[TelegramChannel] send failed: {e}", file=sys.stderr)
 
-    def _answer_loop(self) -> None:
-        """Watch question_queue; when a question arrives, send it via Telegram and collect the answer."""
-        while not self._stop_event.is_set():
-            # wait for question (0.5s timeout)
-            try:
-                qdata = self.question_queue.get(timeout=0.5)
-            except Exception:
-                continue
-
-            if qdata is None:
-                break  # stop sentinel
-
-            question = qdata.get("question", "")
-            options: list[str] = qdata.get("options", [])
-
-            # build question message
-            lines = ["<b>[HermitAgent question]</b>", "", question]
-            if options:
-                lines.append("")
-                for i, opt in enumerate(options, 1):
-                    lines.append(f"  {i}. {opt}")
+    def _present_question(self, question: str, options: list[str]) -> str:
+        """Send one question via Telegram and wait for one reply."""
+        lines = ["<b>[HermitAgent question]</b>", "", question]
+        if options:
             lines.append("")
-            lines.append("<i>Please enter your answer.</i>")
-            question_text = "\n".join(lines)
+            for i, opt in enumerate(options, 1):
+                lines.append(f"  {i}. {opt}")
+        lines.append("")
+        lines.append("<i>Please enter your answer.</i>")
+        question_text = "\n".join(lines)
 
-            # send question via Telegram
-            try:
-                self._send_message(question_text)
-            except Exception as e:
-                import sys
-                print(f"[TelegramChannel] Failed to send question: {e}", file=sys.stderr)
-                self.reply_queue.put("skip")
-                continue
+        try:
+            self._send_message(question_text)
+        except Exception as e:
+            import sys
+            print(f"[TelegramChannel] Failed to send question: {e}", file=sys.stderr)
+            return "skip"
 
-            # wait for answer (long polling)
-            answer = self._wait_for_reply()
-            self.reply_queue.put(answer)
+        return self._wait_for_reply()
 
     def _wait_for_reply(self) -> str:
         """Long-poll Telegram until a user message arrives."""

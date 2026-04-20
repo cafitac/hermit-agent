@@ -112,27 +112,11 @@ class HTTPChannel(ChannelInterface):
         """Send progress/results to hermit-channel as a progress event."""
         self.notify("progress", message=message)
 
-    def _answer_loop(self) -> None:
-        """Watch question_queue; when a question arrives, forward it to Claude Code and poll for the answer."""
-        while not self._stop_event.is_set():
-            try:
-                qdata = self.question_queue.get(timeout=0.5)
-            except Exception:
-                continue
-
-            if qdata is None:
-                break  # stop sentinel
-
-            question = qdata.get("question", "")
-            options: list[str] = qdata.get("options", [])
-
-            # send question to Claude Code (waiting type)
-            self.notify("waiting", question=question, options=options or None)
-
-            # poll for Claude Code's answer
-            # DEPRECATED: Post stdio-only channel merger, _poll_for_answer() is no longer supported.
-            answer = self._poll_for_answer()
-            self.reply_queue.put(answer)
+    def _present_question(self, question: str, options: list[str]) -> str:
+        """Forward one question to Claude Code and poll for one answer."""
+        self.notify("waiting", question=question, options=options or None)
+        # DEPRECATED: Post stdio-only channel merger, _poll_for_answer() is no longer supported.
+        return self._poll_for_answer()
 
     def _poll_for_answer(self, poll_interval: float = 1.0, max_wait: float = 300.0) -> str:
         """Poll hermit-channel until Claude Code's answer arrives.

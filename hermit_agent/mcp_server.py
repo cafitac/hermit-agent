@@ -63,6 +63,38 @@ def _log(line: str) -> None:
 _current_session = None  # type: ignore[assignment]
 _current_loop = None     # type: ignore[assignment]
 _session_lock = threading.Lock()
+_pending_channel_notifications: list[tuple[str, dict]] = []
+
+
+def _schedule_channel_send(loop, session, content: str, meta: dict) -> None:
+    async def _send() -> None:
+        await _send_channel_notification(session, content, meta)
+
+    def _runner() -> None:
+        task = asyncio.create_task(_send())
+
+        def _done_callback(done_task: asyncio.Task) -> None:
+            try:
+                done_task.result()
+            except Exception as e:
+                _log(f"[channel] buffered send failed: {e}")
+
+        task.add_done_callback(_done_callback)
+
+    loop.call_soon_threadsafe(_runner)
+
+
+def _flush_pending_channel_notifications(session, loop) -> None:
+    with _session_lock:
+        pending = list(_pending_channel_notifications)
+        _pending_channel_notifications.clear()
+
+    if not pending:
+        return
+
+    for content, meta in pending:
+        _log(f"[channel] flushing buffered notification type={meta.get('kind')} task={str(meta.get('task_id',''))[:8]}")
+        _schedule_channel_send(loop, session, content, meta)
 
 
 def _set_active_session(session, loop) -> None:
@@ -72,6 +104,7 @@ def _set_active_session(session, loop) -> None:
     with _session_lock:
         _current_session = session
         _current_loop = loop
+    _flush_pending_channel_notifications(session, loop)
 
 
 async def _send_channel_notification(session, content: str, meta: dict) -> None:
@@ -96,7 +129,9 @@ def _fire_channel_notification_sync(content: str, meta: dict) -> None:
         session = _current_session
         loop = _current_loop
     if session is None or loop is None:
-        _log("[channel] no active session/loop — notification dropped")
+        with _session_lock:
+            _pending_channel_notifications.append((content, meta))
+        _log(f"[channel] no active session/loop — notification buffered type={meta.get('kind')}")
         return
     _log(f"[channel] scheduling coroutine type={meta.get('kind')} task={str(meta.get('task_id',''))[:8]}")
     try:

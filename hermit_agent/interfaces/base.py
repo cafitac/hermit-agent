@@ -44,9 +44,24 @@ class ChannelInterface(ABC):
         """Deliver progress updates, completion results, etc. to the user."""
 
     @abstractmethod
+    def _present_question(self, question: str, options: list[str]) -> str:
+        """Deliver one question to the concrete transport and return the answer."""
+
     def _answer_loop(self) -> None:
-        """Loop that pulls questions from question_queue, sends them to the user,
-        and puts replies into reply_queue. Runs in a separate thread."""
+        """Loop that pulls questions from question_queue and records replies."""
+        while not self._stop_event.is_set():
+            try:
+                qdata = self.question_queue.get(timeout=0.5)
+            except Exception:
+                continue
+
+            if qdata is None:
+                break
+
+            question = qdata.get("question", "")
+            options: list[str] = qdata.get("options", [])
+            answer = self._present_question(question, options)
+            self.reply_queue.put(answer)
 
     # ── common methods ──────────────────────────────────────────────────────────
 
