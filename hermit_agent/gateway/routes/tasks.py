@@ -16,6 +16,31 @@ from ..task_runner import run_task_async
 router = APIRouter()
 
 
+def _discover_available_models() -> list[dict[str, object]]:
+    from ...config import load_settings, get_primary_model
+
+    cfg = load_settings()
+
+    models: list[dict[str, object]] = []
+    default_model = get_primary_model(cfg, available_only=True) or get_primary_model(cfg)
+    if default_model:
+        models.append({"id": default_model, "source": "config", "default": True})
+
+    try:
+        import httpx
+
+        r = httpx.get("http://localhost:11434/api/tags", timeout=5.0)
+        if r.status_code == 200:
+            for m in r.json().get("models", []):
+                name = m.get("name", "")
+                if name and name != default_model:
+                    models.append({"id": name, "source": "ollama", "default": False})
+    except Exception:
+        pass
+
+    return models
+
+
 def _handle_slash_command(text: str) -> str | None:
     """Slash commands that the gateway can handle immediately.
     Returns result text, or None to forward to AgentLoop."""
@@ -36,23 +61,10 @@ def _handle_slash_command(text: str) -> str | None:
     elif cmd == "/model":
         if cmd_args:
             return f"Model changed to {cmd_args}. (Applied from next run)"
-        from ...config import load_settings, get_primary_model
-        cfg = load_settings()
-        default_model = get_primary_model(cfg, available_only=True) or get_primary_model(cfg)
         lines = ["Available models:"]
-        if default_model:
-            lines.append(f"  {default_model} (default) [config]")
-        # Local ollama models
-        try:
-            import httpx
-            r = httpx.get("http://localhost:11434/api/tags", timeout=5.0)
-            if r.status_code == 200:
-                for m in r.json().get("models", []):
-                    name = m.get("name", "")
-                    if name and name != default_model:
-                        lines.append(f"  {name} [ollama]")
-        except Exception:
-            pass
+        for model in _discover_available_models():
+            suffix = " (default)" if model["default"] else ""
+            lines.append(f"  {model['id']}{suffix} [{model['source']}]")
         if len(lines) == 1:
             lines.append("  (No models)")
         return "\n".join(lines)
@@ -82,27 +94,7 @@ class ReplyRequest(BaseModel):
 @router.get("/models")
 async def list_models():
     """Return available models from the configured LLM."""
-    from ...config import load_settings, get_primary_model
-    cfg = load_settings()
-
-    models = []
-    default_model = get_primary_model(cfg, available_only=True) or get_primary_model(cfg)
-    if default_model:
-        models.append({"id": default_model, "source": "config", "default": True})
-
-    # Query local ollama models
-    try:
-        import httpx
-        r = httpx.get("http://localhost:11434/api/tags", timeout=5.0)
-        if r.status_code == 200:
-            for m in r.json().get("models", []):
-                name = m.get("name", "")
-                if name and name != default_model:
-                    models.append({"id": name, "source": "ollama", "default": False})
-    except Exception:
-        pass
-
-    return {"models": models}
+    return {"models": _discover_available_models()}
 
 
 @router.post("/tasks")
