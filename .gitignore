@@ -18,6 +18,7 @@ claw-code-main/
 
 # OMC state
 .omc/
+.omx/
 
 # Harness audit snapshots (per-machine, contain personal paths)
 .harness/
