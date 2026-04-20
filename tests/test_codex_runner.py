@@ -6,6 +6,7 @@ from hermit_agent.codex_runner import (
     _normalize_reasoning_effort,
 )
 from hermit_agent.gateway.task_store import GatewayTaskState
+from hermit_agent.config import get_primary_model, get_routing_priority_models, is_model_configured
 
 
 def test_is_codex_model_detects_supported_aliases():
@@ -222,13 +223,17 @@ def test_rate_limit_event_fails_fast_when_out_of_credits():
         assert "rate-limited or out of credits" in str(exc)
 
 
-def test_auto_model_chain_order_prefers_codex_then_zai_then_local():
+def test_auto_model_chain_order_prefers_codex_then_zai_then_local(monkeypatch):
     from hermit_agent.gateway import task_runner
 
+    monkeypatch.setattr("hermit_agent.config.shutil.which", lambda cmd: "/usr/bin/" + cmd)
     cfg = {
         "codex_default_model": "gpt-5.4",
         "codex_reasoning_effort": "medium",
         "model": "glm-5.1",
+        "providers": {
+            "z.ai": {"base_url": "https://api.z.ai/api/coding/paas/v4", "api_key": "k"},
+        },
         "local_model": "qwen3-coder:30b",
     }
     assert task_runner._auto_model_chain(cfg) == [
@@ -238,10 +243,14 @@ def test_auto_model_chain_order_prefers_codex_then_zai_then_local():
     ]
 
 
-def test_auto_model_chain_uses_routing_priority_models_from_settings():
+def test_auto_model_chain_uses_routing_priority_models_from_settings(monkeypatch):
     from hermit_agent.gateway import task_runner
 
+    monkeypatch.setattr("hermit_agent.config.shutil.which", lambda cmd: "/usr/bin/" + cmd)
     cfg = {
+        "providers": {
+            "z.ai": {"base_url": "https://api.z.ai/api/coding/paas/v4", "api_key": "k"},
+        },
         "routing": {
             "priority_models": [
                 {"model": "glm-5.1"},
@@ -257,10 +266,14 @@ def test_auto_model_chain_uses_routing_priority_models_from_settings():
     ]
 
 
-def test_auto_model_chain_deduplicates_models_preserving_first_reasoning_effort():
+def test_auto_model_chain_deduplicates_models_preserving_first_reasoning_effort(monkeypatch):
     from hermit_agent.gateway import task_runner
 
+    monkeypatch.setattr("hermit_agent.config.shutil.which", lambda cmd: "/usr/bin/" + cmd)
     cfg = {
+        "providers": {
+            "z.ai": {"base_url": "https://api.z.ai/api/coding/paas/v4", "api_key": "k"},
+        },
         "routing": {
             "priority_models": [
                 {"model": "gpt-5.4", "reasoning_effort": "medium"},
@@ -273,6 +286,51 @@ def test_auto_model_chain_deduplicates_models_preserving_first_reasoning_effort(
         {"model": "gpt-5.4", "reasoning_effort": "medium"},
         {"model": "glm-5.1"},
     ]
+
+
+def test_get_routing_priority_models_skips_unconfigured_providers(monkeypatch):
+    cfg = {
+        "codex_command": "codex",
+        "ollama_url": "http://localhost:11434/v1",
+        "providers": {
+            "z.ai": {"base_url": "https://api.z.ai/api/coding/paas/v4", "api_key": "k"},
+        },
+        "routing": {
+            "priority_models": [
+                {"model": "gpt-5.4", "reasoning_effort": "medium"},
+                {"model": "glm-5.1"},
+                {"model": "qwen3-coder:30b"},
+            ]
+        },
+    }
+    monkeypatch.setattr("hermit_agent.config.shutil.which", lambda cmd: None if cmd == "codex" else None)
+
+    assert get_routing_priority_models(cfg, available_only=True) == [
+        {"model": "glm-5.1"},
+    ]
+
+
+def test_get_primary_model_prefers_first_available(monkeypatch):
+    cfg = {
+        "codex_command": "codex",
+        "providers": {"z.ai": {"base_url": "https://api.z.ai/api/coding/paas/v4", "api_key": "k"}},
+        "routing": {
+            "priority_models": [
+                {"model": "gpt-5.4", "reasoning_effort": "medium"},
+                {"model": "glm-5.1"},
+            ]
+        },
+        "model": "glm-5.1",
+    }
+    monkeypatch.setattr("hermit_agent.config.shutil.which", lambda cmd: None)
+
+    assert get_primary_model(cfg, available_only=True) == "glm-5.1"
+
+
+def test_is_model_configured_recognizes_remote_ollama_without_local_binary(monkeypatch):
+    cfg = {"ollama_url": "https://ollama.example.com/v1"}
+    monkeypatch.setattr("hermit_agent.config.shutil.which", lambda cmd: None)
+    assert is_model_configured("qwen3-coder:30b", cfg) is True
 
 
 def test_auto_route_falls_back_to_zai_when_codex_unavailable(monkeypatch):

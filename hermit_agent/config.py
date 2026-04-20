@@ -28,6 +28,8 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any
 
@@ -110,6 +112,8 @@ _MODEL_PREFIX_PLATFORM: list[tuple[str, str]] = [
     ("gpt-", "openai"),
 ]
 
+_LOCAL_HOSTS = {"localhost", "127.0.0.1", "0.0.0.0", "::1", ""}
+
 
 def _resolve_platform_for_model(model: str) -> str | None:
     if not model:
@@ -126,6 +130,81 @@ def get_provider_cred(cfg: dict[str, Any], platform: str) -> dict[str, Any]:
     providers = cfg.get("providers") or {}
     block = providers.get(platform)
     return dict(block) if isinstance(block, dict) else {}
+
+
+def _is_local_ollama_url(url: str) -> bool:
+    try:
+        host = urlparse(url).hostname or ""
+    except Exception:
+        return True
+    return host in _LOCAL_HOSTS
+
+
+def is_model_configured(model: str, cfg: dict[str, Any]) -> bool:
+    platform = _resolve_platform_for_model(model)
+    if platform == "local":
+        ollama_url = str(cfg.get("ollama_url", DEFAULTS["ollama_url"]) or DEFAULTS["ollama_url"])
+        if not _is_local_ollama_url(ollama_url):
+            return True
+        return shutil.which("ollama") is not None
+
+    if is_codex_model_name(model):
+        codex_command = str(cfg.get("codex_command", DEFAULTS["codex_command"]) or DEFAULTS["codex_command"])
+        return shutil.which(codex_command) is not None
+
+    if platform is None:
+        return False
+
+    cred = get_provider_cred(cfg, platform)
+    return bool(cred.get("base_url")) and bool(cred.get("api_key"))
+
+
+def is_codex_model_name(model: str) -> bool:
+    lowered = (model or "").strip().lower()
+    return (
+        lowered.startswith("codex/")
+        or lowered == "codex"
+        or "-codex" in lowered
+        or lowered == "gpt-5.4"
+        or lowered.startswith("gpt-5.4-")
+    )
+
+
+def get_routing_priority_models(cfg: dict[str, Any], *, available_only: bool = False) -> list[dict[str, str]]:
+    routing = cfg.get("routing") or {}
+    raw_priority_models = routing.get("priority_models") if isinstance(routing, dict) else None
+    candidates = raw_priority_models if isinstance(raw_priority_models, list) else DEFAULTS["routing"]["priority_models"]
+
+    deduped: list[dict[str, str]] = []
+    seen_models: set[str] = set()
+    for item in candidates:
+        if isinstance(item, str):
+            model = item.strip()
+            reasoning_effort = None
+        elif isinstance(item, dict):
+            model = str(item.get("model", "") or "").strip()
+            reasoning_effort = str(item.get("reasoning_effort", "") or "").strip() or None
+        else:
+            continue
+
+        if not model or model in seen_models:
+            continue
+        if available_only and not is_model_configured(model, cfg):
+            continue
+
+        entry = {"model": model}
+        if reasoning_effort:
+            entry["reasoning_effort"] = reasoning_effort
+        deduped.append(entry)
+        seen_models.add(model)
+    return deduped
+
+
+def get_primary_model(cfg: dict[str, Any], *, available_only: bool = False) -> str:
+    routing_models = get_routing_priority_models(cfg, available_only=available_only)
+    if routing_models:
+        return routing_models[0]["model"]
+    return str(cfg.get("model", "") or "")
 
 
 def select_llm_endpoint(model: str, cfg: dict[str, Any]) -> tuple[str, str]:

@@ -32,7 +32,7 @@ def register_mcp_tools(mcp) -> None:
 
         from ..config import load_settings
         cfg = load_settings()
-        use_model = model or cfg.get("model", "qwen3-coder:30b")
+        use_model = model or "__auto__"
 
         state = create_task(task_id)
         sse_manager.register(task_id)

@@ -57,61 +57,13 @@ def _is_unavailable_error(error: Exception | str) -> bool:
     return any(marker in text for marker in markers)
 
 
-def _routing_entry(model: str, reasoning_effort: str | None = None) -> dict[str, str]:
-    entry = {"model": model}
-    if reasoning_effort:
-        entry["reasoning_effort"] = reasoning_effort
-    return entry
-
-
-def _default_auto_model_chain(cfg: dict[str, Any]) -> list[dict[str, str]]:
-    chain: list[dict[str, str]] = []
-
-    codex_model = str(cfg.get("codex_default_model", "gpt-5.4") or "gpt-5.4").strip()
-    codex_reasoning_effort = str(cfg.get("codex_reasoning_effort", "") or "").strip() or None
-    if codex_model:
-        chain.append(_routing_entry(codex_model, codex_reasoning_effort))
-
-    configured_model = str(cfg.get("model", "") or "").strip()
-    z_ai_model = str(cfg.get("zai_default_model", "") or "").strip()
-    if not z_ai_model:
-        z_ai_model = configured_model if configured_model.startswith("glm-") else "glm-5.1"
-    if z_ai_model:
-        chain.append(_routing_entry(z_ai_model))
-
-    local_model = str(cfg.get("local_model", "") or "").strip()
-    if not local_model:
-        if configured_model and ":" in configured_model:
-            local_model = configured_model
-        else:
-            local_model = "qwen3-coder:30b"
-    chain.append(_routing_entry(local_model))
-
-    return chain
-
-
 def _auto_model_chain(cfg: dict[str, Any]) -> list[dict[str, str]]:
-    raw_routing = cfg.get("routing")
-    raw_priority_models = raw_routing.get("priority_models") if isinstance(raw_routing, dict) else None
-    candidates = raw_priority_models if isinstance(raw_priority_models, list) else _default_auto_model_chain(cfg)
+    from ..config import get_routing_priority_models
 
-    deduped: list[dict[str, str]] = []
-    seen_models: set[str] = set()
-    for item in candidates:
-        if isinstance(item, str):
-            model = item.strip()
-            reasoning_effort = None
-        elif isinstance(item, dict):
-            model = str(item.get("model", "") or "").strip()
-            reasoning_effort = str(item.get("reasoning_effort", "") or "").strip() or None
-        else:
-            continue
-        if model:
-            if model in seen_models:
-                continue
-            deduped.append(_routing_entry(model, reasoning_effort))
-            seen_models.add(model)
-    return deduped
+    configured = get_routing_priority_models(cfg, available_only=True)
+    if configured:
+        return configured
+    return get_routing_priority_models(cfg, available_only=False)
 
 
 def _make_emitter_handler(task_id: str, sse: SSEManager, gw_log: GatewaySessionLog | None = None):

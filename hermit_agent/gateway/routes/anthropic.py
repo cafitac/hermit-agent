@@ -85,8 +85,9 @@ async def messages(
 
     model = body.get("model") or ""
     if not model:
-        from ...config import load_settings
-        model = load_settings().get("model", "")
+        from ...config import load_settings, get_primary_model
+        cfg = load_settings()
+        model = get_primary_model(cfg, available_only=True) or get_primary_model(cfg) or ""
 
     try:
         platform = resolve_platform(model)

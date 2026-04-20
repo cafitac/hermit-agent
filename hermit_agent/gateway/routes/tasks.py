@@ -53,9 +53,9 @@ def _handle_slash_command(text: str) -> str | None:
     elif cmd == "/model":
         if cmd_args:
             return f"Model changed to {cmd_args}. (Applied from next run)"
-        from ...config import load_settings
+        from ...config import load_settings, get_primary_model
         cfg = load_settings()
-        default_model = cfg.get("model", "")
+        default_model = get_primary_model(cfg, available_only=True) or get_primary_model(cfg)
         lines = ["Available models:"]
         if default_model:
             lines.append(f"  {default_model} (default) [config]")
@@ -99,11 +99,11 @@ class ReplyRequest(BaseModel):
 @router.get("/models")
 async def list_models():
     """Return available models from the configured LLM."""
-    from ...config import load_settings
+    from ...config import load_settings, get_primary_model
     cfg = load_settings()
 
     models = []
-    default_model = cfg.get("model", "")
+    default_model = get_primary_model(cfg, available_only=True) or get_primary_model(cfg)
     if default_model:
         models.append({"id": default_model, "source": "config", "default": True})
 

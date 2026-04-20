@@ -110,8 +110,13 @@ def _dispatch_sse_to_tui(event: dict) -> None:
 def _run_gateway_mode(args: argparse.Namespace) -> None:
     """Main loop for Gateway HTTP client mode."""
     from .bridge_client import GatewayClient
+    from .config import load_settings, get_primary_model
 
     client = GatewayClient(base_url=args.gateway_url, api_key=args.gateway_api_key)
+    display_model = args.model
+    if display_model == "__auto__":
+        cfg = load_settings(cwd=args.cwd)
+        display_model = get_primary_model(cfg, available_only=True) or get_primary_model(cfg) or "__auto__"
 
     if not client.check_gateway():
         _send({"type": "error", "message": f"Gateway connection failed: {args.gateway_url}"})
@@ -137,7 +142,7 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
 
     _send({
         "type": "ready",
-        "model": args.model,
+        "model": display_model,
         "session_id": "gateway",
         "cwd": args.cwd,
         "permission": "accept_edits",
@@ -305,7 +310,7 @@ def main() -> None:
     cfg = load_settings(cwd=pre_args.cwd)
 
     parser = argparse.ArgumentParser(description="HermitAgent Bridge — Gateway HTTP client")
-    parser.add_argument("--model", default=cfg["model"])
+    parser.add_argument("--model", default="__auto__")
     parser.add_argument("--cwd", default=pre_args.cwd)
     parser.add_argument("--max-turns", type=int, default=cfg["max_turns"])
     parser.add_argument("--gateway-url", default=cfg["gateway_url"])

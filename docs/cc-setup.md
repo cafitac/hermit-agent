@@ -106,7 +106,7 @@ Claude will interview you briefly, write a plan, then delegate implementation to
 | `/mcp` shows `hermit` as failed | Check `~/.hermit/gateway.log` for a 401 or connection refused; re-mint the API key |
 | `mcp__hermit__run_task` hangs | Auto-start may have failed or `gateway_url` is wrong; check `~/.hermit/gateway.log`, then try `./bin/gateway.sh --daemon` manually |
 | Claude Code shows no push notifications | Start Claude Code with `--dangerously-load-development-channels server:hermit-channel` |
-| Wrong model picked | `HERMIT_MODEL` env or the `model` / `routing.priority_models` keys in settings. Explicit routing: `gpt-*-codex` and `gpt-5.4` → Codex, `glm-*` → `providers["z.ai"]`, `name:tag` → ollama. If model is omitted, gateway follows `routing.priority_models`. |
+| Wrong model picked | `HERMIT_MODEL` env or the `model` / `routing.priority_models` keys in settings. Explicit routing: `gpt-*-codex` and `gpt-5.4` → Codex, `glm-*` → `providers["z.ai"]`, `name:tag` → ollama. If model is omitted, gateway follows `routing.priority_models` and skips providers that are not configured/installed. |
 | MCP server won't start | `./bin/mcp-server.sh` now ensures the gateway first; if startup still fails, inspect `~/.hermit/mcp_server.log` and `~/.hermit/gateway.log` |
 
 ## How tokens actually get saved

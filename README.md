@@ -7,7 +7,7 @@ HermitAgent plugs into Claude Code as an MCP sub-agent. Claude keeps doing what 
 ## v0.3.x highlights (cost-first execution)
 
 - **Codex support is first-class**: Hermit can run tasks via Codex, with `gpt-5.4` at `medium` reasoning as the default Codex lane.
-- **Auto model routing when `model` is omitted**: configurable via `routing.priority_models` in `settings.json` (default: `gpt-5.4 medium -> glm -> local ollama`).
+- **Auto model routing when `model` is omitted**: configurable via `routing.priority_models` in `settings.json`, and providers that are not configured/installed are skipped automatically (default chain: `gpt-5.4 medium -> glm -> local ollama`).
 - **Explicit model requests are strict**: if you ask for a specific model and it is unavailable, Hermit returns a clear unavailable error instead of silently switching providers.
 - **MCP + gateway auto-start**: `bin/mcp-server.sh` now ensures the local gateway is up, so Claude Code/Codex startup is simpler.
 
@@ -211,7 +211,7 @@ A key with zero rows in `api_key_platform` is denied everything (default-deny).
 
 Priority: CLI flag > env var > `<cwd>/.hermit/settings.json` > `~/.hermit/settings.json` > defaults.
 
-If `model` is omitted in a task request, Hermit follows `routing.priority_models` from `settings.json`. The default chain is **`gpt-5.4` (`medium`) -> z.ai -> local ollama**.
+If `model` is omitted in a task request, Hermit follows `routing.priority_models` from `settings.json`. The default chain is **`gpt-5.4` (`medium`) -> z.ai -> local ollama`**, but any provider that is not configured or installed in the current environment is skipped automatically.
 
 ```json
 {
@@ -229,6 +229,48 @@ If `model` is omitted in a task request, Hermit follows `routing.priority_models
   "compact_instructions": "",
   "ollama_max_loaded": 1,
   "external_max_concurrent": 10
+}
+```
+
+Common templates:
+
+`Codex-first`
+
+```json
+{
+  "routing": {
+    "priority_models": [
+      {"model": "gpt-5.4", "reasoning_effort": "medium"},
+      {"model": "glm-5.1"},
+      {"model": "qwen3-coder:30b"}
+    ]
+  }
+}
+```
+
+`z.ai-first`
+
+```json
+{
+  "routing": {
+    "priority_models": [
+      {"model": "glm-5.1"},
+      {"model": "gpt-5.4", "reasoning_effort": "medium"},
+      {"model": "qwen3-coder:30b"}
+    ]
+  }
+}
+```
+
+`local-only`
+
+```json
+{
+  "routing": {
+    "priority_models": [
+      {"model": "qwen3-coder:30b"}
+    ]
+  }
 }
 ```
 

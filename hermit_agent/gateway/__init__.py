@@ -83,11 +83,12 @@ async def health():
     }
 
     # ── LLM connection status ──
-    from ..config import select_llm_endpoint
+    from ..config import select_llm_endpoint, get_primary_model
     cfg = load_settings()
     # Resolve upstream for the configured default model — ollama or
     # providers[<slug>] per the active routing rules.
-    llm_url, llm_api_key = select_llm_endpoint(cfg.get("model", ""), cfg)
+    primary_model = get_primary_model(cfg, available_only=True) or get_primary_model(cfg)
+    llm_url, llm_api_key = select_llm_endpoint(primary_model, cfg)
     if not llm_url:
         llm_url = cfg.get("ollama_url", "http://localhost:11434/v1")
     llm_status = "operational"
@@ -149,7 +150,7 @@ async def health():
     # ── Model list ──
     models = []
     active_models = []
-    default_model = cfg.get("model", "")
+    default_model = primary_model
 
     # Configured default model (cloud API → always active)
     if default_model:
