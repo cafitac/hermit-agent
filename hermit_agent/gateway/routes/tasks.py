@@ -1,6 +1,4 @@
 from __future__ import annotations
-import uuid
-import logging
 from fastapi import APIRouter, BackgroundTasks, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -17,7 +15,6 @@ from ..auth import AuthContext, get_current_user
 from ..errors import ErrorCode, gateway_error
 from ..task_runner import run_task_async
 
-logger = logging.getLogger("hermit_agent.gateway.routes.tasks")
 router = APIRouter()
 
 

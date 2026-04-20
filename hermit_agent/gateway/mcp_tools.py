@@ -1,7 +1,4 @@
 from __future__ import annotations
-import logging
-
-logger = logging.getLogger("hermit_agent.gateway.mcp_tools")
 
 
 def register_mcp_tools(mcp) -> None:
