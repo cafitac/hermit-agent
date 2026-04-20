@@ -4,7 +4,7 @@
 
 HermitAgent plugs into Claude Code as an MCP sub-agent. Claude keeps doing what it is best at — planning, interviewing, code review — and delegates the high-token grunt work (file edits, test runs, commit/push, refactors) to a low-cost executor (Codex, local ollama, or flat-rate z.ai).
 
-## v0.2.x highlights (cost-first execution)
+## v0.3.x highlights (cost-first execution)
 
 - **Codex support is first-class**: Hermit can run tasks via Codex, with `gpt-5.4` at `medium` reasoning as the default Codex lane.
 - **Auto model routing when `model` is omitted**: configurable via `routing.priority_models` in `settings.json` (default: `gpt-5.4 medium -> glm -> local ollama`).

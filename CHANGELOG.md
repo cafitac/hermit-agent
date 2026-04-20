@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.3.0
+
+### Configurable routing
+- Added `routing.priority_models` in `settings.json` so users can define their own default model order instead of being locked to a built-in provider sequence.
+- Set the default Codex lane to `gpt-5.4` with `medium` reasoning effort.
+- Propagated Codex reasoning effort into the app-server turn start request.
+- Updated docs to show JSON-based routing configuration and the new default chain.
+
 ## v0.2.1
 
 ### Documentation & release visibility
