@@ -23,7 +23,13 @@ _CANCEL_ANSWERS = {"cancel", "abort", "__cancelled__"}
 
 def is_codex_model(model: str) -> bool:
     lowered = (model or "").strip().lower()
-    return lowered.startswith("codex/") or lowered == "codex" or "-codex" in lowered
+    return (
+        lowered.startswith("codex/")
+        or lowered == "codex"
+        or "-codex" in lowered
+        or lowered == "gpt-5.4"
+        or lowered.startswith("gpt-5.4-")
+    )
 
 
 def normalize_codex_model(model: str) -> str:
@@ -50,6 +56,7 @@ class CodexAppServerClient:
         command: str,
         cwd: str,
         model: str,
+        reasoning_effort: str | None,
         state,
         sse,
         task_id: str,
@@ -58,6 +65,7 @@ class CodexAppServerClient:
         self._command = command
         self._cwd = cwd
         self._model = normalize_codex_model(model)
+        self._reasoning_effort = _normalize_reasoning_effort(reasoning_effort)
         self._state = state
         self._sse = sse
         self._task_id = task_id
@@ -97,6 +105,7 @@ class CodexAppServerClient:
                 {
                     "threadId": self._thread_id,
                     "input": [{"type": "text", "text": task}],
+                    "effort": self._reasoning_effort,
                 },
             )
             self._turn_id = turn["turn"]["id"]
@@ -481,6 +490,13 @@ def _normalize_answer(answer: str | None) -> str:
     return (answer or "").strip().lower()
 
 
+def _normalize_reasoning_effort(effort: str | None) -> str | None:
+    normalized = (effort or "").strip().lower()
+    if normalized in {"none", "low", "medium", "high", "xhigh"}:
+        return normalized
+    return None
+
+
 def _resolve_option_answer(answer: str, options: list[dict[str, Any]]) -> str:
     normalized = _normalize_answer(answer)
     if normalized.isdigit():
@@ -555,6 +571,7 @@ def run_codex_task(
     task: str,
     cwd: str,
     model: str,
+    reasoning_effort: str | None,
     state,
     sse,
     gw_log: GatewaySessionLog | None = None,
@@ -564,6 +581,7 @@ def run_codex_task(
         command=codex_command,
         cwd=cwd,
         model=model,
+        reasoning_effort=reasoning_effort,
         state=state,
         sse=sse,
         task_id=task_id,

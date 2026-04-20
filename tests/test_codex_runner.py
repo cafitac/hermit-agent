@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from hermit_agent.codex_runner import is_codex_model, normalize_codex_model
+from hermit_agent.codex_runner import (
+    is_codex_model,
+    normalize_codex_model,
+    _normalize_reasoning_effort,
+)
 from hermit_agent.gateway.task_store import GatewayTaskState
 
 
 def test_is_codex_model_detects_supported_aliases():
     assert is_codex_model("gpt-5.3-codex") is True
+    assert is_codex_model("gpt-5.4") is True
     assert is_codex_model("codex/gpt-5.3-codex") is True
     assert is_codex_model("codex") is True
     assert is_codex_model("glm-5.1") is False
@@ -16,6 +21,12 @@ def test_normalize_codex_model_strips_provider_prefix():
     assert normalize_codex_model("codex/gpt-5.3-codex") == "gpt-5.3-codex"
     assert normalize_codex_model("gpt-5.2-codex") == "gpt-5.2-codex"
     assert normalize_codex_model("codex") == "gpt-5.4"
+
+
+def test_normalize_reasoning_effort_accepts_supported_values():
+    assert _normalize_reasoning_effort("medium") == "medium"
+    assert _normalize_reasoning_effort("XHIGH") == "xhigh"
+    assert _normalize_reasoning_effort("bogus") is None
 
 
 def test_task_runner_codex_branch_uses_codex_backend(monkeypatch):
@@ -40,7 +51,11 @@ def test_task_runner_codex_branch_uses_codex_backend(monkeypatch):
             calls["log_crashed"] = error
 
     monkeypatch.setattr(task_runner, "release_worker_slot", lambda: calls.setdefault("released", True))
-    monkeypatch.setattr(config_mod, "load_settings", lambda cwd=None: {"codex_command": "codex"})
+    monkeypatch.setattr(
+        config_mod,
+        "load_settings",
+        lambda cwd=None: {"codex_command": "codex", "codex_reasoning_effort": "medium"},
+    )
     monkeypatch.setattr(task_runner, "GatewaySessionLog", DummyLog)
 
     def fake_run_codex_task(**kwargs):
@@ -64,6 +79,7 @@ def test_task_runner_codex_branch_uses_codex_backend(monkeypatch):
 
     assert calls["kwargs"]["codex_command"] == "codex"
     assert calls["kwargs"]["model"] == "gpt-5.3-codex"
+    assert calls["kwargs"]["reasoning_effort"] == "medium"
     assert result["status"] == "done"
     assert result["token_totals"] == {"prompt_tokens": 7, "completion_tokens": 3}
     assert calls["released"] is True
@@ -93,6 +109,7 @@ def test_codex_client_launch_uses_clean_app_server_flags(monkeypatch):
         command="codex",
         cwd="/tmp",
         model="gpt-5.3-codex",
+        reasoning_effort="medium",
         state=GatewayTaskState(task_id="t"),
         sse=object(),
         task_id="task-id",
@@ -118,6 +135,7 @@ def test_system_error_event_fails_fast():
         command="codex",
         cwd="/tmp",
         model="gpt-5.3-codex",
+        reasoning_effort=None,
         state=GatewayTaskState(task_id="t"),
         sse=object(),
         task_id="task-id",
@@ -142,6 +160,7 @@ def test_thread_idle_with_result_completes_drain():
         command="codex",
         cwd="/tmp",
         model="gpt-5.3-codex",
+        reasoning_effort=None,
         state=GatewayTaskState(task_id="t"),
         sse=object(),
         task_id="task-id",
@@ -161,6 +180,7 @@ def test_thread_idle_without_result_does_not_complete():
         command="codex",
         cwd="/tmp",
         model="gpt-5.3-codex",
+        reasoning_effort=None,
         state=GatewayTaskState(task_id="t"),
         sse=object(),
         task_id="task-id",
@@ -179,6 +199,7 @@ def test_rate_limit_event_fails_fast_when_out_of_credits():
         command="codex",
         cwd="/tmp",
         model="gpt-5.3-codex",
+        reasoning_effort=None,
         state=GatewayTaskState(task_id="t"),
         sse=object(),
         task_id="task-id",
@@ -205,14 +226,52 @@ def test_auto_model_chain_order_prefers_codex_then_zai_then_local():
     from hermit_agent.gateway import task_runner
 
     cfg = {
-        "codex_default_model": "gpt-5.3-codex",
+        "codex_default_model": "gpt-5.4",
+        "codex_reasoning_effort": "medium",
         "model": "glm-5.1",
         "local_model": "qwen3-coder:30b",
     }
     assert task_runner._auto_model_chain(cfg) == [
-        "gpt-5.3-codex",
-        "glm-5.1",
-        "qwen3-coder:30b",
+        {"model": "gpt-5.4", "reasoning_effort": "medium"},
+        {"model": "glm-5.1"},
+        {"model": "qwen3-coder:30b"},
+    ]
+
+
+def test_auto_model_chain_uses_routing_priority_models_from_settings():
+    from hermit_agent.gateway import task_runner
+
+    cfg = {
+        "routing": {
+            "priority_models": [
+                {"model": "glm-5.1"},
+                {"model": "gpt-5.4", "reasoning_effort": "high"},
+                {"model": "qwen3-coder:30b"},
+            ]
+        }
+    }
+    assert task_runner._auto_model_chain(cfg) == [
+        {"model": "glm-5.1"},
+        {"model": "gpt-5.4", "reasoning_effort": "high"},
+        {"model": "qwen3-coder:30b"},
+    ]
+
+
+def test_auto_model_chain_deduplicates_models_preserving_first_reasoning_effort():
+    from hermit_agent.gateway import task_runner
+
+    cfg = {
+        "routing": {
+            "priority_models": [
+                {"model": "gpt-5.4", "reasoning_effort": "medium"},
+                {"model": "gpt-5.4", "reasoning_effort": "high"},
+                "glm-5.1",
+            ]
+        }
+    }
+    assert task_runner._auto_model_chain(cfg) == [
+        {"model": "gpt-5.4", "reasoning_effort": "medium"},
+        {"model": "glm-5.1"},
     ]
 
 
@@ -267,7 +326,8 @@ def test_auto_route_falls_back_to_zai_when_codex_unavailable(monkeypatch):
         "load_settings",
         lambda cwd=None: {
             "codex_command": "codex",
-            "codex_default_model": "gpt-5.3-codex",
+            "codex_default_model": "gpt-5.4",
+            "codex_reasoning_effort": "medium",
             "model": "glm-5.1",
             "local_model": "qwen3-coder:30b",
             "providers": {"z.ai": {"base_url": "https://example.invalid", "api_key": "k"}},

@@ -14,7 +14,14 @@ Example settings file:
     "gateway_url": "http://localhost:8765",
     "gateway_api_key": "your-key",
     "model": "qwen3-coder:30b",
-    "max_turns": 200
+    "max_turns": 200,
+    "routing": {
+      "priority_models": [
+        {"model": "gpt-5.4", "reasoning_effort": "medium"},
+        {"model": "glm-5.1"},
+        {"model": "qwen3-coder:30b"}
+      ]
+    }
   }
 """
 from __future__ import annotations
@@ -37,7 +44,16 @@ DEFAULTS: dict[str, Any] = {
     "providers": {},
     "ollama_url": "http://localhost:11434/v1",
     "codex_command": "codex",
+    "codex_default_model": "gpt-5.4",
+    "codex_reasoning_effort": "medium",
     "model": "qwen3-coder:30b",
+    "routing": {
+        "priority_models": [
+            {"model": "gpt-5.4", "reasoning_effort": "medium"},
+            {"model": "glm-5.1"},
+            {"model": "qwen3-coder:30b"},
+        ]
+    },
     "max_turns": 200,
     "response_language": "auto",
     # Free-form extra directive appended to the compaction prompt. Empty string
@@ -73,6 +89,8 @@ _ENV_MAP = {
     "HERMIT_API_KEY": "llm_api_key",
     "HERMIT_OLLAMA_URL": "ollama_url",
     "HERMIT_CODEX_COMMAND": "codex_command",
+    "HERMIT_CODEX_DEFAULT_MODEL": "codex_default_model",
+    "HERMIT_CODEX_REASONING_EFFORT": "codex_reasoning_effort",
     "Z_AI_API_KEY": "llm_api_key",
     "HERMIT_LANG": "response_language",
     "HERMIT_COMPACT_INSTRUCTIONS": "compact_instructions",
@@ -192,6 +210,15 @@ def load_settings(cwd: str | None = None) -> dict[str, Any]:
         block.setdefault("base_url", legacy_url)
         block.setdefault("api_key", legacy_key)
     settings["providers"] = providers
+
+    routing = settings.get("routing")
+    if not isinstance(routing, dict):
+        settings["routing"] = dict(DEFAULTS["routing"])
+    else:
+        priority_models = routing.get("priority_models")
+        if not isinstance(priority_models, list):
+            routing["priority_models"] = list(DEFAULTS["routing"]["priority_models"])
+        settings["routing"] = routing
 
     return settings
 
