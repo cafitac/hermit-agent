@@ -32,121 +32,113 @@ def test_is_ollama_model_detection():
 
 # ── Ollama admission ───────────────────────────────────────────────────────
 
-def test_admission_allows_already_loaded_model():
-    async def _scenario():
-        ctl = AdmissionController(
-            ollama_max_loaded=1,
-            ps_client_factory=_fake_ps({"qwen3-coder:30b"}),
-        )
-        token = await ctl.acquire("qwen3-coder:30b")
-        assert token is not None
-        token.release()
-    asyncio.run(_scenario())
+@pytest.mark.anyio
+async def test_admission_allows_already_loaded_model():
+    ctl = AdmissionController(
+        ollama_max_loaded=1,
+        ps_client_factory=_fake_ps({"qwen3-coder:30b"}),
+    )
+    token = await ctl.acquire("qwen3-coder:30b")
+    assert token is not None
+    token.release()
 
 
-def test_admission_rejects_new_model_when_full():
-    async def _scenario():
-        ctl = AdmissionController(
-            ollama_max_loaded=1,
-            ps_client_factory=_fake_ps({"qwen3-coder:30b"}),
-        )
-        with pytest.raises(AdmissionDenied) as exc:
-            await ctl.acquire("llama3:8b")
-        assert exc.value.retry_after >= 1
-        assert "capacity" in str(exc.value).lower()
-    asyncio.run(_scenario())
+@pytest.mark.anyio
+async def test_admission_rejects_new_model_when_full():
+    ctl = AdmissionController(
+        ollama_max_loaded=1,
+        ps_client_factory=_fake_ps({"qwen3-coder:30b"}),
+    )
+    with pytest.raises(AdmissionDenied) as exc:
+        await ctl.acquire("llama3:8b")
+    assert exc.value.retry_after >= 1
+    assert "capacity" in str(exc.value).lower()
 
 
-def test_admission_allows_new_model_when_slot_free():
-    async def _scenario():
-        ctl = AdmissionController(
-            ollama_max_loaded=1,
-            ps_client_factory=_fake_ps(set()),
-        )
-        token = await ctl.acquire("llama3:8b")
-        token.release()
-    asyncio.run(_scenario())
+@pytest.mark.anyio
+async def test_admission_allows_new_model_when_slot_free():
+    ctl = AdmissionController(
+        ollama_max_loaded=1,
+        ps_client_factory=_fake_ps(set()),
+    )
+    token = await ctl.acquire("llama3:8b")
+    token.release()
 
 
-def test_admission_allows_multiple_loaded_when_budget_permits():
-    async def _scenario():
-        ctl = AdmissionController(
-            ollama_max_loaded=2,
-            ps_client_factory=_fake_ps({"a:1"}),
-        )
-        token = await ctl.acquire("b:2")
-        token.release()
-    asyncio.run(_scenario())
+@pytest.mark.anyio
+async def test_admission_allows_multiple_loaded_when_budget_permits():
+    ctl = AdmissionController(
+        ollama_max_loaded=2,
+        ps_client_factory=_fake_ps({"a:1"}),
+    )
+    token = await ctl.acquire("b:2")
+    token.release()
 
 
-def test_admission_fail_open_when_ps_errors():
+@pytest.mark.anyio
+async def test_admission_fail_open_when_ps_errors():
     """If we cannot reach ollama /api/ps, err on the side of admitting.
 
     The alternative (blocking all traffic because health-check failed)
     would turn a transient ollama-side blip into a full gateway outage.
     """
-    async def _scenario():
-        async def _broken_ps():
-            raise RuntimeError("network down")
-        ctl = AdmissionController(
-            ollama_max_loaded=1,
-            ps_client_factory=_broken_ps,
-        )
-        token = await ctl.acquire("qwen3-coder:30b")
-        token.release()
-    asyncio.run(_scenario())
+    async def _broken_ps():
+        raise RuntimeError("network down")
+    ctl = AdmissionController(
+        ollama_max_loaded=1,
+        ps_client_factory=_broken_ps,
+    )
+    token = await ctl.acquire("qwen3-coder:30b")
+    token.release()
 
 
-def test_token_release_frees_ollama_slot():
-    async def _scenario():
-        ctl = AdmissionController(
-            ollama_max_loaded=1,
-            ps_client_factory=_fake_ps({"qwen3-coder:30b"}),
-        )
-        t1 = await ctl.acquire("qwen3-coder:30b")
-        t1.release()
-        # Second acquire of the same model must succeed immediately.
-        t2 = await asyncio.wait_for(ctl.acquire("qwen3-coder:30b"), timeout=0.5)
-        t2.release()
-    asyncio.run(_scenario())
+@pytest.mark.anyio
+async def test_token_release_frees_ollama_slot():
+    ctl = AdmissionController(
+        ollama_max_loaded=1,
+        ps_client_factory=_fake_ps({"qwen3-coder:30b"}),
+    )
+    t1 = await ctl.acquire("qwen3-coder:30b")
+    t1.release()
+    # Second acquire of the same model must succeed immediately.
+    t2 = await asyncio.wait_for(ctl.acquire("qwen3-coder:30b"), timeout=0.5)
+    t2.release()
 
 
 # ── External admission ────────────────────────────────────────────────────
 
-def test_external_admission_queues_past_limit():
+@pytest.mark.anyio
+async def test_external_admission_queues_past_limit():
     """External providers queue. The N+1 request waits; it does not fail."""
-    async def _scenario():
-        ctl = AdmissionController(
-            ollama_max_loaded=1,
-            external_max_concurrent=2,
-        )
-        t1 = await ctl.acquire("glm-5.1")
-        t2 = await ctl.acquire("glm-5.1")
-        # Third should block until t1 releases.
-        third_task = asyncio.create_task(ctl.acquire("glm-5.1"))
-        await asyncio.sleep(0.05)
-        assert not third_task.done(), "third external request should be queued"
-        t1.release()
-        t3 = await asyncio.wait_for(third_task, timeout=0.5)
-        t2.release()
-        t3.release()
-    asyncio.run(_scenario())
+    ctl = AdmissionController(
+        ollama_max_loaded=1,
+        external_max_concurrent=2,
+    )
+    t1 = await ctl.acquire("glm-5.1")
+    t2 = await ctl.acquire("glm-5.1")
+    # Third should block until t1 releases.
+    third_task = asyncio.create_task(ctl.acquire("glm-5.1"))
+    await asyncio.sleep(0.05)
+    assert not third_task.done(), "third external request should be queued"
+    t1.release()
+    t3 = await asyncio.wait_for(third_task, timeout=0.5)
+    t2.release()
+    t3.release()
 
 
-def test_external_does_not_consume_ollama_budget():
+@pytest.mark.anyio
+async def test_external_does_not_consume_ollama_budget():
     """An external call must not count against the ollama memory cap."""
-    async def _scenario():
-        ctl = AdmissionController(
-            ollama_max_loaded=1,
-            external_max_concurrent=5,
-            ps_client_factory=_fake_ps({"qwen3-coder:30b"}),
-        )
-        # Hold an ollama slot and a z.ai slot simultaneously.
-        ollama_tok = await ctl.acquire("qwen3-coder:30b")
-        ext_tok = await ctl.acquire("glm-5.1")
-        ollama_tok.release()
-        ext_tok.release()
-    asyncio.run(_scenario())
+    ctl = AdmissionController(
+        ollama_max_loaded=1,
+        external_max_concurrent=5,
+        ps_client_factory=_fake_ps({"qwen3-coder:30b"}),
+    )
+    # Hold an ollama slot and a z.ai slot simultaneously.
+    ollama_tok = await ctl.acquire("qwen3-coder:30b")
+    ext_tok = await ctl.acquire("glm-5.1")
+    ollama_tok.release()
+    ext_tok.release()
 
 
 # ── URL normalization ─────────────────────────────────────────────────────
