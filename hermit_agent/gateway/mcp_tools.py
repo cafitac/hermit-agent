@@ -1,6 +1,5 @@
 from __future__ import annotations
 import logging
-import uuid
 
 logger = logging.getLogger("hermit_agent.gateway.mcp_tools")
 
@@ -10,9 +9,9 @@ def register_mcp_tools(mcp) -> None:
 
     from .task_actions import cancel_task_state, enqueue_reply, is_waiting_for_reply
     from .task_models import normalize_requested_model, normalize_task_cwd
-    from .task_store import acquire_worker_slot, create_task, get_task
+    from .task_runtime import create_registered_task_state
+    from .task_store import acquire_worker_slot, get_task
     from .task_views import add_waiting_prompt_fields
-    from ._singletons import sse_manager
     from .task_runner import run_task_async
     import asyncio
 
@@ -29,12 +28,10 @@ def register_mcp_tools(mcp) -> None:
         if not acquire_worker_slot():
             return mcp_error(ErrorCode.SERVER_BUSY)
 
-        task_id = str(uuid.uuid4())
         work_cwd = normalize_task_cwd(cwd)
         use_model = normalize_requested_model(model)
 
-        state = create_task(task_id)
-        sse_manager.register(task_id)
+        task_id, state = create_registered_task_state()
 
         asyncio.create_task(run_task_async(
             task_id=task_id,

@@ -7,10 +7,11 @@ from pydantic import BaseModel
 
 from .._singletons import sse_manager
 from ..task_store import (
-    GatewayTaskState, acquire_worker_slot, create_task, get_task,
+    GatewayTaskState, acquire_worker_slot, get_task,
 )
 from ..task_actions import cancel_task_state, enqueue_reply, is_waiting_for_reply
 from ..task_models import normalize_requested_model, normalize_task_cwd
+from ..task_runtime import create_registered_task_state
 from ..task_views import add_waiting_prompt_fields
 from ..auth import AuthContext, get_current_user
 from ..errors import ErrorCode, gateway_error
@@ -125,17 +126,13 @@ async def create_task_endpoint(
     if not acquire_worker_slot():
         raise gateway_error(ErrorCode.SERVER_BUSY)
 
-    task_id = str(uuid.uuid4())
     cwd = normalize_task_cwd(req.cwd)
 
     # Auto routing priority when model is omitted: codex -> z.ai -> local ollama
     model = normalize_requested_model(req.model)
 
-
-    state = create_task(task_id)
+    task_id, state = create_registered_task_state()
     state.parent_session_id = req.parent_session_id
-
-    sse_manager.register(task_id)  # register before starting background task to prevent race
 
     background.add_task(
         run_task_async,
