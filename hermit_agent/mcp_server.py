@@ -40,6 +40,7 @@ from .mcp_channel import (
     _notify_running,
     _set_active_session,
 )
+from .mcp_sse_bridge import _SSEBridge as _BaseSSEBridge
 
 # ── File logger ───────────────────────────────────────────────────────────────
 
@@ -138,81 +139,22 @@ def _gateway_health_check(force: bool = False) -> bool:
         return False
 
 
-# ── SSE → hermit-channel bridge ──────────────────────────────────────────────
-
-class _SSEBridge:
-    """Consume the Gateway SSE stream and bridge events to hermit-channel.
-
-    One bridge instance per task, running on a background thread.
-    Auto-cleans on completion or error.
-    """
+class _SSEBridge(_BaseSSEBridge):
+    """mcp_server-local wrapper preserving existing test patch points."""
 
     def __init__(self, task_id: str, client: httpx.Client):
-        self.task_id = task_id
-        self.client = client
-        self.shutdown_event = threading.Event()
-        self.thread: threading.Thread | None = None
-        self._last_event_time = time.time()
-
-    def _bridge_log(self, msg: str) -> None:
-        _log(f"[sse-bridge {self.task_id[:8]}] {msg}")
-
-    def start(self) -> None:
-        self.thread = threading.Thread(
-            target=self._consume_sse,
-            name=f"sse-bridge-{self.task_id[:8]}",
-            daemon=True,
+        super().__init__(
+            task_id=task_id,
+            client=client,
+            gateway_url=_GATEWAY_URL,
+            gateway_api_key=_GATEWAY_API_KEY,
+            log_fn=_log,
+            on_prompt=_notify_channel,
+            on_done=_notify_done,
+            on_error=_notify_error,
+            on_running=_notify_running,
+            on_cleanup=lambda tid: _sse_bridges.pop(tid, None),
         )
-        self.thread.start()
-        self._bridge_log("started")
-
-    def shutdown(self) -> None:
-        self.shutdown_event.set()
-        if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=5.0)
-            if self.thread.is_alive():
-                self._bridge_log("thread did not exit gracefully")
-        self._bridge_log("shutdown")
-
-    def _consume_sse(self) -> None:
-        url = f"{_GATEWAY_URL}/tasks/{self.task_id}/stream"
-        headers = {}
-        if _GATEWAY_API_KEY:
-            headers["Authorization"] = f"Bearer {_GATEWAY_API_KEY}"
-
-        try:
-            with self.client.stream("GET", url, headers=headers, timeout=None) as resp:
-                resp.raise_for_status()
-
-                for line in resp.iter_lines():
-                    if self.shutdown_event.is_set():
-                        break
-
-                    self._last_event_time = time.time()
-
-                    if not line:
-                        continue
-
-                    if line.startswith("data: "):
-                        data_str = line[6:]
-                        try:
-                            event = json.loads(data_str)
-                            self._handle_sse_event(event)
-                        except json.JSONDecodeError:
-                            pass
-
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                self._bridge_log("task not found (404) -- cleanup")
-            else:
-                self._bridge_log(f"http error: {e}")
-        except Exception as e:
-            if not self.shutdown_event.is_set():
-                self._bridge_log(f"error: {e}")
-
-        # Auto-cleanup on exit
-        with _sse_bridges_lock:
-            _sse_bridges.pop(self.task_id, None)
 
     def _handle_sse_event(self, event: dict) -> None:
         event_type = event.get("type", "")
