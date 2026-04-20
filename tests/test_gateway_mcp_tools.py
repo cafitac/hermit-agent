@@ -96,3 +96,18 @@ def test_check_reply_and_cancel_task_use_real_state():
         assert state.reply_queue.get_nowait() == "__CANCELLED__"
     finally:
         delete_task("task-check")
+
+
+def test_create_registered_task_state_registers_real_task_and_sse_queue():
+    from hermit_agent.gateway._singletons import sse_manager
+    from hermit_agent.gateway.task_runtime import create_registered_task_state
+    from hermit_agent.gateway.task_store import delete_task, get_task
+
+    task_id, state = create_registered_task_state()
+
+    try:
+        assert get_task(task_id) is state
+        assert task_id in sse_manager._queues
+    finally:
+        delete_task(task_id)
+        sse_manager._queues.pop(task_id, None)
