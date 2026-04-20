@@ -10,6 +10,7 @@ from ..llm_client import create_llm_client
 from ..agent_session import MCPAgentSession
 from ..codex_runner import is_codex_model, run_codex_task
 from ._singletons import sse_manager, MAX_WORKERS
+from .task_models import AUTO_MODEL_SENTINEL, normalize_requested_model
 from .sse import SSEEvent, SSEManager
 from .task_store import GatewayTaskState, release_worker_slot
 from .permission import GatewayPermissionChecker
@@ -23,12 +24,9 @@ _EXECUTOR = concurrent.futures.ThreadPoolExecutor(
     thread_name_prefix="gateway-agent",
 )
 
-_AUTO_MODEL_SENTINEL = "__auto__"
-
-
 def _is_auto_model(model: str) -> bool:
-    lowered = (model or "").strip().lower()
-    return lowered in {"", "auto", _AUTO_MODEL_SENTINEL}
+    normalized = normalize_requested_model(model).lower()
+    return normalized in {"auto", AUTO_MODEL_SENTINEL}
 
 
 def _is_unavailable_error(error: Exception | str) -> bool:
@@ -117,7 +115,7 @@ def _run(
     from ..permissions import PermissionMode
     from ..config import load_settings, select_llm_endpoint
 
-    requested_model = (model or "").strip() or _AUTO_MODEL_SENTINEL
+    requested_model = normalize_requested_model(model)
     cfg = load_settings(cwd=cwd)
 
     gw_log = GatewaySessionLog(

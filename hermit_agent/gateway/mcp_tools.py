@@ -10,6 +10,7 @@ def register_mcp_tools(mcp) -> None:
     """Register 4 tools on the FastMCP instance."""
 
     from .task_actions import cancel_task_state, enqueue_reply, is_waiting_for_reply
+    from .task_models import normalize_requested_model
     from .task_store import acquire_worker_slot, create_task, get_task
     from .task_views import add_waiting_prompt_fields
     from ._singletons import sse_manager
@@ -31,7 +32,7 @@ def register_mcp_tools(mcp) -> None:
 
         task_id = str(uuid.uuid4())
         work_cwd = cwd or os.getcwd()
-        use_model = model or "__auto__"
+        use_model = normalize_requested_model(model)
 
         state = create_task(task_id)
         sse_manager.register(task_id)

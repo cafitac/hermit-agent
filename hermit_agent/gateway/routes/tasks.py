@@ -11,6 +11,7 @@ from ..task_store import (
     GatewayTaskState, acquire_worker_slot, create_task, get_task,
 )
 from ..task_actions import cancel_task_state, enqueue_reply, is_waiting_for_reply
+from ..task_models import normalize_requested_model
 from ..task_views import add_waiting_prompt_fields
 from ..auth import AuthContext, get_current_user
 from ..errors import ErrorCode, gateway_error
@@ -128,13 +129,8 @@ async def create_task_endpoint(
     task_id = str(uuid.uuid4())
     cwd = req.cwd or os.getcwd()
 
-    requested_model = (req.model or "").strip()
-    if requested_model:
-        model = requested_model
-    else:
-        # Auto routing priority when model is omitted:
-        # codex -> z.ai -> local ollama
-        model = "__auto__"
+    # Auto routing priority when model is omitted: codex -> z.ai -> local ollama
+    model = normalize_requested_model(req.model)
 
 
     state = create_task(task_id)
