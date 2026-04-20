@@ -31,9 +31,6 @@ def register_mcp_tools(mcp) -> None:
 
         task_id = str(uuid.uuid4())
         work_cwd = cwd or os.getcwd()
-
-        from ..config import load_settings
-        cfg = load_settings()
         use_model = model or "__auto__"
 
         state = create_task(task_id)
