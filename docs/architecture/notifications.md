@@ -152,3 +152,5 @@ See [docs/cc-setup.md](../cc-setup.md). The short version:
 2. Start Claude Code with
    `--dangerously-load-development-channels server:hermit-channel`
    so CC loads the `claude/channel` capability.
+   The MCP launcher auto-starts the local gateway when needed and skips the
+   start when the gateway is already healthy.

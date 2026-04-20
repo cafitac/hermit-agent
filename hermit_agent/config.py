@@ -36,6 +36,7 @@ DEFAULTS: dict[str, Any] = {
     # `anthropic_base_url`. See `get_provider_cred(cfg, platform)`.
     "providers": {},
     "ollama_url": "http://localhost:11434/v1",
+    "codex_command": "codex",
     "model": "qwen3-coder:30b",
     "max_turns": 200,
     "response_language": "auto",
@@ -71,6 +72,7 @@ _ENV_MAP = {
     "HERMIT_LLM_URL": "llm_url",
     "HERMIT_API_KEY": "llm_api_key",
     "HERMIT_OLLAMA_URL": "ollama_url",
+    "HERMIT_CODEX_COMMAND": "codex_command",
     "Z_AI_API_KEY": "llm_api_key",
     "HERMIT_LANG": "response_language",
     "HERMIT_COMPACT_INSTRUCTIONS": "compact_instructions",

@@ -4,9 +4,11 @@ import concurrent.futures
 import logging
 import os
 import time
+from typing import Any
 
 from ..llm_client import create_llm_client
 from ..agent_session import MCPAgentSession
+from ..codex_runner import is_codex_model, run_codex_task
 from ._singletons import sse_manager, MAX_WORKERS
 from .sse import SSEEvent, SSEManager
 from .task_store import GatewayTaskState, release_worker_slot
@@ -21,10 +23,73 @@ _EXECUTOR = concurrent.futures.ThreadPoolExecutor(
     thread_name_prefix="gateway-agent",
 )
 
+_AUTO_MODEL_SENTINEL = "__auto__"
+
+
+def _is_auto_model(model: str) -> bool:
+    lowered = (model or "").strip().lower()
+    return lowered in {"", "auto", _AUTO_MODEL_SENTINEL}
+
+
+def _is_unavailable_error(error: Exception | str) -> bool:
+    text = str(error).lower()
+    markers = [
+        "rate-limit",
+        "rate limit",
+        "out of credits",
+        "insufficient",
+        "quota",
+        "authentication",
+        "unauthorized",
+        "forbidden",
+        "api key",
+        "requested model unavailable",
+        "no provider configured",
+        "model not found",
+        "unknown model",
+        "http 401",
+        "http 403",
+        "http 429",
+        "connection refused",
+        "failed to establish a new connection",
+        "could not connect",
+    ]
+    return any(marker in text for marker in markers)
+
+
+def _auto_model_chain(cfg: dict[str, Any]) -> list[str]:
+    chain: list[str] = []
+
+    codex_model = str(cfg.get("codex_default_model", "gpt-5.3-codex") or "gpt-5.3-codex").strip()
+    if codex_model:
+        chain.append(codex_model)
+
+    configured_model = str(cfg.get("model", "") or "").strip()
+    z_ai_model = str(cfg.get("zai_default_model", "") or "").strip()
+    if not z_ai_model:
+        z_ai_model = configured_model if configured_model.startswith("glm-") else "glm-5.1"
+    if z_ai_model:
+        chain.append(z_ai_model)
+
+    local_model = str(cfg.get("local_model", "") or "").strip()
+    if not local_model:
+        if configured_model and ":" in configured_model:
+            local_model = configured_model
+        else:
+            local_model = "qwen3-coder:30b"
+    chain.append(local_model)
+
+    deduped: list[str] = []
+    for model in chain:
+        if model and model not in deduped:
+            deduped.append(model)
+    return deduped
+
 
 def _make_emitter_handler(task_id: str, sse: SSEManager, gw_log: GatewaySessionLog | None = None):
     """Handler that converts AgentLoop emitter events to SSE events.
     Also forwards non-streaming events to the GatewaySessionLog."""
+
     def handler(event_type: str, data: dict):
         if event_type == "streaming":
             sse.publish_threadsafe(task_id, SSEEvent(type="streaming", token=data.get("token", "")))
@@ -54,6 +119,7 @@ def _make_emitter_handler(task_id: str, sse: SSEManager, gw_log: GatewaySessionL
         if gw_log is not None and event_type not in ("streaming", "stream_end"):
             gw_log.write_event({"type": event_type, **data})
         # progress events are handled by the existing progress_hook
+
     return handler
 
 
@@ -69,100 +135,185 @@ def _run(
 ) -> dict:
     """Runs in the executor thread. Always calls release_worker_slot() in finally."""
     from ..permissions import PermissionMode
-
-    # Load LLM config from config.py (including env vars)
     from ..config import load_settings, select_llm_endpoint
-    cfg = load_settings()
-    llm_url, api_key = select_llm_endpoint(model, cfg)
-    llm = create_llm_client(base_url=llm_url, model=model, api_key=api_key)
 
-    def notify_fn(question: str, options: list) -> None:
-        state.status = "waiting"
-        sse.publish_threadsafe(task_id, SSEEvent(
-            type="waiting", question=question, options=options or [],
-        ))
+    requested_model = (model or "").strip() or _AUTO_MODEL_SENTINEL
+    cfg = load_settings(cwd=cwd)
 
-    def permission_notify_fn(question: str, options: list) -> None:
-        state.status = "waiting"
-        sse.publish_threadsafe(task_id, SSEEvent(
-            type="permission_ask", question=question, options=options or [],
-        ))
-
-    def notify_running_fn() -> None:
-        state.status = "running"
-
-    def progress_hook(step: str, result: str) -> None:
-        sse.publish_threadsafe(task_id, SSEEvent(
-            type="progress", step=step, message=result[:500],
-        ))
-
-    def make_progress_hook_fn(_tid: str):
-        return progress_hook
-
-    checker = GatewayPermissionChecker(
-        mode=PermissionMode.ALLOW_READ,
-        question_queue=state.question_queue,
-        reply_queue=state.reply_queue,
-        notify_fn=notify_fn,
-        notify_running_fn=notify_running_fn,
-        permission_notify_fn=permission_notify_fn,
-    )
-
-    # Slash command preprocessing
-    if task.strip().startswith("/"):
-        slash_line = task.strip().splitlines()[0]
-        try:
-            from ..loop import _preprocess_slash_command
-            task = _preprocess_slash_command(task, slash_line, cwd)
-        except Exception as e:
-            logger.warning("slash command preprocessing failed: %s", e)
-
-    session = MCPAgentSession(
-        llm=llm,
-        cwd=cwd,
-        state=state,
-        task_id=task_id,
-        notify_fn=notify_fn,
-        notify_running_fn=notify_running_fn,
-        make_progress_hook_fn=make_progress_hook_fn,
-        notify_done_fn=lambda tid, summary: sse.publish_threadsafe(
-            tid, SSEEvent(type="done", result=summary or ""),
-        ),
-        notify_error_fn=lambda tid, msg: sse.publish_threadsafe(
-            tid, SSEEvent(type="error", message=msg),
-        ),
-        permission_checker=checker,
-        max_turns=max_turns,
-        parent_session_id=state.parent_session_id,
-    )
-
-    # Per-task structured event logging (additive — does not replace stdlib logger or SSE)
     gw_log = GatewaySessionLog(
-        task_id=task_id, cwd=cwd, model=model,
+        task_id=task_id,
+        cwd=cwd,
+        model=requested_model,
         parent_session_id=state.parent_session_id,
     )
-    session.set_emitter_handler(_make_emitter_handler(task_id, sse, gw_log))
 
-    try:
-        session.run(task)
+    def _run_single(selected_model: str) -> dict[str, Any]:
+        if is_codex_model(selected_model):
+            result = run_codex_task(
+                task_id=task_id,
+                task=task,
+                cwd=cwd,
+                model=selected_model,
+                state=state,
+                sse=sse,
+                gw_log=gw_log,
+                codex_command=cfg.get("codex_command", "codex"),
+            )
+            if state.cancel_event.is_set():
+                state.status = "cancelled"
+                state.waiting_kind = None
+            else:
+                state.status = "done"
+                sse.publish_threadsafe(task_id, SSEEvent(type="done", result=result.get("result", "")))
+            return result | {"status": state.status, "token_totals": state.token_totals, "model": selected_model}
+
+        llm_url, api_key = select_llm_endpoint(selected_model, cfg)
+        if not llm_url:
+            raise RuntimeError(f"Requested model unavailable: {selected_model} (no provider configured)")
+
+        llm = create_llm_client(base_url=llm_url, model=selected_model, api_key=api_key)
+
+        def notify_fn(question: str, options: list) -> None:
+            state.status = "waiting"
+            state.waiting_kind = "waiting"
+            sse.publish_threadsafe(task_id, SSEEvent(
+                type="waiting", question=question, options=options or [],
+            ))
+
+        def permission_notify_fn(question: str, options: list) -> None:
+            state.status = "waiting"
+            state.waiting_kind = "permission_ask"
+            sse.publish_threadsafe(task_id, SSEEvent(
+                type="permission_ask", question=question, options=options or [],
+            ))
+
+        def notify_running_fn() -> None:
+            state.status = "running"
+            state.waiting_kind = None
+
+        def progress_hook(step: str, result: str) -> None:
+            sse.publish_threadsafe(task_id, SSEEvent(
+                type="progress", step=step, message=result[:500],
+            ))
+
+        def make_progress_hook_fn(_tid: str):
+            return progress_hook
+
+        checker = GatewayPermissionChecker(
+            mode=PermissionMode.ALLOW_READ,
+            question_queue=state.question_queue,
+            reply_queue=state.reply_queue,
+            notify_fn=notify_fn,
+            notify_running_fn=notify_running_fn,
+            permission_notify_fn=permission_notify_fn,
+        )
+
+        processed_task = task
+        if processed_task.strip().startswith("/"):
+            slash_line = processed_task.strip().splitlines()[0]
+            try:
+                from ..loop import _preprocess_slash_command
+
+                processed_task = _preprocess_slash_command(processed_task, slash_line, cwd)
+            except Exception as e:
+                logger.warning("slash command preprocessing failed: %s", e)
+
+        session = MCPAgentSession(
+            llm=llm,
+            cwd=cwd,
+            state=state,
+            task_id=task_id,
+            notify_fn=notify_fn,
+            notify_running_fn=notify_running_fn,
+            make_progress_hook_fn=make_progress_hook_fn,
+            notify_done_fn=lambda tid, summary: sse.publish_threadsafe(
+                tid, SSEEvent(type="done", result=summary or ""),
+            ),
+            notify_error_fn=lambda tid, msg: sse.publish_threadsafe(
+                tid, SSEEvent(type="error", message=msg),
+            ),
+            permission_checker=checker,
+            max_turns=max_turns,
+            parent_session_id=state.parent_session_id,
+        )
+
+        # Per-task structured event logging (additive — does not replace stdlib logger or SSE)
+        session.set_emitter_handler(_make_emitter_handler(task_id, sse, gw_log))
+
+        session.run(processed_task)
+
         if state.cancel_event.is_set():
             state.status = "cancelled"
+            state.waiting_kind = None
         elif state.status not in ("done", "error"):
             state.status = "done"
+            state.waiting_kind = None
+
+        return {
+            "token_totals": state.token_totals,
+            "status": state.status,
+            "model": selected_model,
+        }
+
+    try:
+        if _is_auto_model(requested_model):
+            attempted: list[str] = []
+            unavailable: list[dict[str, str]] = []
+
+            for selected_model in _auto_model_chain(cfg):
+                attempted.append(selected_model)
+                gw_log.write_event({"type": "model_attempt", "model": selected_model})
+                try:
+                    result = _run_single(selected_model)
+                    gw_log.mark_completed(state.token_totals)
+                    return result | {
+                        "model": selected_model,
+                        "auto_route": {
+                            "requested": requested_model,
+                            "attempted": attempted,
+                            "selected": selected_model,
+                        },
+                    }
+                except Exception as e:
+                    message = str(e)
+                    unavailable.append({"model": selected_model, "error": message})
+                    gw_log.write_event({
+                        "type": "model_attempt_failed",
+                        "model": selected_model,
+                        "error": message,
+                        "unavailable": _is_unavailable_error(e),
+                    })
+                    if state.cancel_event.is_set():
+                        raise
+                    if not _is_unavailable_error(e):
+                        raise
+
+            details = "; ".join(f"{x['model']}: {x['error']}" for x in unavailable)
+            raise RuntimeError(f"All auto-routed models unavailable. {details}")
+
+        result = _run_single(requested_model)
         gw_log.mark_completed(state.token_totals)
+        return result
+
     except Exception as e:
-        logger.exception("task %s failed: %s", task_id, e)
+        message = str(e)
+        if not _is_auto_model(requested_model) and _is_unavailable_error(e):
+            message = f"Requested model unavailable: {requested_model}. {message}"
+
+        logger.exception("task %s failed (model=%s): %s", task_id, requested_model, message)
         state.status = "error"
-        sse.publish_threadsafe(task_id, SSEEvent(type="error", message=str(e)))
-        gw_log.mark_crashed(str(e))
+        state.waiting_kind = None
+        state.result = message
+        state.result_queue.put({"status": "error", "message": message})
+        sse.publish_threadsafe(task_id, SSEEvent(type="error", message=message))
+        gw_log.mark_crashed(message)
+        return {
+            "token_totals": state.token_totals,
+            "status": state.status,
+            "model": requested_model,
+        }
     finally:
         release_worker_slot()
-
-    return {
-        "token_totals": state.token_totals,
-        "status": state.status,
-        "model": model,
-    }
 
 
 async def run_task_async(

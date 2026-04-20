@@ -2,12 +2,13 @@
 
 This is the setup that makes `/feature-develop-hermit`, `/code-apply-hermit`, etc. work from inside Claude Code. Five minutes, no Docker.
 
-## 1. Install and start the gateway
+## 1. Install and initialize the gateway
 
 ```bash
 ./install.sh          # one-shot: venv, deps, default settings
-./bin/gateway.sh --daemon # FastAPI relay on :8765
 ```
+
+`./bin/mcp-server.sh` now auto-starts the gateway when Claude Code or Codex launches the MCP server, so the explicit `./bin/gateway.sh --daemon` step is optional. It is still handy when you want to warm the relay up manually before connecting a client.
 
 Verify:
 
@@ -103,10 +104,10 @@ Claude will interview you briefly, write a plan, then delegate implementation to
 | Symptom | Fix |
 |---|---|
 | `/mcp` shows `hermit` as failed | Check `~/.hermit/gateway.log` for a 401 or connection refused; re-mint the API key |
-| `mcp__hermit__run_task` hangs | Gateway not running (`./bin/gateway.sh --daemon`) or wrong `gateway_url` |
+| `mcp__hermit__run_task` hangs | Auto-start may have failed or `gateway_url` is wrong; check `~/.hermit/gateway.log`, then try `./bin/gateway.sh --daemon` manually |
 | Claude Code shows no push notifications | Start Claude Code with `--dangerously-load-development-channels server:hermit-channel` |
 | Wrong model picked | `HERMIT_MODEL` env or the `model` key in settings — names containing `:` route to ollama, anything else routes via `providers[<slug>]` (e.g. `glm-*` → `providers["z.ai"]`) |
-| MCP server won't start | `./bin/mcp-server.sh` alone should print `ready`; if it fails, run with `HERMIT_DEBUG=1` |
+| MCP server won't start | `./bin/mcp-server.sh` now ensures the gateway first; if startup still fails, inspect `~/.hermit/mcp_server.log` and `~/.hermit/gateway.log` |
 
 ## How tokens actually get saved
 

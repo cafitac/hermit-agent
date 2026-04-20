@@ -10,6 +10,21 @@ from .._singletons import sse_manager
 from ..task_store import (
     GatewayTaskState, acquire_worker_slot, create_task, get_task,
 )
+
+
+def _peek_waiting_prompt(state: GatewayTaskState) -> dict[str, object]:
+    try:
+        q_item = state.question_queue.get_nowait()
+    except Exception:
+        return {}
+
+    try:
+        return {
+            "question": q_item.get("question", ""),
+            "options": q_item.get("options", []),
+        }
+    finally:
+        state.question_queue.put_nowait(q_item)
 from ..auth import AuthContext, get_current_user
 from ..errors import ErrorCode, gateway_error
 from ..task_runner import run_task_async
@@ -126,9 +141,14 @@ async def create_task_endpoint(
     task_id = str(uuid.uuid4())
     cwd = req.cwd or os.getcwd()
 
-    from ...config import load_settings
-    cfg = load_settings()
-    model = req.model or cfg.get("model", "glm-5.1")
+    requested_model = (req.model or "").strip()
+    if requested_model:
+        model = requested_model
+    else:
+        # Auto routing priority when model is omitted:
+        # codex -> z.ai -> local ollama
+        model = "__auto__"
+
 
     state = create_task(task_id)
     state.parent_session_id = req.parent_session_id
@@ -217,9 +237,15 @@ async def get_task_status(
     if not state:
         raise gateway_error(ErrorCode.TASK_NOT_FOUND)
 
-    return {
+    result = {
         "task_id": task_id,
         "status": state.status,
         "result": state.result,
         "token_totals": state.token_totals,
     }
+
+    if state.status == "waiting":
+        result.update(_peek_waiting_prompt(state))
+        result["kind"] = state.waiting_kind or "waiting"
+
+    return result

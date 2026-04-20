@@ -91,7 +91,7 @@ What the installer does automatically:
 - **Prompts `Generate a random gateway API key now?`** If you accept, it applies the schema in `hermit_agent/gateway/migrations/001_initial.sql` to `~/.hermit/gateway.db`, inserts a freshly-generated `hermit-mcp-<random>` key, and patches `gateway_api_key` in your settings file.
 - **Prompts `Pull a local coding model via ollama?`** (skipped automatically if `ollama` is not installed). Accepting pulls `qwen3-coder:30b` (~18 GB).
 - Symlinks the four bundled `-hermit` slash commands into `~/.claude/commands/`.
-- **Prompts `Register Hermit MCP server in ~/.claude.json?`** with three choices: (a) project-specific, (b) user-wide, (c) skip. On accept, merges a `hermit-channel` stdio entry pointing at `./bin/mcp-server.sh` into `~/.claude.json` (backup: `~/.claude.json.backup-<ts>`). Safe on re-runs — an identical entry is detected and left alone.
+- **Prompts `Register Hermit MCP server in ~/.claude.json?`** with three choices: (a) project-specific, (b) user-wide, (c) skip. On accept, merges a `hermit-channel` stdio entry pointing at `./bin/mcp-server.sh` into `~/.claude.json` (backup: `~/.claude.json.backup-<ts>`). Safe on re-runs — an identical entry is detected and left alone. That launcher now auto-starts the local gateway on demand (and skips the start when the gateway is already healthy).
 - **Prompts `Add hermit alias to <rc-file>?`** so you can run `hermit` from any shell. If an existing alias points to an old path (e.g. before the `bin/` move), the installer offers to update it.
 - Prints any "Pending manual steps" at the end — e.g. a reminder to launch Claude Code with `--dangerously-load-development-channels server:hermit-channel`.
 
@@ -109,7 +109,7 @@ Every prompt is idempotent: re-running the installer detects the existing API ke
 
 To reverse everything: `./uninstall.sh` walks back through the same steps with per-item prompts (`--yes` accepts all; `--keep-data` leaves `~/.hermit/` alone). Ollama models are never deleted — remove manually with `ollama rm <model>`.
 
-The `hermit` launcher transparently starts the gateway daemon if it isn't already running (`HERMIT_AUTO_GATEWAY=0` opts out), so you never need to remember to run `./bin/gateway.sh --daemon` first.
+The `hermit` launcher transparently starts the gateway daemon if it isn't already running (`HERMIT_AUTO_GATEWAY=0` opts out), so you never need to remember to run `./bin/gateway.sh --daemon` first. The MCP launcher (`./bin/mcp-server.sh`) now does the same check-and-start flow, which makes both Claude Code and Codex able to bring up the full Hermit stack from the MCP entrypoint alone.
 
 ### Pick an executor LLM
 
@@ -156,8 +156,7 @@ If you skipped the registration prompt (or want to adjust the scope later), see 
 ## Quick start — CC + Hermit (the recommended shape)
 
 ```bash
-./bin/gateway.sh --daemon         # executor LLM relay, :8765
-./bin/mcp-server.sh               # MCP stdio — register this in ~/.claude/settings.json
+./bin/mcp-server.sh               # auto-starts the gateway if needed, then serves MCP stdio
 ```
 
 Then in Claude Code:
