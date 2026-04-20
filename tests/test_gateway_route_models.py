@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 
 class _FakeResponse:
     def __init__(self, status_code: int, payload: dict):
@@ -62,3 +64,26 @@ def test_model_slash_command_shows_empty_state(monkeypatch):
     monkeypatch.setattr(tasks_mod, "_discover_available_models", lambda: [])
 
     assert tasks_mod._handle_slash_command("/model") == "Available models:\n  (No models)"
+
+
+@pytest.mark.anyio
+async def test_list_models_route_returns_discovered_models(monkeypatch):
+    from hermit_agent.gateway.routes import tasks as tasks_mod
+
+    monkeypatch.setattr(
+        tasks_mod,
+        "_discover_available_models",
+        lambda: [
+            {"id": "glm-5.1", "source": "config", "default": True},
+            {"id": "codex-mini", "source": "ollama", "default": False},
+        ],
+    )
+
+    result = await tasks_mod.list_models()
+
+    assert result == {
+        "models": [
+            {"id": "glm-5.1", "source": "config", "default": True},
+            {"id": "codex-mini", "source": "ollama", "default": False},
+        ]
+    }

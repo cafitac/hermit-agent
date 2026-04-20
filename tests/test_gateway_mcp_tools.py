@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 
 class _DummyMCP:
     def __init__(self):
@@ -15,7 +17,8 @@ class _DummyMCP:
         return decorator
 
 
-def test_run_task_leaves_slash_preprocessing_to_task_runner(monkeypatch):
+@pytest.mark.anyio
+async def test_run_task_leaves_slash_preprocessing_to_task_runner(monkeypatch):
     import os
 
     import hermit_agent.gateway.mcp_tools as mcp_tools_mod
@@ -34,12 +37,8 @@ def test_run_task_leaves_slash_preprocessing_to_task_runner(monkeypatch):
     mcp_tools_mod.register_mcp_tools(dummy)
     run_task = dummy.tools["run_task"]
 
-    async def _scenario():
-        result = await run_task(task="/plan\nbody", cwd="", model="", max_turns=7)
-        await asyncio.sleep(0)
-        return result
-
-    result = asyncio.run(_scenario())
+    result = await run_task(task="/plan\nbody", cwd="", model="", max_turns=7)
+    await asyncio.sleep(0)
     task_id = result["task_id"]
     state = get_task(task_id)
 
@@ -58,7 +57,8 @@ def test_run_task_leaves_slash_preprocessing_to_task_runner(monkeypatch):
         sse_manager._queues.pop(task_id, None)
 
 
-def test_check_reply_and_cancel_task_use_real_state():
+@pytest.mark.anyio
+async def test_check_reply_and_cancel_task_use_real_state():
     import hermit_agent.gateway.mcp_tools as mcp_tools_mod
     from hermit_agent.gateway.task_store import create_task, delete_task
 
@@ -73,14 +73,10 @@ def test_check_reply_and_cancel_task_use_real_state():
     state.waiting_kind = "permission_ask"
     state.question_queue.put({"question": "Allow?", "options": ["Yes", "No"]})
 
-    async def _scenario():
+    try:
         checked = await check_task("task-check")
         replied = await reply_task("task-check", "yes")
         cancelled = await cancel_task("task-check")
-        return checked, replied, cancelled
-
-    try:
-        checked, replied, cancelled = asyncio.run(_scenario())
 
         assert checked == {
             "task_id": "task-check",

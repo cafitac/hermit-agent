@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-import asyncio
 from types import SimpleNamespace
 
+import pytest
 from fastapi import BackgroundTasks
 
 
@@ -23,17 +23,15 @@ def test_status_and_resume_slash_commands_return_gateway_messages():
     assert tasks_mod._handle_slash_command("/resume") == "Gateway mode does not support /resume."
 
 
-def test_create_task_endpoint_short_circuits_gateway_slash_commands():
+@pytest.mark.anyio
+async def test_create_task_endpoint_short_circuits_gateway_slash_commands():
     from hermit_agent.gateway.routes.tasks import TaskRequest, create_task_endpoint
 
-    async def _scenario():
-        return await create_task_endpoint(
-            req=TaskRequest(task="/status", cwd="", model="", max_turns=1),
-            background=BackgroundTasks(),
-            auth=SimpleNamespace(user="tester"),
-        )
-
-    result = asyncio.run(_scenario())
+    result = await create_task_endpoint(
+        req=TaskRequest(task="/status", cwd="", model="", max_turns=1),
+        background=BackgroundTasks(),
+        auth=SimpleNamespace(user="tester"),
+    )
 
     assert result == {
         "task_id": "instant",
