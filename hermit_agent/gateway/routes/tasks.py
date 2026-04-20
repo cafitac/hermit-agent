@@ -10,21 +10,8 @@ from .._singletons import sse_manager
 from ..task_store import (
     GatewayTaskState, acquire_worker_slot, create_task, get_task,
 )
-
-
-def _peek_waiting_prompt(state: GatewayTaskState) -> dict[str, object]:
-    try:
-        q_item = state.question_queue.get_nowait()
-    except Exception:
-        return {}
-
-    try:
-        return {
-            "question": q_item.get("question", ""),
-            "options": q_item.get("options", []),
-        }
-    finally:
-        state.question_queue.put_nowait(q_item)
+from ..task_actions import cancel_task_state, enqueue_reply, is_waiting_for_reply
+from ..task_views import add_waiting_prompt_fields
 from ..auth import AuthContext, get_current_user
 from ..errors import ErrorCode, gateway_error
 from ..task_runner import run_task_async
@@ -200,13 +187,13 @@ async def reply_task(
     state = get_task(task_id)
     if not state:
         raise gateway_error(ErrorCode.TASK_NOT_FOUND)
-    if state.status != "waiting":
+    if not is_waiting_for_reply(state):
         raise gateway_error(
             ErrorCode.TASK_ALREADY_DONE,
             f"Task status is '{state.status}'. Reply is only possible in waiting state.",
         )
 
-    state.reply_queue.put(req.message)
+    enqueue_reply(state, req.message)
     sse_manager.publish_threadsafe(task_id, SSEEvent(type="reply_ack", message="reply received"))
     return {"status": "ok", "task_id": task_id}
 
@@ -220,11 +207,7 @@ async def cancel_task(
     if not state:
         raise gateway_error(ErrorCode.TASK_NOT_FOUND)
 
-    state.cancel_event.set()
-    # If waiting, send cancellation signal to reply_queue
-    if state.status == "waiting":
-        state.reply_queue.put("__CANCELLED__")
-
+    cancel_task_state(state)
     return {"status": "cancelled", "task_id": task_id}
 
 
@@ -243,9 +226,4 @@ async def get_task_status(
         "result": state.result,
         "token_totals": state.token_totals,
     }
-
-    if state.status == "waiting":
-        result.update(_peek_waiting_prompt(state))
-        result["kind"] = state.waiting_kind or "waiting"
-
-    return result
+    return add_waiting_prompt_fields(result, state, include_kind=True)

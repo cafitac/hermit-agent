@@ -47,6 +47,8 @@ try:
 except Exception:
     VERSION = "0.0.0"
 
+from .channels_core.event_adapters import bridge_messages_from_sse_event
+
 
 def _send(msg: dict) -> None:
     """Send JSON message to UI. Always uses the original stdout."""
@@ -56,54 +58,8 @@ def _send(msg: dict) -> None:
 
 def _dispatch_sse_to_tui(event: dict) -> None:
     """Convert SSE event dict → TUI JSON protocol and send."""
-    t = event.get("type")
-    if t == "streaming":
-        _send({"type": "streaming", "token": event.get("token", "")})
-    elif t == "stream_end":
-        _send({"type": "stream_end"})
-    elif t == "tool_use":
-        _send({
-            "type": "tool_use",
-            "name": event.get("tool_name", ""),
-            "detail": event.get("detail", ""),
-            "ts": time.time(),
-        })
-    elif t == "tool_result":
-        _send({
-            "type": "tool_result",
-            "content": event.get("content", ""),
-            "is_error": event.get("is_error", False),
-            "ts": time.time(),
-        })
-    elif t == "status":
-        fields = {k: v for k, v in event.items() if k not in ("type", "_source")}
-        _send({"type": "status", **fields})
-    elif t == "model_changed":
-        _send({
-            "type": "model_changed",
-            "old_model": event.get("old_model", ""),
-            "new_model": event.get("new_model", ""),
-        })
-    elif t == "waiting":
-        # ask_user_question → reuse TUI permission_ask UI (tool="ask" → free-text input)
-        _send({
-            "type": "permission_ask",
-            "tool": "ask",
-            "summary": event.get("question", ""),
-            "options": event.get("options", []),
-        })
-    elif t == "permission_ask":
-        # bash permission request
-        _send({
-            "type": "permission_ask",
-            "tool": event.get("tool_name", "bash"),
-            "summary": event.get("question", ""),
-            "options": event.get("options", []),
-        })
-    elif t == "progress":
-        _send({"type": "tool_result", "content": event.get("message", ""), "is_error": False})
-    elif t == "error":
-        _send({"type": "error", "message": event.get("message", "")})
+    for msg in bridge_messages_from_sse_event(event, now=time.time):
+        _send(msg)
     # done/cancelled/error terminators are handled in the _run_gateway_mode main loop
 
 

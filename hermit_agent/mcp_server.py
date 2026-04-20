@@ -31,6 +31,7 @@ import httpx
 from pathlib import Path
 from typing import Any
 
+from .channels_core.event_adapters import channel_action_from_sse_event
 from mcp.shared.message import SessionMessage
 from mcp.types import JSONRPCMessage, JSONRPCNotification
 
@@ -296,32 +297,17 @@ class _SSEBridge:
         event_type = event.get("type", "")
         self._bridge_log(f"event: {event_type}")
 
-        if event_type == "waiting":
-            question = event.get("question", "")
-            options = event.get("options", [])
-            _notify_channel(self.task_id, question, options)
-
-        elif event_type == "permission_ask":
-            question = event.get("question", "")
-            options = event.get("options", [])
-            _notify_channel(self.task_id, question, options)
-
-        elif event_type == "done":
-            result = event.get("result", "")
-            _notify_done(self.task_id, result[:200] if result else None)
-
-        elif event_type == "error":
-            message = event.get("message", "")
-            _notify_error(self.task_id, message)
-
-        elif event_type == "cancelled":
-            message = event.get("message", "Task cancelled")
-            _notify_error(self.task_id, message)
-
-        elif event_type == "reply_ack":
+        action = channel_action_from_sse_event(event)
+        if action is None:
+            return
+        if action.kind == "prompt":
+            _notify_channel(self.task_id, action.question, list(action.options))
+        elif action.kind == "done":
+            _notify_done(self.task_id, action.message[:200] if action.message else None)
+        elif action.kind == "error":
+            _notify_error(self.task_id, action.message)
+        elif action.kind == "running":
             _notify_running(self.task_id)
-
-        # progress, tool_result, streaming, stream_end, tool_use, status: no channel notification
 
 
 def _start_sse_bridge(task_id: str) -> _SSEBridge:
