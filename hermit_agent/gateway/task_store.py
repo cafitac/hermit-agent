@@ -23,6 +23,7 @@ class GatewayTaskState:
     reply_queue: queue.Queue = field(default_factory=queue.Queue)
     result_queue: queue.Queue = field(default_factory=queue.Queue)
     status: str = "running"       # running | waiting | done | error | cancelled
+    waiting_kind: str | None = None
     result: str | None = None
     token_totals: dict = field(default_factory=lambda: {"prompt_tokens": 0, "completion_tokens": 0})
     parent_session_id: str | None = None

@@ -70,13 +70,15 @@ async def health():
         overall = "degraded" if overall == "operational" else overall
 
     # ── Active Tasks ──
+    _ACTIVE_STATUSES = {"running", "waiting"}
     with _tasks_lock:
         task_statuses = {}
         for state in _tasks.values():
             task_statuses[state.status] = task_statuses.get(state.status, 0) + 1
+    active_total = sum(v for k, v in task_statuses.items() if k in _ACTIVE_STATUSES)
     components["tasks"] = {
         "status": "operational",
-        "active_total": len(task_statuses),
+        "active_total": active_total,
         "breakdown": task_statuses,
     }
 
@@ -198,7 +200,7 @@ async def health():
                         **({"size_gb": size_gb} if size_gb else {}),
                     })
     except Exception:
-        ollama_status = "major"
+        ollama_status = "unavailable"
 
     components["ollama"] = {
         "status": ollama_status,
@@ -206,8 +208,6 @@ async def health():
         "active_count": len(ollama_active_detail),
         "active": ollama_active_detail,
     }
-    if ollama_status != "operational" and overall == "operational":
-        overall = "degraded"
 
     # ── Response ──
     return {
