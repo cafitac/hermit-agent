@@ -9,7 +9,9 @@ logger = logging.getLogger("hermit_agent.gateway.mcp_tools")
 def register_mcp_tools(mcp) -> None:
     """Register 4 tools on the FastMCP instance."""
 
+    from .task_actions import cancel_task_state, enqueue_reply, is_waiting_for_reply
     from .task_store import acquire_worker_slot, create_task, get_task
+    from .task_views import add_waiting_prompt_fields
     from ._singletons import sse_manager
     from .task_runner import run_task_async
     import asyncio
@@ -65,13 +67,13 @@ def register_mcp_tools(mcp) -> None:
         state = get_task(task_id)
         if not state:
             return mcp_error(ErrorCode.TASK_NOT_FOUND, f"task {task_id} not found")
-        if state.status != "waiting":
+        if not is_waiting_for_reply(state):
             return mcp_error(
                 ErrorCode.TASK_ALREADY_DONE,
                 f"task is not waiting (status={state.status})",
             )
 
-        state.reply_queue.put(message)
+        enqueue_reply(state, message)
         return {"status": "ok", "task_id": task_id}
 
     @mcp.tool()
@@ -90,15 +92,7 @@ def register_mcp_tools(mcp) -> None:
         }
         if state.status in ("done", "error"):
             result["result"] = state.result
-        elif state.status == "waiting":
-            try:
-                q_item = state.question_queue.get_nowait()
-                result["question"] = q_item.get("question", "")
-                result["options"] = q_item.get("options", [])
-                state.question_queue.put_nowait(q_item)  # Put back (peek)
-            except Exception:
-                pass
-        return result
+        return add_waiting_prompt_fields(result, state, include_kind=False)
 
     @mcp.tool()
     async def cancel_task(task_id: str) -> dict:
@@ -109,8 +103,5 @@ def register_mcp_tools(mcp) -> None:
         if not state:
             return mcp_error(ErrorCode.TASK_NOT_FOUND, f"task {task_id} not found")
 
-        state.cancel_event.set()
-        if state.status == "waiting":
-            state.reply_queue.put("__CANCELLED__")
-
+        cancel_task_state(state)
         return {"status": "cancelled", "task_id": task_id}

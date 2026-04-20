@@ -4,6 +4,8 @@ GatewayPermissionChecker — moved MCPPermissionChecker into the Gateway package
 Same interface as mcp_server.py's MCPPermissionChecker.
 """
 
+from ..channels_core.approvals import parse_permission_reply
+
 
 class GatewayPermissionChecker:
     """Permission checker for Gateway tasks.
@@ -97,12 +99,10 @@ class GatewayPermissionChecker:
         except Exception:
             return False
 
-        answer = answer.strip().lower()
-        if 'yolo' in answer or 'always' in answer or answer == '2':
+        decision = parse_permission_reply(answer)
+        if decision.escalate_to_yolo:
             self.mode = PermissionMode.YOLO
             if self.on_mode_change is not None:
                 self.on_mode_change(self.mode)
             return True
-        if answer == 'no' or answer.startswith('no'):
-            return False
-        return answer in ('', 'y', 'yes', '1') or 'yes' in answer or 'once' in answer
+        return decision.allow
