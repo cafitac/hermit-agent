@@ -59,6 +59,22 @@ def test_http_channel_presents_question_via_notify_and_poll(monkeypatch):
     assert seen == [("waiting", "Allow?", ["Yes", "No"])]
 
 
+def test_http_channel_poll_for_answer_returns_payload_value(monkeypatch):
+    channel = HTTPChannel(task_id="task-1", channel_url="http://127.0.0.1:8789")
+
+    monkeypatch.setattr(channel, "_get", lambda _path, timeout=5: (200, b'{\"answer\":\"approved\"}'))
+
+    assert channel._poll_for_answer(poll_interval=0.0, max_wait=0.1) == "approved"
+
+
+def test_http_channel_poll_for_answer_returns_skip_on_stop_event(monkeypatch):
+    channel = HTTPChannel(task_id="task-1", channel_url="http://127.0.0.1:8789")
+    channel._stop_event.set()
+    monkeypatch.setattr(channel, "_get", lambda _path, timeout=5: (204, b""))
+
+    assert channel._poll_for_answer(poll_interval=0.0, max_wait=0.1) == "skip"
+
+
 def test_telegram_channel_returns_skip_when_send_fails(monkeypatch):
     channel = TelegramChannel(bot_token="token", chat_id="123")
     monkeypatch.setattr(channel, "_send_message", lambda _text: (_ for _ in ()).throw(RuntimeError("boom")))
@@ -80,6 +96,33 @@ def test_telegram_channel_sends_question_and_waits_for_reply(monkeypatch):
     assert sent
     assert "Allow?" in sent[0]
     assert "1. Yes" in sent[0]
+
+
+def test_telegram_channel_wait_for_reply_filters_other_chats(monkeypatch):
+    channel = TelegramChannel(bot_token="token", chat_id="123")
+
+    updates = iter(
+        [
+            [{"update_id": 1, "message": {"chat": {"id": "999"}, "text": "ignore"}}],
+            [{"update_id": 2, "message": {"chat": {"id": "123"}, "text": "approved"}}],
+        ]
+    )
+    monkeypatch.setattr(channel, "_get_updates", lambda timeout=20: next(updates, []))
+
+    assert channel._wait_for_reply() == "approved"
+    assert channel._offset == 3
+
+
+def test_telegram_channel_wait_for_reply_returns_skip_when_stopped(monkeypatch):
+    channel = TelegramChannel(bot_token="token", chat_id="123")
+
+    def _set_stop(timeout=20):
+        channel._stop_event.set()
+        return []
+
+    monkeypatch.setattr(channel, "_get_updates", _set_stop)
+
+    assert channel._wait_for_reply() == "skip"
 
 
 def test_channel_progress_hook_reports_only_selected_tools():
