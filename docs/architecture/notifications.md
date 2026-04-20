@@ -3,7 +3,7 @@
 HermitAgent surfaces live task progress inside a Claude Code session as
 `<channel source="hermit-channel">` frames. This document describes how
 that path works now that the mechanism lives entirely inside the Python
-MCP server.
+MCP server and its extracted channel-runtime helpers.
 
 ## Overview
 
@@ -37,13 +37,18 @@ MCP server.
 └──────────────────────┘
 ```
 
-A single Python MCP server handles both role halves:
+A single Python MCP server handles both role halves, but the runtime is
+now split internally:
 
 - **Request/response tools** (`run_task`, `reply_task`, …) for Claude
   Code to delegate work.
 - **Server-push notifications** using the custom JSON-RPC method
   `notifications/claude/channel`, which Claude Code renders as a
   `<channel source="hermit-channel">` block inside the session.
+- **`hermit_agent/mcp_channel.py`** owns active-session tracking,
+  buffering, and raw channel notification delivery.
+- **`hermit_agent/mcp_sse_bridge.py`** owns Gateway SSE consumption and
+  maps Gateway events into channel actions.
 
 The earlier Bun-based sidecar has been removed; both responsibilities
 live inline in the Python process.
@@ -84,6 +89,15 @@ repo takes two precautions:
 If the SDK changes `_write_stream`, step 2 fails loudly before users
 do.
 
+## Buffered delivery
+
+Early channel events can arrive before the MCP session loop has been
+attached for the current stdio process. Instead of dropping those
+events, `hermit_agent/mcp_channel.py` now buffers them and flushes them
+once `_set_active_session(...)` is called from the tool handlers. That
+keeps early `waiting` / `running` / `error` notifications more reliable
+for Claude Code channel rendering.
+
 ## `experimental_capabilities`
 
 Claude Code only forwards `notifications/claude/channel` to its
@@ -114,12 +128,10 @@ Every channel notification is a plain JSON-RPC frame:
   "jsonrpc": "2.0",
   "method": "notifications/claude/channel",
   "params": {
-    "content": "<running/>",
+    "content": "task running",
     "meta": {
       "task_id": "f46e33d9…",
-      "type": "running",
-      "step": "phase-3",
-      "source": "hermit"
+      "kind": "running"
     }
   }
 }
@@ -127,8 +139,15 @@ Every channel notification is a plain JSON-RPC frame:
 
 `content` is free-form HTML-ish text that Claude Code displays inline.
 `meta` is opaque to Claude Code but used by HermitAgent's own log / UI
-paths. The known `type` values are `waiting`, `running`, `done`,
-`reply`, `error`.
+paths. The runtime payload uses `kind` (not `type`) because `type` was
+treated as reserved in earlier channel experiments. The known `kind`
+values are `waiting`, `running`, `done`, `reply`, and `error`.
+
+`tests/test_mcp_notification_wire.py` still covers a broader raw JSON-RPC
+shape using extra metadata keys (`type`, `step`, `source`) via the probe
+script, because the lower-level notification path must remain tolerant of
+custom metadata even though HermitAgent's runtime now emits the narrower
+`kind`-based shape above.
 
 ## Session routing
 
