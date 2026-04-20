@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import BackgroundTasks
+from fastapi.responses import StreamingResponse
 
 
 def test_help_slash_command_lists_available_commands():
@@ -100,5 +101,25 @@ async def test_reply_status_and_cancel_routes_use_real_task_state():
         assert cancelled == {"status": "cancelled", "task_id": task_id}
         assert state.cancel_event.is_set() is True
         assert state.reply_queue.get_nowait() == "__CANCELLED__"
+    finally:
+        delete_task(task_id)
+
+
+@pytest.mark.anyio
+async def test_stream_task_returns_sse_response_for_registered_task():
+    from hermit_agent.gateway.routes.tasks import stream_task
+    from hermit_agent.gateway.task_runtime import create_registered_task_state
+    from hermit_agent.gateway.task_store import delete_task
+
+    auth = SimpleNamespace(user="tester")
+    task_id, _state = create_registered_task_state()
+
+    try:
+        response = await stream_task(task_id=task_id, auth=auth)
+        assert isinstance(response, StreamingResponse)
+        assert response.media_type == "text/event-stream"
+        assert response.headers["x-task-id"] == task_id
+        assert response.headers["cache-control"] == "no-cache"
+        assert response.headers["connection"] == "keep-alive"
     finally:
         delete_task(task_id)
