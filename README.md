@@ -1,10 +1,10 @@
 # HermitAgent
 
-> **Run Claude Code cheaper with Hermit as executor — Codex first, then z.ai/local fallback — while Claude stays the orchestrator.**
+> **Run Claude Code 50–80% cheaper: Hermit is an MCP executor with Codex-first fallback routing (codex → z.ai → local) while Claude stays the orchestrator.**
 
-HermitAgent plugs into Claude Code as an MCP sub-agent. Claude keeps doing what it is best at — planning, interviewing, code review — and delegates the high-token grunt work (file edits, test runs, commit/push, refactors) to a cheap executor (ollama on your laptop, or a flat-rate z.ai subscription).
+HermitAgent plugs into Claude Code as an MCP sub-agent. Claude keeps doing what it is best at — planning, interviewing, code review — and delegates the high-token grunt work (file edits, test runs, commit/push, refactors) to a low-cost executor (Codex, local ollama, or flat-rate z.ai).
 
-## v0.2.x highlights
+## v0.2.x highlights (cost-first execution)
 
 - **Codex support is first-class**: Hermit can run tasks via Codex (`gpt-5.3-codex`) through the gateway.
 - **Auto model routing when `model` is omitted**: `codex -> z.ai (glm) -> local ollama`.
