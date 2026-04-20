@@ -1,5 +1,7 @@
 # HermitAgent
 
+[![Python tests](https://github.com/cafitac/hermit-agent/actions/workflows/python-tests.yml/badge.svg)](https://github.com/cafitac/hermit-agent/actions/workflows/python-tests.yml)
+
 > **Run Claude Code 50–80% cheaper: Hermit is an MCP executor with Codex-first fallback routing (codex → z.ai → local) while Claude stays the orchestrator.**
 
 HermitAgent plugs into Claude Code as an MCP sub-agent. Claude keeps doing what it is best at — planning, interviewing, code review — and delegates the high-token grunt work (file edits, test runs, commit/push, refactors) to a low-cost executor (Codex, local ollama, or flat-rate z.ai).
@@ -295,7 +297,20 @@ hermit_agent/                # agent, loop, tools, gateway, MCP, skills
 .claude/                     # this repo's own Claude Code config
 scripts/harness/             # harness tooling (cc-learner.py, etc.)
 tests/                       # pytest suite
+docs/                        # user/operator docs and architecture notes
+bin/                         # launchers for hermit / gateway / MCP
+claw-code-main/             # reference mirror / sibling workspace (not part of HermitAgent package)
+hermes-agent/               # sibling project with its own workflows and release surface
+react/                      # standalone frontend package experiments / support surface
 ```
+
+### CI map
+
+- **Root `.github/workflows/python-tests.yml`** — validates the `hermit_agent` Python package on Python 3.11–3.13.
+- **`hermes-agent/.github/workflows/*`** — sibling project CI; not the root package gate.
+- **`claw-code-main/rust/.github/workflows/*`** — nested Rust workspace CI; separate responsibility.
+
+If you touch root `hermit_agent/`, `bin/`, docs, or `tests/`, the root workflow is the primary CI contract.
 
 ## Status
 
@@ -304,7 +319,7 @@ Early, working, single-author. MIT. No release cadence. No roadmap promises. Clo
 ## Running tests
 
 ```bash
-pytest    # conftest.py auto-excludes ollama-dependent tests
+.venv/bin/pytest tests/    # conftest.py auto-excludes ollama-dependent tests
 ```
 
 ## Boundaries
