@@ -1,8 +1,15 @@
 # HermitAgent
 
-> **Run Claude Code 50–80% cheaper by letting local ollama or z.ai handle the grunt work while Claude stays the orchestrator.**
+> **Run Claude Code cheaper with Hermit as executor — Codex first, then z.ai/local fallback — while Claude stays the orchestrator.**
 
 HermitAgent plugs into Claude Code as an MCP sub-agent. Claude keeps doing what it is best at — planning, interviewing, code review — and delegates the high-token grunt work (file edits, test runs, commit/push, refactors) to a cheap executor (ollama on your laptop, or a flat-rate z.ai subscription).
+
+## v0.2.x highlights
+
+- **Codex support is first-class**: Hermit can run tasks via Codex (`gpt-5.3-codex`) through the gateway.
+- **Auto model routing when `model` is omitted**: `codex -> z.ai (glm) -> local ollama`.
+- **Explicit model requests are strict**: if you ask for a specific model and it is unavailable, Hermit returns a clear unavailable error instead of silently switching providers.
+- **MCP + gateway auto-start**: `bin/mcp-server.sh` now ensures the local gateway is up, so Claude Code/Codex startup is simpler.
 
 ```
 ┌──────────────┐   MCP   ┌──────────────┐   any OpenAI-compatible   ┌───────┐
@@ -55,7 +62,7 @@ Everything else in the repo is there to make that pattern work cleanly:
 - **Skill compatibility** — same `SKILL.md` format and YAML frontmatter as Claude Code; skills under `~/.claude/skills/` are shared read-only
 - **Progressive-disclosure rule system** — foundational rules stay auto-injected, contextual rules are on-demand skills (cuts session prefix from ~12k to ~3k tokens)
 - **Gateway** (FastAPI + SSE) in front of the executor LLM — 429 fail-fast + failover, cache hints, dashboard at `:8765`
-- **Model routing by name** — `qwen3-coder:30b` → local ollama, `glm-5.1` → z.ai, everything else → your configured endpoint
+- **Model routing by name + auto chain** — explicit names route by provider (`gpt-*-codex` → Codex, `glm-*` → z.ai, `name:tag` → local ollama); omitted model auto-routes `codex -> z.ai -> local`
 - **Permission floor** — `.env`, `*.pem`, `*.key`, `credentials*` blocked across every mode (even YOLO)
 - **Self-learning skills** with model-aware lifecycles (validated-on models, 30-day auto-deprecation, `needs_review` on model swap)
 - **Optional standalone TUI** (React + Ink) for when you want to use Hermit without Claude Code in the loop
@@ -203,6 +210,8 @@ A key with zero rows in `api_key_platform` is denied everything (default-deny).
 ### Configuration
 
 Priority: CLI flag > env var > `<cwd>/.hermit/settings.json` > `~/.hermit/settings.json` > defaults.
+
+If `model` is omitted in a task request, Hermit auto-routes in this order: **Codex -> z.ai -> local ollama**.
 
 ```json
 {

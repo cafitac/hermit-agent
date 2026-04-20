@@ -79,3 +79,6 @@ claude_code_zai_env.sh
 
 # Subrepos (managed separately)
 hermes-agent/
+
+# Local knowledge scratchpad
+kb/
