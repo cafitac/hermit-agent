@@ -62,3 +62,43 @@ async def test_create_task_endpoint_schedules_background_work_for_normal_tasks()
     finally:
         delete_task(task_id)
         sse_manager._queues.pop(task_id, None)
+
+
+@pytest.mark.anyio
+async def test_reply_status_and_cancel_routes_use_real_task_state():
+    from hermit_agent.gateway.routes.tasks import (
+        ReplyRequest,
+        cancel_task,
+        get_task_status,
+        reply_task,
+    )
+    from hermit_agent.gateway.task_runtime import create_registered_task_state
+    from hermit_agent.gateway.task_store import delete_task
+
+    auth = SimpleNamespace(user="tester")
+    task_id, state = create_registered_task_state()
+    state.status = "waiting"
+    state.waiting_kind = "permission_ask"
+    state.question_queue.put({"question": "Allow?", "options": ["Yes", "No"]})
+
+    try:
+        status = await get_task_status(task_id=task_id, auth=auth)
+        replied = await reply_task(task_id=task_id, req=ReplyRequest(message="yes"), auth=auth)
+        cancelled = await cancel_task(task_id=task_id, auth=auth)
+
+        assert status == {
+            "task_id": task_id,
+            "status": "waiting",
+            "result": None,
+            "token_totals": {"prompt_tokens": 0, "completion_tokens": 0},
+            "question": "Allow?",
+            "options": ["Yes", "No"],
+            "kind": "permission_ask",
+        }
+        assert replied == {"status": "ok", "task_id": task_id}
+        assert state.reply_queue.get_nowait() == "yes"
+        assert cancelled == {"status": "cancelled", "task_id": task_id}
+        assert state.cancel_event.is_set() is True
+        assert state.reply_queue.get_nowait() == "__CANCELLED__"
+    finally:
+        delete_task(task_id)
