@@ -29,6 +29,12 @@ APPROVED_DIR = ".hermit/skills/learned-feedback/approved"
 DEPRECATED_DIR = ".hermit/skills/learned-feedback/deprecated"
 AUTO_LEARNED_DIR = ".hermit/skills/auto-learned"
 
+_DEFAULT_LEARNED_FEEDBACK_DIR = LEARNED_FEEDBACK_DIR
+_DEFAULT_PENDING_DIR = PENDING_DIR
+_DEFAULT_APPROVED_DIR = APPROVED_DIR
+_DEFAULT_DEPRECATED_DIR = DEPRECATED_DIR
+_DEFAULT_AUTO_LEARNED_DIR = AUTO_LEARNED_DIR
+
 # Deprecation criteria
 MIN_USES_BEFORE_EVAL = 5   # evaluate success_rate only after N or more uses
 DEPRECATE_THRESHOLD = 0.4  # auto-deprecate if success_rate falls below this
@@ -199,11 +205,26 @@ class Learner:
     def __init__(self, llm=None, root: str | None = None):
         self.llm = llm
         self.root = root or os.getcwd()
-        self.learned_feedback_dir = os.path.join(self.root, ".hermit", "skills", "learned-feedback")
-        self.pending_dir = os.path.join(self.learned_feedback_dir, "pending")
-        self.approved_dir = os.path.join(self.learned_feedback_dir, "approved")
-        self.deprecated_dir = os.path.join(self.learned_feedback_dir, "deprecated")
-        self.auto_learned_dir = os.path.join(self.root, ".hermit", "skills", "auto-learned")
+
+        use_legacy_overrides = root is None and (
+            PENDING_DIR != _DEFAULT_PENDING_DIR
+            or APPROVED_DIR != _DEFAULT_APPROVED_DIR
+            or DEPRECATED_DIR != _DEFAULT_DEPRECATED_DIR
+            or AUTO_LEARNED_DIR != _DEFAULT_AUTO_LEARNED_DIR
+        )
+
+        if use_legacy_overrides:
+            self.pending_dir = PENDING_DIR
+            self.approved_dir = APPROVED_DIR
+            self.deprecated_dir = DEPRECATED_DIR
+            self.auto_learned_dir = AUTO_LEARNED_DIR
+            self.learned_feedback_dir = LEARNED_FEEDBACK_DIR
+        else:
+            self.learned_feedback_dir = os.path.join(self.root, ".hermit", "skills", "learned-feedback")
+            self.pending_dir = os.path.join(self.learned_feedback_dir, "pending")
+            self.approved_dir = os.path.join(self.learned_feedback_dir, "approved")
+            self.deprecated_dir = os.path.join(self.learned_feedback_dir, "deprecated")
+            self.auto_learned_dir = os.path.join(self.root, ".hermit", "skills", "auto-learned")
         for d in (self.pending_dir, self.approved_dir, self.deprecated_dir, self.auto_learned_dir):
             os.makedirs(d, exist_ok=True)
 

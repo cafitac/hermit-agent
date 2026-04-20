@@ -18,6 +18,8 @@ python -m venv .venv
 .venv/bin/uv pip install -e '.[test]'
 ```
 
+The root GitHub Actions workflow (`.github/workflows/python-tests.yml`) uses the same editable install + `pytest tests/` contract.
+
 ## Running tests
 
 ```bash
@@ -31,8 +33,8 @@ No network calls in tests. `httpx` / `requests` should be mocked. See `tests/tes
 ## Style
 
 - Python 3.11+
-- `ruff format` then `ruff check`
-- `mypy hermit_agent/` should be clean
+- If you already have them installed locally, `ruff format` then `ruff check`
+- If you already have it installed locally, `mypy hermit_agent/` should be clean
 - The `.claude/hooks/python-syntax-check.sh` PostToolUse hook catches obvious breakage when Claude Code edits a file — install it in your CC config if you want the same guard
 
 No opinions on line length beyond "ruff defaults."

@@ -43,6 +43,23 @@ async def test_create_task_endpoint_short_circuits_gateway_slash_commands():
 
 
 @pytest.mark.anyio
+async def test_create_task_endpoint_short_circuits_model_change_command():
+    from hermit_agent.gateway.routes.tasks import TaskRequest, create_task_endpoint
+
+    result = await create_task_endpoint(
+        req=TaskRequest(task="/model codex-mini", cwd="", model="", max_turns=1),
+        background=BackgroundTasks(),
+        auth=SimpleNamespace(user="tester"),
+    )
+
+    assert result == {
+        "task_id": "instant",
+        "status": "done",
+        "result": "Model changed to codex-mini. (Applied from next run)",
+    }
+
+
+@pytest.mark.anyio
 async def test_create_task_endpoint_schedules_background_work_for_normal_tasks():
     from hermit_agent.gateway._singletons import sse_manager
     from hermit_agent.gateway.routes.tasks import TaskRequest, create_task_endpoint

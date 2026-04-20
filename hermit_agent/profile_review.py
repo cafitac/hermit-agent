@@ -59,18 +59,18 @@ def _format_diff(removal_candidates: list[str], addition_signals: dict, trigger_
     lines.append(f" Guardrail Profile Review ({n} sessions)")
     lines.append(f"{'='*60}")
 
-    lines.append(f"\nCompletion rate: {addition_signals['completion_rate']:.1%}  "
-                 f"Correction freq: {addition_signals['correction_rate']:.2f}/session")
+    lines.append(f"\ncompletion rate: {addition_signals['completion_rate']:.1%}  "
+                 f"correction rate: {addition_signals['correction_rate']:.2f}/session")
 
-    lines.append("\n[Removal candidates] — 0 triggers + completion_rate ≥ 80%")
+    lines.append("\n[removal candidates] — 0 triggers + completion_rate ≥ 80%")
     if removal_candidates:
         for gid in removal_candidates:
             lines.append(f"  - {gid} ({trigger_counts.get(gid, 0)} triggers)")
-        lines.append("\n  → Consider adding 'removal review' to notes in the profile YAML.")
+        lines.append("\n  → removal candidate: consider adding 'removal review' to notes in the profile YAML.")
     else:
         lines.append("  none")
 
-    lines.append("\n[Addition review signals]")
+    lines.append("\n[addition review signals]")
     if addition_signals["needs_review"]:
         reasons = []
         if addition_signals["completion_rate"] < 0.6:
@@ -78,7 +78,7 @@ def _format_diff(removal_candidates: list[str], addition_signals: dict, trigger_
         if addition_signals["correction_rate"] > 0.3:
             reasons.append(f"high correction_rate ({addition_signals['correction_rate']:.2f} > 0.3)")
         lines.append(f"  ⚠ {', '.join(reasons)}")
-        lines.append("  → Consider adding a new guardrail or strengthening existing conditions")
+        lines.append("  → addition review: consider adding a new guardrail or strengthening existing conditions")
     else:
         lines.append("  none (within normal range)")
 
@@ -101,7 +101,7 @@ def main(argv: list[str] | None = None) -> int:
     sessions = agg.load_sessions()
 
     if len(sessions) < args.min_sessions:
-        print(f"Not enough sessions: {len(sessions)} (need at least {args.min_sessions})")
+        print(f"insufficient sessions: {len(sessions)} (need at least {args.min_sessions})")
         return 1
 
     registry = _load_registry()
