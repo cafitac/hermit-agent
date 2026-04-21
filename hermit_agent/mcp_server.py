@@ -56,6 +56,7 @@ from .mcp_channel import (
 )
 from .mcp_sse_bridge import _SSEBridge as _BaseSSEBridge
 from .mcp_task_proxy import MCPGatewayProxy
+from .mcp_tool_handlers import cancel_task_request, check_task_request, reply_task_request, run_task_request
 
 
 def _resolve_git_cwd(cwd: str) -> str:
@@ -270,24 +271,17 @@ def _build_mcp_app(host: str = "0.0.0.0", port: int = 3737) -> "FastMCP":
         _set_active_session(mcp_app.get_context().session, asyncio.get_running_loop())
         _log(f"[req] run_task cwd={cwd} bg={background} model={model or 'default'}")
 
-        if not _gateway_health_check():
-            return _result_to_text({
-                "status": "error",
-                "message": "AI Gateway is not responding. Make sure the Gateway is running.",
-            })
-
-        try:
-            resolved_cwd = _resolve_git_cwd(cwd)
-            return _result_to_text(
-                proxy.run_task(task=task, cwd=resolved_cwd, model=model, max_turns=max_turns)
-            )
-
-        except httpx.HTTPStatusError as e:
-            _log(f"[err] run_task: {e}")
-            return _result_to_text({"status": "error", "message": f"Gateway HTTP error: {e.response.status_code}"})
-        except httpx.RequestError as e:
-            _log(f"[err] run_task: {e}")
-            return _result_to_text({"status": "error", "message": f"Gateway communication error: {e}"})
+        return run_task_request(
+            task=task,
+            cwd=cwd,
+            model=model,
+            max_turns=max_turns,
+            proxy=proxy,
+            result_to_text=_result_to_text,
+            gateway_health_check=_gateway_health_check,
+            resolve_git_cwd=_resolve_git_cwd,
+            log_fn=_log,
+        )
 
     @mcp_app.tool(description=TOOLS[1]["description"])
     async def reply_task(task_id: str, message: str) -> str:
@@ -295,17 +289,13 @@ def _build_mcp_app(host: str = "0.0.0.0", port: int = 3737) -> "FastMCP":
         _set_active_session(mcp_app.get_context().session, asyncio.get_running_loop())
         _log(f"[req] reply_task task_id={task_id} msg={message[:60]}")
 
-        try:
-            return _result_to_text(proxy.reply_task(task_id=task_id, message=message))
-
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                return _result_to_text({"status": "not_found", "message": f"Task not found: {task_id}"})
-            _log(f"[err] reply_task: {e}")
-            return _result_to_text({"status": "error", "message": f"Gateway HTTP error: {e.response.status_code}"})
-        except httpx.RequestError as e:
-            _log(f"[err] reply_task: {e}")
-            return _result_to_text({"status": "error", "message": f"Gateway communication error: {e}"})
+        return reply_task_request(
+            task_id=task_id,
+            message=message,
+            proxy=proxy,
+            result_to_text=_result_to_text,
+            log_fn=_log,
+        )
 
     @mcp_app.tool(description=TOOLS[2]["description"])
     async def check_task(task_id: str, full: bool = False) -> str:
@@ -313,34 +303,25 @@ def _build_mcp_app(host: str = "0.0.0.0", port: int = 3737) -> "FastMCP":
         _set_active_session(mcp_app.get_context().session, asyncio.get_running_loop())
         _log(f"[req] check_task task_id={task_id} full={full}")
 
-        try:
-            return _result_to_text(proxy.check_task(task_id=task_id, full=full))
-
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                return _result_to_text({"status": "not_found", "message": f"Task not found: {task_id}"})
-            _log(f"[err] check_task: {e}")
-            return _result_to_text({"status": "error", "message": f"Gateway HTTP error: {e.response.status_code}"})
-        except httpx.RequestError as e:
-            _log(f"[err] check_task: {e}")
-            return _result_to_text({"status": "error", "message": f"Gateway communication error: {e}"})
+        return check_task_request(
+            task_id=task_id,
+            full=full,
+            proxy=proxy,
+            result_to_text=_result_to_text,
+            log_fn=_log,
+        )
 
     @mcp_app.tool(description=TOOLS[3]["description"])
     async def cancel_task(task_id: str) -> str:
         """Cancel a running task."""
         _log(f"[req] cancel_task task_id={task_id}")
 
-        try:
-            return _result_to_text(proxy.cancel_task(task_id=task_id))
-
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404:
-                return _result_to_text({"status": "not_found", "message": f"Task not found: {task_id}"})
-            _log(f"[err] cancel_task: {e}")
-            return _result_to_text({"status": "error", "message": f"Gateway HTTP error: {e.response.status_code}"})
-        except httpx.RequestError as e:
-            _log(f"[err] cancel_task: {e}")
-            return _result_to_text({"status": "error", "message": f"Gateway communication error: {e}"})
+        return cancel_task_request(
+            task_id=task_id,
+            proxy=proxy,
+            result_to_text=_result_to_text,
+            log_fn=_log,
+        )
 
     return mcp_app
 
