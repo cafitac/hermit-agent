@@ -377,6 +377,8 @@ def _download_release_source(settings: CodexChannelsSettings) -> str:
 
 def _prepare_downloaded_source(settings: CodexChannelsSettings) -> str:
     extracted = _download_release_source(settings)
+    for info_file in Path(extracted).glob("packages/*/tsconfig.tsbuildinfo"):
+        info_file.unlink(missing_ok=True)
     subprocess.run(["npm", "install"], cwd=extracted, check=True, capture_output=True, text=True)
     subprocess.run(["npm", "run", "build"], cwd=extracted, check=True, capture_output=True, text=True)
     return extracted
