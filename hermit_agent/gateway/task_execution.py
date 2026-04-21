@@ -76,6 +76,7 @@ def run_single_model(
             sse=sse,
             gw_log=gw_log,
             codex_command=cfg.get("codex_command", "codex"),
+            codex_channels_cfg=cfg,
         )
         if state.cancel_event.is_set():
             state.status = "cancelled"

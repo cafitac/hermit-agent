@@ -467,3 +467,106 @@ def test_explicit_unavailable_model_returns_unavailable_message(monkeypatch):
     assert state.status == "error"
     assert "Requested model unavailable: gpt-5.3-codex" in state.result
     assert calls["released"] is True
+
+
+def test_wait_for_reply_accepts_codex_channels_response(monkeypatch):
+    import hermit_agent.codex_runner as codex_runner
+    from hermit_agent.codex_channels_adapter import CodexChannelsSettings
+
+    calls = {"started": 0, "terminated": 0}
+
+    class FakeSession:
+        def __init__(self, *, settings, interaction):
+            calls["interaction"] = interaction
+
+        def start(self):
+            calls["started"] += 1
+
+        def poll_response(self):
+            return "Always allow (session)"
+
+        def terminate(self):
+            calls["terminated"] += 1
+
+    class DummySSE:
+        def __init__(self):
+            self.events = []
+
+        def publish_threadsafe(self, task_id, event):
+            self.events.append((task_id, event.type, event.question, event.message))
+
+    monkeypatch.setattr(codex_runner, "load_codex_channels_settings", lambda cfg, cwd: CodexChannelsSettings(enabled=True, state_file="/tmp/state.json"))
+    monkeypatch.setattr(codex_runner, "CodexChannelsWaitSession", FakeSession)
+
+    state = GatewayTaskState(task_id="task-1")
+    sse = DummySSE()
+    answer = codex_runner._wait_for_reply(
+        state=state,
+        sse=sse,
+        task_id="task-1",
+        question="Allow?",
+        options=["Yes", "No"],
+        kind="permission_ask",
+        method="item/commandExecution/requestApproval",
+        request_id="req-1",
+        thread_id="thr-1",
+        turn_id="turn-1",
+        codex_channels_cfg={"enabled": True},
+    )
+
+    assert answer == "Always allow (session)"
+    assert calls["started"] == 1
+    assert calls["terminated"] == 1
+    assert calls["interaction"]["id"] == "hermit-task-1-req-1"
+    assert sse.events[-1][1] == "reply_ack"
+
+
+def test_wait_for_reply_falls_back_to_reply_queue_when_codex_channels_session_is_silent(monkeypatch):
+    import hermit_agent.codex_runner as codex_runner
+    from hermit_agent.codex_channels_adapter import CodexChannelsSettings
+
+    class SilentSession:
+        def __init__(self, *, settings, interaction):
+            self._calls = 0
+
+        def start(self):
+            return None
+
+        def poll_response(self):
+            self._calls += 1
+            return None
+
+        def terminate(self):
+            return None
+
+    class DummySSE:
+        def __init__(self):
+            self.events = []
+
+        def publish_threadsafe(self, task_id, event):
+            self.events.append((task_id, event.type))
+
+    monkeypatch.setattr(codex_runner, "load_codex_channels_settings", lambda cfg, cwd: CodexChannelsSettings(enabled=True, state_file="/tmp/state.json", source_path="/tmp/codex-channels"))
+    monkeypatch.setattr(codex_runner, "CodexChannelsWaitSession", SilentSession)
+
+    state = GatewayTaskState(task_id="task-2")
+    state.reply_queue.put("manual-answer")
+    sse = DummySSE()
+
+    answer = codex_runner._wait_for_reply(
+        state=state,
+        sse=sse,
+        task_id="task-2",
+        question="Continue?",
+        options=["Yes", "No"],
+        kind="waiting",
+        method="item/tool/requestUserInput",
+        request_id="req-2",
+        thread_id="thr-2",
+        turn_id="turn-2",
+        codex_channels_cfg={"enabled": True},
+        cwd="/tmp/worktree",
+    )
+
+    assert answer == "manual-answer"
+    assert sse.events[-1] == ("task-2", "reply_ack")

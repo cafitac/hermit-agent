@@ -116,6 +116,25 @@ Useful flags:
 
 Every prompt is idempotent: re-running the installer detects the existing API key, MCP entry, alias, and ollama model and reports them unchanged instead of duplicating.
 
+### Codex channels happy path (experimental)
+
+If you want the Codex path to bootstrap `codex-channels` for local-first interaction routing, run:
+
+```bash
+hermit-agent install-codex
+```
+
+That command:
+- writes project-local `.hermit/settings.json` defaults for `codex_channels`
+- bootstraps the `codex-channels` plugin wrapper into the workspace marketplace
+- runs a compact local runtime smoke check before reporting success
+
+Right now the happy path expects a built `codex-channels` source tree either:
+- next to this repo (`../codex-channels`), or
+- via `HERMIT_CODEX_CHANNELS_SOURCE_PATH=/absolute/path/to/codex-channels`
+
+The default path is workspace-local and local-first; remote backends stay optional and out of the critical path.
+
 To reverse everything: `./uninstall.sh` walks back through the same steps with per-item prompts (`--yes` accepts all; `--keep-data` leaves `~/.hermit/` alone). Ollama models are never deleted — remove manually with `ollama rm <model>`.
 
 The `hermit` launcher transparently starts the gateway daemon if it isn't already running (`HERMIT_AUTO_GATEWAY=0` opts out), so you never need to remember to run `./bin/gateway.sh --daemon` first. The MCP launcher (`./bin/mcp-server.sh`) now does the same check-and-start flow, which makes both Claude Code and Codex able to bring up the full Hermit stack from the MCP entrypoint alone.

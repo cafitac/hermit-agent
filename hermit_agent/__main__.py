@@ -5,6 +5,7 @@ Usage:
   hermit_agent "message"                  # Single message mode
   hermit_agent "message" --channel cli    # CLI channel (stdin/stdout, Standalone mode)
   hermit_agent --model qwen3:14b         # Specify model
+  hermit_agent install-codex             # Configure codex-channels happy path
   hermit_agent --yolo                    # Run without permission checks
   hermit_agent --base-url http://server/v1  # Use remote Hermit gateway or custom endpoint
 
@@ -54,6 +55,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     return parser
 
+
+
+
+def _build_install_codex_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Configure the Hermit Codex path")
+    parser.add_argument("--cwd", default=os.getcwd(), help="Working directory")
+    parser.add_argument("--codex-command", default="codex", help="Codex CLI command")
+    parser.add_argument("--scope", choices=["workspace", "user"], default="workspace", help="Plugin bootstrap scope")
+    return parser
 
 def parse_args(argv=None):
     """Parse CLI arguments. Pass argv list for testing; omit to read sys.argv."""
@@ -109,6 +119,13 @@ def _resolve_model(args) -> str:
 
 
 def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "install-codex":
+        from .install_codex import run_install_codex
+
+        install_args = _build_install_codex_parser().parse_args(sys.argv[2:])
+        print(run_install_codex(cwd=install_args.cwd, codex_command=install_args.codex_command, scope=install_args.scope))
+        return
+
     args = parse_args()
     args.api_key = _resolve_api_key(args)
     args.model = _resolve_model(args)

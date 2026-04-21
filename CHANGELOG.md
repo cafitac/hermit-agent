@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Codex channels bootstrap
+- Added an experimental `hermit-agent install-codex` happy path that writes project-local Codex-channel settings, bootstraps the workspace plugin entry, and runs a local runtime smoke check.
+- Added installer/uninstaller hooks for the project-local Codex channels setup, including workspace marketplace cleanup and `.codex-channels` state removal.
+- Added a thin Codex interaction adapter path so Codex approvals and free-text waits can also listen on a `codex-channels` runtime while preserving the existing Hermit reply queue fallback.
+
+
 ## v0.3.0
 
 ### Configurable routing
