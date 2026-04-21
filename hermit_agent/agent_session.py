@@ -16,6 +16,7 @@ import threading
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Callable
 
+from .bridge_learning import schedule_bridge_post_task_learning
 from .session_support import infer_context_size as _infer_context_size
 from .session_support import run_pytest as _run_pytest
 
@@ -360,44 +361,7 @@ class BridgeAgentSession(AgentSessionBase):
     def _on_success(self, result: str | None) -> None:
         """After completion: auto pytest + Learner + KB update."""
         assert self._agent is not None
-        self._auto_pytest_and_learn(self._agent)
-
-    def _auto_pytest_and_learn(self, agent: "AgentLoop") -> None:
-        """Run pytest + record learnings after skill completion. Executed in background."""
-        if getattr(self, '_session_kind', None) in ('gateway', 'mcp'):
-            return
-        def _run():
-            try:
-                from .learner import Learner
-                from .kb_learner import KBLearner
-                learner = Learner(llm=agent.llm)
-                active_skills = [name for name, _ in learner.get_active_skills()]
-
-                passed, output = _run_pytest(agent.cwd)
-
-                if active_skills:
-                    learner.record_run(active_skills, passed)
-
-                status = "✓ passed" if passed else "✗ failed"
-                print(f"\n\033[35m  [Learner] pytest {status}\033[0m")
-
-                if not passed and learner.llm:
-                    skill_data = learner.extract_from_failure(agent.messages, output)
-                    if skill_data:
-                        path = learner.save_pending(skill_data)
-                        if path:
-                            print(f"\033[35m  [Learner] saved improvement rule to pending: {skill_data['name']}\033[0m")
-
-                try:
-                    kb = KBLearner(cwd=agent.cwd, llm=agent.llm)
-                    kb.post_task_update(agent.messages, passed)
-                except Exception as kb_err:
-                    print(f"\033[33m  [KB] error: {kb_err}\033[0m")
-
-            except Exception as e:
-                print(f"\033[33m  [Learner] error: {e}\033[0m")
-
-        threading.Thread(target=_run, daemon=True).start()
+        schedule_bridge_post_task_learning(self._agent, session_kind=getattr(self, "_session_kind", None))
 
 
 # ---------------------------------------------------------------------------
@@ -460,4 +424,3 @@ class CLIAgentSession(AgentSessionBase):
     def _execute(self, prompt: str) -> str | None:
         assert self._agent is not None
         return self._agent.run(prompt)
-
