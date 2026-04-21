@@ -17,6 +17,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Callable
 
 from .bridge_learning import schedule_bridge_post_task_learning
+from .session_logging import attach_session_logger
 from .session_support import infer_context_size as _infer_context_size
 from .session_support import run_pytest as _run_pytest
 
@@ -108,19 +109,14 @@ class AgentSessionBase(ABC):
     def _setup_session_logger(self) -> None:
         """Inject SessionLogger into LLM + emitter."""
         try:
-            from .session_logger import SessionLogger
-            from .session_store import SessionStore
-            store = SessionStore()
-            session_dir = store.create_session(
+            attach_session_logger(
+                llm=self.llm,
+                agent=self._agent,
                 mode=self._session_mode,
-                session_id=self._agent.session_id,
                 cwd=self.cwd,
                 parent_session_id=getattr(self, 'parent_session_id', None),
+                session_id=self._agent.session_id,
             )
-            logger = SessionLogger(session_dir=session_dir)
-            self.llm.session_logger = logger
-            if self._agent and hasattr(self._agent, "emitter"):
-                self._agent.emitter.session_logger = logger
         except Exception:
             pass
 
