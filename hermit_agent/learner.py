@@ -15,6 +15,7 @@ import subprocess
 from pathlib import Path
 
 from .learner_extraction import build_failure_prompt, build_success_prompt, extract_skill_data
+from .learner_reporting import build_status_report, collect_active_skills
 from .learner_verification import evaluate_cleanup_action, resolve_verify_cmd, run_pytest_check, run_verify_command
 from .learner_storage import SkillMeta
 from .learner_storage import add_hub_backlink as _add_hub_backlink
@@ -427,56 +428,25 @@ class Learner:
 
         Returns: [(name, body), ...]
         """
-        result = []
-        search_dirs = [self.approved_dir, self.auto_learned_dir]
-        for search_dir in search_dirs:
-            for p in Path(search_dir).glob("*.md"):
-                parsed = _parse_skill_file(str(p))
-                if not parsed:
-                    continue
-                meta, body = parsed
-
-                # match context keywords (return all if none provided)
-                if context_keywords:
-                    match = any(
-                        kw.lower() in " ".join(meta.triggers + meta.scope).lower()
-                        for kw in context_keywords
-                    )
-                    if not match:
-                        continue
-
-                result.append((meta.name, body))
-
-        return result
+        return collect_active_skills(
+            approved_dir=self.approved_dir,
+            auto_learned_dir=self.auto_learned_dir,
+            parse_skill_file=_parse_skill_file,
+            context_keywords=context_keywords,
+        )
 
     # ------------------------------------------------------------------
     # Status report
     # ------------------------------------------------------------------
 
     def status_report(self) -> str:
-        pending = len(list(Path(self.pending_dir).glob("*.md")))
-        approved = list(Path(self.approved_dir).glob("*.md"))
-        deprecated = len(list(Path(self.deprecated_dir).glob("*.md")))
-        auto_learned = len(list(Path(self.auto_learned_dir).glob("*.md")))
-
-        lines = [
-            f"[Learned Skills] pending:{pending} approved:{len(approved)} "
-            f"auto-learned:{auto_learned} deprecated:{deprecated}",
-        ]
-        for p in approved:
-            parsed = _parse_skill_file(str(p))
-            if parsed:
-                meta, _ = parsed
-                lines.append(
-                    f"  • {meta.name}: {meta.success_rate:.0%} "
-                    f"({meta.success_count}✓/{meta.fail_count}✗, {meta.use_count}x)"
-                )
-        for p in Path(self.auto_learned_dir).glob("*.md"):
-            parsed = _parse_skill_file(str(p))
-            if parsed:
-                meta, _ = parsed
-                lines.append(f"  ✦ {meta.name} [auto] ({meta.use_count}x)")
-        return "\n".join(lines)
+        return build_status_report(
+            pending_dir=self.pending_dir,
+            approved_dir=self.approved_dir,
+            deprecated_dir=self.deprecated_dir,
+            auto_learned_dir=self.auto_learned_dir,
+            parse_skill_file=_parse_skill_file,
+        )
 
 
 def learner_enabled_for(session_kind: str | None) -> bool:
