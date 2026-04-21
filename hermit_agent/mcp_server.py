@@ -54,6 +54,7 @@ from .mcp_channel import (
     _set_active_session,
 )
 from .mcp_sse_bridge import _SSEBridge as _BaseSSEBridge
+from .mcp_task_proxy import MCPGatewayProxy
 
 
 def _resolve_git_cwd(cwd: str) -> str:
@@ -236,6 +237,18 @@ def _build_mcp_app(host: str = "0.0.0.0", port: int = 3737) -> "FastMCP":
 
     mcp_app._mcp_server.create_initialization_options = _create_init_with_channel_caps
 
+    proxy = MCPGatewayProxy(
+        gateway_url=_GATEWAY_URL,
+        gateway_client=_GATEWAY_CLIENT,
+        gateway_headers=_gateway_headers,
+        start_sse_bridge=_start_sse_bridge,
+        cleanup_sse_bridge=_cleanup_sse_bridge,
+        notify_error=_notify_error,
+        notify_reply=_notify_reply,
+        notify_channel=_notify_channel,
+        truncate_result=_truncate_result,
+    )
+
     @mcp_app.tool()
     async def register_task(task_id: str) -> str:
         """Register a task_id. Stdio per-session makes per-port routing unnecessary;
@@ -264,45 +277,9 @@ def _build_mcp_app(host: str = "0.0.0.0", port: int = 3737) -> "FastMCP":
 
         try:
             resolved_cwd = _resolve_git_cwd(cwd)
-
-            payload: dict[str, Any] = {
-                "task": task,
-                "cwd": resolved_cwd,
-                "max_turns": max_turns,
-            }
-            if model:
-                payload["model"] = model
-
-            r = _GATEWAY_CLIENT.post(
-                f"{_GATEWAY_URL}/tasks",
-                json=payload,
-                headers=_gateway_headers(),
-                timeout=30.0,
+            return _result_to_text(
+                proxy.run_task(task=task, cwd=resolved_cwd, model=model, max_turns=max_turns)
             )
-            r.raise_for_status()
-            data = r.json()
-
-            task_id = data.get("task_id", "")
-            status = data.get("status", "running")
-
-            if status == "done" and task_id == "instant":
-                result = data.get("result", "")
-                truncated, meta = _truncate_result(result)
-                payload = {"status": "done", "result": truncated}
-                if meta:
-                    payload["_truncation"] = meta
-                return _result_to_text(payload)
-
-            if status == "running":
-                _start_sse_bridge(task_id)
-                return _result_to_text({"status": "running", "task_id": task_id})
-
-            if status == "error":
-                message = data.get("message", "")
-                _notify_error(task_id, message)
-                return _result_to_text({"status": "error", "message": message})
-
-            return _result_to_text(data)
 
         except httpx.HTTPStatusError as e:
             _log(f"[err] run_task: {e}")
@@ -318,16 +295,7 @@ def _build_mcp_app(host: str = "0.0.0.0", port: int = 3737) -> "FastMCP":
         _log(f"[req] reply_task task_id={task_id} msg={message[:60]}")
 
         try:
-            r = _GATEWAY_CLIENT.post(
-                f"{_GATEWAY_URL}/tasks/{task_id}/reply",
-                json={"message": message},
-                headers=_gateway_headers(),
-                timeout=30.0,
-            )
-            r.raise_for_status()
-
-            _notify_reply(task_id, message)
-            return _result_to_text({"status": "running", "task_id": task_id})
+            return _result_to_text(proxy.reply_task(task_id=task_id, message=message))
 
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
@@ -345,29 +313,7 @@ def _build_mcp_app(host: str = "0.0.0.0", port: int = 3737) -> "FastMCP":
         _log(f"[req] check_task task_id={task_id} full={full}")
 
         try:
-            r = _GATEWAY_CLIENT.get(
-                f"{_GATEWAY_URL}/tasks/{task_id}",
-                headers=_gateway_headers(),
-                timeout=10.0,
-            )
-            r.raise_for_status()
-            data = r.json()
-
-            status = data.get("status")
-            if status == "waiting":
-                question = data.get("question", "")
-                options = data.get("options", [])
-                _notify_channel(task_id, question, options)
-
-            if status == "done":
-                result = data.get("result", "")
-                if not full:
-                    truncated, meta = _truncate_result(result)
-                    data["result"] = truncated
-                    if meta:
-                        data["_truncation"] = meta
-
-            return _result_to_text(data)
+            return _result_to_text(proxy.check_task(task_id=task_id, full=full))
 
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
@@ -384,15 +330,7 @@ def _build_mcp_app(host: str = "0.0.0.0", port: int = 3737) -> "FastMCP":
         _log(f"[req] cancel_task task_id={task_id}")
 
         try:
-            r = _GATEWAY_CLIENT.delete(
-                f"{_GATEWAY_URL}/tasks/{task_id}",
-                headers=_gateway_headers(),
-                timeout=10.0,
-            )
-            r.raise_for_status()
-
-            _cleanup_sse_bridge(task_id)
-            return _result_to_text({"status": "cancelled", "task_id": task_id})
+            return _result_to_text(proxy.cancel_task(task_id=task_id))
 
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
