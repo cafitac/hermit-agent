@@ -48,6 +48,7 @@ except Exception:
     VERSION = "0.0.0"
 
 from .channels_core.event_adapters import bridge_messages_from_sse_event
+from .bridge_runtime import BridgeRuntime
 
 
 def _send(msg: dict) -> None:
@@ -107,9 +108,7 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
     })
 
     msg_queue: queue.Queue = queue.Queue()
-    current_task_id: str | None = None
-    # Create a new Event per task → prevent shutdown race
-    sse_shutdown: threading.Event = threading.Event()
+    runtime = BridgeRuntime(msg_queue)
 
     # ── TUI session logging ──
     import uuid as _uuid
@@ -141,8 +140,8 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
                 continue
 
     def _sse_reader(task_id: str) -> None:
-        for event in client.stream_events(task_id, sse_shutdown):
-            msg_queue.put({"_source": "sse", **event})
+        for event in client.stream_events(task_id, runtime.sse_shutdown):
+            runtime.msg_queue.put({"_source": "sse", **event})
             if event.get("type") in ("done", "error", "cancelled"):
                 break
 
@@ -165,12 +164,12 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
                 if result_text:
                     _send({"type": "text", "content": result_text})
                 _send({"type": "stream_end"})
-                current_task_id = None
+                runtime.clear_current_task()
                 _send({"type": "done"})
             elif t in ("error", "cancelled"):
                 _dispatch_sse_to_tui(msg)
                 session_logger.on_send(msg)
-                current_task_id = None
+                runtime.clear_current_task()
                 _send({"type": "done"})
             else:
                 _dispatch_sse_to_tui(msg)
@@ -181,8 +180,8 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
         msg_type = msg.get("type", "")
 
         if msg_type == "quit":
-            if current_task_id:
-                client.cancel(current_task_id)
+            if runtime.current_task_id:
+                client.cancel(runtime.current_task_id)
             client.close()
             try:
                 SessionStore().update_meta(session_dir, status='completed')
@@ -192,17 +191,17 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
             break
 
         elif msg_type == "interrupt":
-            if current_task_id:
-                sse_shutdown.set()
+            if runtime.current_task_id:
+                runtime.sse_shutdown.set()
                 client.close_stream()
-                client.cancel(current_task_id)
-                current_task_id = None
+                client.cancel(runtime.current_task_id)
+                runtime.clear_current_task()
             _send({"type": "done"})
 
         elif msg_type == "permission_response":
-            if current_task_id:
+            if runtime.current_task_id:
                 choice = msg.get("choice", "no")
-                client.reply(current_task_id, choice)
+                client.reply(runtime.current_task_id, choice)
 
         elif msg_type == "permission_mode":
             # In gateway mode, permission_mode changes cannot be forwarded via reply
@@ -218,8 +217,8 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
             session_logger.on_user_input(text)  # capture user message even if gateway fails
 
             # user_input in waiting state → processed as reply
-            if current_task_id:
-                client.reply(current_task_id, text)
+            if runtime.current_task_id:
+                client.reply(runtime.current_task_id, text)
                 continue
 
             # Create task (including slash commands — handled by gateway)
@@ -245,12 +244,12 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
                 continue
 
             task_id = data["task_id"]
-            current_task_id = task_id
+            runtime.current_task_id = task_id
             # Create a new Event for each task. Reasons for not reusing the previous Event:
             # Sharing the same Event while the previous reader is shutting down causes a false early-exit.
             # The previous reader naturally exits upon receiving done/error/cancelled,
             # and the GC cleans up the previous Event.
-            sse_shutdown = threading.Event()
+            runtime.reset_sse_shutdown()
 
             sse_thread = threading.Thread(target=_sse_reader, args=(task_id,), daemon=True)
             sse_thread.start()

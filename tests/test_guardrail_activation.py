@@ -229,6 +229,33 @@ def test_real_registry_qwen3_profile():
     assert engine.is_active("G29A") is True
 
 
+def test_real_registry_gpt_5_4_profile():
+    """gpt-5.4 profile → stronger model guardrails mostly inactive."""
+    engine = GuardrailEngine(model_id="gpt-5.4")
+    assert engine.is_active("G34") is False
+    assert engine.is_active("G45") is False
+    assert engine.is_active("G29A") is False
+    assert engine.is_active("G38") is False
+
+
+def test_real_registry_gpt_5_3_profile():
+    """gpt-5.3 profile → stronger model guardrails mostly inactive."""
+    engine = GuardrailEngine(model_id="gpt-5.3")
+    assert engine.is_active("G34") is False
+    assert engine.is_active("G45") is False
+    assert engine.is_active("G29A") is False
+    assert engine.is_active("G38") is False
+
+
+def test_real_registry_glm_5_1_profile():
+    """glm-5.1 profile → mixed/default-balanced guardrail set."""
+    engine = GuardrailEngine(model_id="glm-5.1")
+    assert engine.is_active("G34") is True
+    assert engine.is_active("G45") is True
+    assert engine.is_active("G29A") is False
+    assert engine.is_active("G38") is False
+
+
 def test_hot_reload():
     """Verify that YAML changes are reflected via hot-reload."""
     import yaml
