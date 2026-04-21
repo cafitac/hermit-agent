@@ -22,7 +22,6 @@ Log monitoring:
 from __future__ import annotations
 
 import asyncio
-import json
 import os
 import sys
 import threading
@@ -32,6 +31,14 @@ from pathlib import Path
 from typing import Any
 
 from .channels_core.event_adapters import channel_action_from_sse_event
+from .mcp_paths import resolve_git_cwd
+from .mcp_results import (
+    HEAD_SIZE,
+    RESULT_CAP,
+    TAIL_SIZE,
+    result_to_text as _result_to_text,
+    truncate_result as _truncate_result,
+)
 from .mcp_schema import DEFAULT_MODEL as _DEFAULT_MODEL
 from .mcp_schema import PROTOCOL_VERSION, SERVER_INFO, TOOLS
 from .mcp_channel import (
@@ -43,6 +50,10 @@ from .mcp_channel import (
     _set_active_session,
 )
 from .mcp_sse_bridge import _SSEBridge as _BaseSSEBridge
+
+
+def _resolve_git_cwd(cwd: str) -> str:
+    return resolve_git_cwd(cwd, log_fn=_log)
 
 # ── File logger ───────────────────────────────────────────────────────────────
 
@@ -218,87 +229,6 @@ def _shutdown_all_bridges() -> None:
         _cleanup_sse_bridge(tid)
 
     _log(f"[shutdown] {_sse_bridges} SSE bridges cleaned up" if task_ids else "[shutdown] no active SSE bridges")
-
-
-# ── cwd preprocessing ─────────────────────────────────────────────────────────
-
-def _resolve_git_cwd(cwd: str) -> str:
-    """If cwd is not a git repo, search subdirectories for one and return it."""
-    import subprocess
-
-    def _is_git_repo(path: str) -> bool:
-        try:
-            r = subprocess.run(
-                ["git", "-C", path, "rev-parse", "--git-dir"],
-                capture_output=True, timeout=5,
-            )
-            return r.returncode == 0
-        except Exception:
-            return False
-
-    if _is_git_repo(cwd):
-        return cwd
-
-    try:
-        candidates = [
-            str(p) for p in Path(cwd).iterdir()
-            if p.is_dir() and not p.name.startswith(".") and _is_git_repo(str(p))
-        ]
-    except Exception:
-        candidates = []
-
-    if len(candidates) == 1:
-        _log(f"  i cwd '{cwd}' is not a git repo -> auto-replacing with '{candidates[0]}'")
-        return candidates[0]
-
-    if len(candidates) > 1:
-        short = [Path(c).name for c in candidates[:5]]
-        more = f" + {len(candidates)-5} more" if len(candidates) > 5 else ""
-        _log(f"  ! {len(candidates)} git repos found under cwd '{cwd}' -- {short}{more}")
-    else:
-        _log(f"  ! no git repo found in '{cwd}' or its subdirectories")
-
-    return cwd
-
-# ── Result truncation ─────────────────────────────────────────────────────────
-
-RESULT_CAP = 4000
-HEAD_SIZE = 2000
-TAIL_SIZE = 1000
-
-
-def _truncate_result(result: str, cap: int = RESULT_CAP) -> tuple[str, dict]:
-    """Truncate long result strings with head+tail preservation.
-
-    Returns (truncated_text, metadata_dict). metadata is empty when no truncation applied.
-    Non-string values are returned unchanged (see test_non_string_result_unchanged).
-    Only "done" status carries a long result — all other paths (running, error, reply) are exempt.
-    """
-    if not isinstance(result, str):
-        return result, {}
-    if len(result) <= cap:
-        return result, {}
-    head = result[:HEAD_SIZE]
-    tail = result[-TAIL_SIZE:]
-    omitted = len(result) - HEAD_SIZE - TAIL_SIZE
-    notice = (
-        f"\n\n[... {omitted} chars omitted. "
-        f"Use check_task(task_id, full=true) for full content ...]\n\n"
-    )
-    truncated = head + notice + tail
-    metadata = {
-        "truncated": True,
-        "original_length": len(result),
-        "head_size": HEAD_SIZE,
-        "tail_size": TAIL_SIZE,
-    }
-    return truncated, metadata
-
-
-# ── MCP SDK Server ─────────────────────────────────────────────────────────────
-
-def _result_to_text(result: dict) -> str:
-    return json.dumps(result, ensure_ascii=False)
 
 
 def _build_mcp_app(host: str = "0.0.0.0", port: int = 3737) -> "FastMCP":
