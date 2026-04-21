@@ -416,13 +416,13 @@ def write_codex_channels_settings(cwd: str, *, settings: CodexChannelsSettings, 
         "enabled": True,
         "host": settings.host,
         "port": settings.port,
-        "state_file": os.path.relpath(settings.state_file, cwd),
+        "state_file": settings.state_file,
         "timeout_ms": settings.timeout_ms,
         "npx_command": settings.npx_command,
-        "source_path": os.path.relpath(settings.source_path, cwd) if settings.source_path else "",
+        "source_path": settings.source_path or "",
         "package_spec": settings.package_spec,
-        "runtime_dir": os.path.relpath(settings.runtime_dir, cwd),
-        "plugin_dir": os.path.relpath(settings.plugin_dir, cwd),
+        "runtime_dir": settings.runtime_dir,
+        "plugin_dir": settings.plugin_dir,
     }
     settings_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return settings_path

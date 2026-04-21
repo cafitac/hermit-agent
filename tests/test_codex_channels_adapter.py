@@ -72,9 +72,9 @@ def test_write_codex_channels_settings_enables_defaults(tmp_path: Path):
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["codex_command"] == "codex"
     assert payload["codex_channels"]["enabled"] is True
-    assert payload["codex_channels"]["state_file"] == ".codex-channels/state.json"
-    assert payload["codex_channels"]["runtime_dir"] == ".hermit/codex-channels-runtime"
-    assert payload["codex_channels"]["plugin_dir"] == "plugins/codex-channels"
+    assert payload["codex_channels"]["state_file"] == str(tmp_path / ".codex-channels/state.json")
+    assert payload["codex_channels"]["runtime_dir"] == str(tmp_path / ".hermit/codex-channels-runtime")
+    assert payload["codex_channels"]["plugin_dir"] == str(tmp_path / "plugins/codex-channels")
     assert payload["codex_channels"]["package_spec"] == "@cafitac/codex-channels@0.1.7"
 
 
