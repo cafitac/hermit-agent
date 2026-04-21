@@ -51,6 +51,7 @@ from .channels_core.event_adapters import bridge_messages_from_sse_event
 from .bridge_commands import build_bridge_commands
 from .bridge_payloads import build_gateway_task_request, build_ready_payload
 from .bridge_runtime import BridgeRuntime
+from .bridge_services import load_auto_recap_text, resolve_display_model, submit_bridge_task
 
 
 def _send(msg: dict) -> None:
@@ -72,10 +73,12 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
     from .config import load_settings, get_primary_model
 
     client = GatewayClient(base_url=args.gateway_url, api_key=args.gateway_api_key)
-    display_model = args.model
-    if display_model == "__auto__":
-        cfg = load_settings(cwd=args.cwd)
-        display_model = get_primary_model(cfg, available_only=True) or get_primary_model(cfg) or "__auto__"
+    display_model = resolve_display_model(
+        requested_model=args.model,
+        cwd=args.cwd,
+        load_settings=load_settings,
+        get_primary_model=get_primary_model,
+    )
 
     if not client.check_gateway():
         _send({"type": "error", "message": f"Gateway connection failed: {args.gateway_url}"})
@@ -100,10 +103,13 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
     # ── Auto-recap on stale TUI startup ──
     try:
         from .skills.recap import should_auto_recap, generate_recap
-        if should_auto_recap(args.cwd):
-            recap_text = generate_recap(args.cwd)
-            if recap_text and recap_text != 'No recent session found.':
-                _send({"type": "text", "content": "[Auto-recap of last session]\n" + recap_text})
+        recap_text = load_auto_recap_text(
+            cwd=args.cwd,
+            should_auto_recap=should_auto_recap,
+            generate_recap=generate_recap,
+        )
+        if recap_text:
+            _send({"type": "text", "content": recap_text})
     except Exception:
         pass
 
@@ -202,14 +208,14 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
 
             # Create task (including slash commands — handled by gateway)
             try:
-                data = client.create_task_payload(
-                    **build_gateway_task_request(
-                        task=text,
-                        cwd=args.cwd,
-                        model=args.model,
-                        max_turns=args.max_turns,
-                        parent_session_id=session_id,
-                    ),
+                data = submit_bridge_task(
+                    client=client,
+                    task=text,
+                    cwd=args.cwd,
+                    model=args.model,
+                    max_turns=args.max_turns,
+                    parent_session_id=session_id,
+                    build_gateway_task_request=build_gateway_task_request,
                 )
             except Exception as e:
                 _send({"type": "error", "message": f"Task creation failed: {e}"})
