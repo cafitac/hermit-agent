@@ -48,6 +48,7 @@ except Exception:
     VERSION = "0.0.0"
 
 from .channels_core.event_adapters import bridge_messages_from_sse_event
+from .bridge_commands import build_bridge_commands
 from .bridge_runtime import BridgeRuntime
 
 
@@ -80,22 +81,7 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
         _send({"type": "done"})
         return
 
-    # Load slash commands + skill list (for TUI autocomplete)
-    commands: dict[str, str] = {}
-    try:
-        from .loop import SLASH_COMMANDS
-        commands = {f"/{k}": v["description"] for k, v in sorted(SLASH_COMMANDS.items())}
-    except Exception:
-        pass
-    try:
-        from .skills import SkillRegistry
-        registry = SkillRegistry()
-        for skill in registry.list_skills():
-            key = f"/{skill.name}"
-            if key not in commands:
-                commands[key] = f"[skill] {skill.description}"
-    except Exception:
-        pass
+    commands = build_bridge_commands()
 
     _send({
         "type": "ready",
