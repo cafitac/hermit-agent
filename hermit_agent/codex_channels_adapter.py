@@ -17,10 +17,33 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 4317
 DEFAULT_TIMEOUT_MS = 300_000
 DEFAULT_NPX = "npx"
+DEFAULT_PACKAGE_SPEC = "@cafitac/codex-channels@0.1.4"
+DEFAULT_RUNTIME_DIR = ".hermit/codex-channels-runtime"
+DEFAULT_PLUGIN_DIR = "plugins/codex-channels"
 DEFAULT_SOURCE_CANDIDATES = (
     "../codex-channels",
     "../../codex-channels",
 )
+LOCAL_WORKSPACES = (
+    "packages/core",
+    "packages/persistence-file",
+    "packages/backend-local",
+    "packages/transport-codex-app-server",
+    "packages/cli",
+)
+PLUGIN_SKILL = """---
+name: codex-channels
+description: Use the local codex-channels runtime for Codex-first interaction routing.
+---
+
+# codex-channels
+
+This plugin was bootstrapped by Hermit so Codex can discover the local codex-channels bridge.
+
+- local runtime only by default
+- approvals, user input, and interaction replies flow through the packaged codex-channels runtime
+- remote backends remain optional and out of the critical path
+"""
 
 
 @dataclass(frozen=True)
@@ -32,17 +55,23 @@ class CodexChannelsSettings:
     timeout_ms: int = DEFAULT_TIMEOUT_MS
     npx_command: str = DEFAULT_NPX
     source_path: str | None = None
+    package_spec: str = DEFAULT_PACKAGE_SPEC
+    runtime_dir: str = DEFAULT_RUNTIME_DIR
+    plugin_dir: str = DEFAULT_PLUGIN_DIR
 
 
 @dataclass(frozen=True)
 class InstallCodexReport:
-    bootstrap_command: list[str]
+    install_command: list[str]
     serve_command: list[str]
     status_command: list[str]
     settings_path: str
     marketplace_path: str
     state_file: str
-    source_path: str
+    plugin_path: str
+    runtime_dir: str
+    package_spec: str
+    source_path: str | None
 
 
 def _resolve_source_path(explicit: str | None, cwd: str) -> str | None:
@@ -58,9 +87,14 @@ def _resolve_source_path(explicit: str | None, cwd: str) -> str | None:
 
     for candidate in candidates:
         root = candidate.expanduser().resolve()
-        if (root / ".codex-plugin" / "plugin.json").exists() and (root / "packages" / "cli" / "dist" / "index.js").exists():
+        if (root / "packages" / "cli" / "dist" / "index.js").exists():
             return str(root)
     return None
+
+
+def _resolve_path(value: str, cwd: str) -> str:
+    path = Path(value)
+    return str(path if path.is_absolute() else (Path(cwd) / path).resolve())
 
 
 def load_codex_channels_settings(cfg: dict[str, Any] | None, cwd: str) -> CodexChannelsSettings:
@@ -69,14 +103,10 @@ def load_codex_channels_settings(cfg: dict[str, Any] | None, cwd: str) -> CodexC
     if not isinstance(block, dict):
         block = {}
 
-    state_file = str(block.get("state_file") or DEFAULT_STATE_FILE)
-    if not os.path.isabs(state_file):
-        state_file = str(Path(cwd) / state_file)
-
-    source_path = _resolve_source_path(
-        str(block.get("source_path") or "").strip() or None,
-        cwd,
-    )
+    state_file = _resolve_path(str(block.get("state_file") or DEFAULT_STATE_FILE), cwd)
+    runtime_dir = _resolve_path(str(block.get("runtime_dir") or DEFAULT_RUNTIME_DIR), cwd)
+    plugin_dir = _resolve_path(str(block.get("plugin_dir") or DEFAULT_PLUGIN_DIR), cwd)
+    source_path = _resolve_source_path(str(block.get("source_path") or "").strip() or None, cwd)
 
     return CodexChannelsSettings(
         enabled=bool(block.get("enabled", False)),
@@ -86,6 +116,9 @@ def load_codex_channels_settings(cfg: dict[str, Any] | None, cwd: str) -> CodexC
         timeout_ms=int(block.get("timeout_ms") or DEFAULT_TIMEOUT_MS),
         npx_command=str(block.get("npx_command") or DEFAULT_NPX),
         source_path=source_path,
+        package_spec=str(block.get("package_spec") or DEFAULT_PACKAGE_SPEC),
+        runtime_dir=runtime_dir,
+        plugin_dir=plugin_dir,
     )
 
 
@@ -101,7 +134,6 @@ def build_interaction(
     request_id: str | int | None,
 ) -> dict[str, Any]:
     interaction_id = f"hermit-{task_id}-{request_id if request_id is not None else kind}"
-    policy_allow_free_text = kind in {"user_input_request", "elicitation_request"}
     return {
         "id": interaction_id,
         "kind": kind,
@@ -117,41 +149,60 @@ def build_interaction(
             "options": [{"label": item, "value": item} for item in (options or [])],
             "metadata": {"taskId": task_id, "waitingKind": kind},
         },
-        "policy": {"allowFreeText": policy_allow_free_text, "timeoutSec": DEFAULT_TIMEOUT_MS // 1000},
+        "policy": {
+            "allowFreeText": kind in {"user_input_request", "elicitation_request"},
+            "timeoutSec": DEFAULT_TIMEOUT_MS // 1000,
+        },
     }
 
 
-def _cli_entry(source_path: str) -> str:
+def _source_cli_entry(source_path: str) -> str:
     return str(Path(source_path) / "packages" / "cli" / "dist" / "index.js")
 
 
-def build_plugin_bootstrap_command(
-    *,
-    settings: CodexChannelsSettings,
-    scope: str,
-    cwd: str,
-) -> list[str]:
+def _installed_cli_entry(settings: CodexChannelsSettings) -> str:
+    return str(Path(settings.runtime_dir) / "node_modules" / "@cafitac" / "codex-channels" / "dist" / "index.js")
+
+
+def _resolve_cli_entry(settings: CodexChannelsSettings) -> str:
+    installed = Path(_installed_cli_entry(settings))
+    if installed.exists():
+        return str(installed)
+    if settings.source_path:
+        source_entry = Path(_source_cli_entry(settings.source_path))
+        if source_entry.exists():
+            return str(source_entry)
+    raise RuntimeError("codex-channels CLI entry not found")
+
+
+def build_runtime_install_command(*, settings: CodexChannelsSettings) -> list[str]:
+    return [
+        "npm",
+        "install",
+        "--no-save",
+        "--prefix",
+        settings.runtime_dir,
+        settings.package_spec,
+    ]
+
+
+def build_runtime_local_install_command(*, settings: CodexChannelsSettings) -> list[str]:
     if not settings.source_path:
         raise RuntimeError("codex-channels source path not found")
     return [
-        "node",
-        _cli_entry(settings.source_path),
-        "plugin-bootstrap",
-        "--scope",
-        scope,
-        "--plugin-path",
-        settings.source_path,
-        "--marketplace-file",
-        str(Path(cwd) / ".agents" / "plugins" / "marketplace.json"),
+        "npm",
+        "install",
+        "--no-save",
+        "--prefix",
+        settings.runtime_dir,
+        *[str(Path(settings.source_path) / workspace) for workspace in LOCAL_WORKSPACES],
     ]
 
 
 def build_runtime_serve_command(*, settings: CodexChannelsSettings) -> list[str]:
-    if not settings.source_path:
-        raise RuntimeError("codex-channels source path not found")
     return [
         "node",
-        _cli_entry(settings.source_path),
+        _resolve_cli_entry(settings),
         "serve",
         "--host",
         settings.host,
@@ -163,11 +214,9 @@ def build_runtime_serve_command(*, settings: CodexChannelsSettings) -> list[str]
 
 
 def build_runtime_status_command(*, settings: CodexChannelsSettings) -> list[str]:
-    if not settings.source_path:
-        raise RuntimeError("codex-channels source path not found")
     return [
         "node",
-        _cli_entry(settings.source_path),
+        _resolve_cli_entry(settings),
         "status",
         "--host",
         settings.host,
@@ -177,11 +226,9 @@ def build_runtime_status_command(*, settings: CodexChannelsSettings) -> list[str
 
 
 def build_runtime_submit_command(*, settings: CodexChannelsSettings, interaction_file: str) -> list[str]:
-    if not settings.source_path:
-        raise RuntimeError("codex-channels source path not found")
     return [
         "node",
-        _cli_entry(settings.source_path),
+        _resolve_cli_entry(settings),
         "submit",
         "--host",
         settings.host,
@@ -196,15 +243,119 @@ def build_runtime_submit_command(*, settings: CodexChannelsSettings, interaction
     ]
 
 
-def ensure_install_prereqs(codex_command: str, settings: CodexChannelsSettings) -> None:
+def _write_plugin_wrapper(cwd: str, settings: CodexChannelsSettings) -> Path:
+    plugin_dir = Path(settings.plugin_dir)
+    (plugin_dir / ".codex-plugin").mkdir(parents=True, exist_ok=True)
+    (plugin_dir / "skills" / "codex-channels").mkdir(parents=True, exist_ok=True)
+
+    plugin_manifest = {
+        "name": "codex-channels",
+        "version": "0.1.0",
+        "description": "Local-first interaction runtime for Codex-first workflows.",
+        "skills": "./skills/",
+        "mcpServers": "./.mcp.json",
+        "interface": {
+            "displayName": "codex-channels",
+            "shortDescription": "Local-first interaction runtime for Codex",
+            "category": "Coding",
+            "capabilities": ["Interactive", "Write"],
+        },
+    }
+    (plugin_dir / ".codex-plugin" / "plugin.json").write_text(json.dumps(plugin_manifest, indent=2) + "\n", encoding="utf-8")
+
+    mcp = {
+        "mcpServers": {
+            "codex-channels-local": {
+                "command": "node",
+                "args": [
+                    _resolve_cli_entry(settings),
+                    "bridge-stdio",
+                    "--quiet",
+                    "--host",
+                    settings.host,
+                    "--port",
+                    str(settings.port),
+                    "--state-file",
+                    settings.state_file,
+                ],
+                "env": {
+                    "CODEX_CHANNELS_HOST": settings.host,
+                    "CODEX_CHANNELS_PORT": str(settings.port),
+                    "CODEX_CHANNELS_STATE_FILE": settings.state_file,
+                },
+            }
+        }
+    }
+    (plugin_dir / ".mcp.json").write_text(json.dumps(mcp, indent=2) + "\n", encoding="utf-8")
+    (plugin_dir / "skills" / "codex-channels" / "SKILL.md").write_text(PLUGIN_SKILL + "\n", encoding="utf-8")
+    return plugin_dir
+
+
+def _write_marketplace_entry(cwd: str, plugin_dir: Path) -> Path:
+    marketplace_path = Path(cwd) / ".agents" / "plugins" / "marketplace.json"
+    marketplace_path.parent.mkdir(parents=True, exist_ok=True)
+    if marketplace_path.exists():
+        try:
+            payload = json.loads(marketplace_path.read_text(encoding="utf-8"))
+        except Exception:
+            payload = {}
+    else:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    payload.setdefault("name", "local-workspace")
+    payload.setdefault("interface", {"displayName": "Workspace Plugins"})
+    plugins = payload.setdefault("plugins", [])
+    entry = {
+        "name": "codex-channels",
+        "source": {"source": "local", "path": str(plugin_dir.resolve())},
+        "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+        "category": "Coding",
+    }
+    if isinstance(plugins, list):
+        for idx, item in enumerate(plugins):
+            if isinstance(item, dict) and item.get("name") == "codex-channels":
+                plugins[idx] = entry
+                break
+        else:
+            plugins.append(entry)
+    payload["plugins"] = plugins
+    marketplace_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return marketplace_path
+
+
+def ensure_install_prereqs(codex_command: str) -> None:
     if shutil.which(codex_command) is None:
         raise RuntimeError(f"Codex command not found on PATH: {codex_command}")
     if shutil.which("node") is None:
         raise RuntimeError("node command not found on PATH")
-    if not settings.source_path:
-        raise RuntimeError(
-            "codex-channels source path not found. Set HERMIT_CODEX_CHANNELS_SOURCE_PATH or place the repo next to claude-code."
-        )
+    if shutil.which("npm") is None:
+        raise RuntimeError("npm command not found on PATH")
+
+
+def _run_install_command(command: list[str], cwd: str) -> tuple[bool, str]:
+    try:
+        completed = subprocess.run(command, cwd=cwd, check=True, capture_output=True, text=True)
+        return True, (completed.stdout or "") + (completed.stderr or "")
+    except subprocess.CalledProcessError as exc:
+        output = (exc.stdout or "") + (exc.stderr or "")
+        return False, output.strip()
+
+
+def install_runtime_package(*, settings: CodexChannelsSettings, cwd: str) -> tuple[str, list[str]]:
+    Path(settings.runtime_dir).mkdir(parents=True, exist_ok=True)
+    package_command = build_runtime_install_command(settings=settings)
+    ok, output = _run_install_command(package_command, cwd)
+    if ok:
+        if Path(_installed_cli_entry(settings)).exists():
+            return "package", package_command
+    if settings.source_path:
+        local_command = build_runtime_local_install_command(settings=settings)
+        ok, local_output = _run_install_command(local_command, cwd)
+        if ok and Path(_installed_cli_entry(settings)).exists():
+            return "local-source", local_command
+        raise RuntimeError(local_output or output or "failed to install codex-channels runtime")
+    raise RuntimeError(output or "failed to install codex-channels runtime")
 
 
 def write_codex_channels_settings(cwd: str, *, settings: CodexChannelsSettings, codex_command: str) -> Path:
@@ -225,6 +376,9 @@ def write_codex_channels_settings(cwd: str, *, settings: CodexChannelsSettings, 
         "timeout_ms": settings.timeout_ms,
         "npx_command": settings.npx_command,
         "source_path": os.path.relpath(settings.source_path, cwd) if settings.source_path else "",
+        "package_spec": settings.package_spec,
+        "runtime_dir": os.path.relpath(settings.runtime_dir, cwd),
+        "plugin_dir": os.path.relpath(settings.plugin_dir, cwd),
     }
     settings_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return settings_path
@@ -258,6 +412,22 @@ def remove_marketplace_plugin_entry(cwd: str, plugin_name: str = "codex-channels
     return marketplace_path
 
 
+def remove_plugin_dir(cwd: str) -> Path:
+    settings = load_codex_channels_settings({}, cwd)
+    plugin_dir = Path(settings.plugin_dir)
+    if plugin_dir.exists():
+        shutil.rmtree(plugin_dir)
+    return plugin_dir
+
+
+def remove_runtime_dir(cwd: str) -> Path:
+    settings = load_codex_channels_settings({}, cwd)
+    runtime_dir = Path(settings.runtime_dir)
+    if runtime_dir.exists():
+        shutil.rmtree(runtime_dir)
+    return runtime_dir
+
+
 class CodexChannelsWaitSession:
     def __init__(self, *, settings: CodexChannelsSettings, interaction: dict[str, Any]) -> None:
         self._settings = settings
@@ -266,8 +436,6 @@ class CodexChannelsWaitSession:
         self._interaction_file: str | None = None
 
     def start(self) -> None:
-        if not self._settings.source_path:
-            raise RuntimeError("codex-channels source path not configured")
         fd, interaction_file = tempfile.mkstemp(prefix="hermit-codex-channels-", suffix=".json")
         os.close(fd)
         Path(interaction_file).write_text(json.dumps(self._interaction, ensure_ascii=False), encoding="utf-8")
@@ -278,7 +446,6 @@ class CodexChannelsWaitSession:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            cwd=self._settings.source_path,
         )
 
     def poll_response(self) -> str | None:
@@ -326,11 +493,11 @@ class CodexChannelsWaitSession:
 
 def install_codex_channels(*, cwd: str, codex_command: str = "codex", scope: str = "workspace") -> InstallCodexReport:
     settings = load_codex_channels_settings({}, cwd)
-    ensure_install_prereqs(codex_command, settings)
+    ensure_install_prereqs(codex_command)
+    install_mode, install_command = install_runtime_package(settings=settings, cwd=cwd)
+    plugin_path = _write_plugin_wrapper(cwd, settings)
+    marketplace_path = _write_marketplace_entry(cwd, plugin_path)
     settings_path = write_codex_channels_settings(cwd, settings=settings, codex_command=codex_command)
-
-    bootstrap_command = build_plugin_bootstrap_command(settings=settings, scope=scope, cwd=cwd)
-    subprocess.run(bootstrap_command, cwd=cwd, check=True, capture_output=True, text=True)
 
     serve_command = build_runtime_serve_command(settings=settings)
     status_command = build_runtime_status_command(settings=settings)
@@ -354,13 +521,15 @@ def install_codex_channels(*, cwd: str, codex_command: str = "codex", scope: str
                 proc.kill()
                 proc.wait(timeout=5)
 
-    marketplace_path = Path(cwd) / ".agents" / "plugins" / "marketplace.json"
     return InstallCodexReport(
-        bootstrap_command=bootstrap_command,
+        install_command=install_command,
         serve_command=serve_command,
         status_command=status_command,
         settings_path=str(settings_path),
         marketplace_path=str(marketplace_path),
         state_file=settings.state_file,
-        source_path=settings.source_path,
+        plugin_path=str(plugin_path),
+        runtime_dir=settings.runtime_dir,
+        package_spec=settings.package_spec,
+        source_path=settings.source_path if install_mode == "local-source" else None,
     )

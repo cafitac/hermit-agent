@@ -489,15 +489,15 @@ esac
 set_default_routing_if_missing "$SETTINGS_FILE" "codex" "glm-5.1" "$LOCAL_MODEL_NAME" "$ROUTING_TEMPLATE" >/dev/null 2>&1 || \
   warn "Could not initialize routing.priority_models in $SETTINGS_FILE."
 
-# 6.9 optional: configure the Codex channels happy path. This currently
-#     expects a built codex-channels source tree either via
-#     HERMIT_CODEX_CHANNELS_SOURCE_PATH or as a sibling repo at
-#     ../codex-channels.
+# 6.9 optional: configure the Codex channels happy path. The preferred
+#     path is package-first; a local source tree is only a development
+#     fallback when HERMIT_CODEX_CHANNELS_SOURCE_PATH (or ../codex-channels)
+#     is available.
 if [ "$SKIP_CODEX_CHANNELS" -eq 0 ]; then
   CODEX_CHANNELS_SOURCE="${HERMIT_CODEX_CHANNELS_SOURCE_PATH:-$PROJECT_DIR/../codex-channels}"
   if ! command -v codex >/dev/null 2>&1; then
     PENDING_STEPS+=("Install Codex CLI, then run \`hermit-agent install-codex\` to enable the Codex channels happy path.")
-  elif [ -f "$CODEX_CHANNELS_SOURCE/.codex-plugin/plugin.json" ] && [ -f "$CODEX_CHANNELS_SOURCE/packages/cli/dist/index.js" ]; then
+  else
     printf "\033[1;36m▸\033[0m Configure Codex channels happy path too? [Y/n] "
     read -r codex_channels_choice || codex_channels_choice="y"
     codex_channels_choice="$(echo "${codex_channels_choice:-y}" | tr '[:upper:]' '[:lower:]')"
@@ -506,13 +506,11 @@ if [ "$SKIP_CODEX_CHANNELS" -eq 0 ]; then
         say "Configured Codex channels happy path."
       else
         warn "Codex channels bootstrap failed."
-        PENDING_STEPS+=("Retry \`HERMIT_CODEX_CHANNELS_SOURCE_PATH=\"$CODEX_CHANNELS_SOURCE\" hermit-agent install-codex --cwd \"$PROJECT_DIR\"\` after checking the codex-channels repo build.")
+        PENDING_STEPS+=("Retry \`hermit-agent install-codex --cwd \"$PROJECT_DIR\"\`. If the packaged runtime is not published yet, set HERMIT_CODEX_CHANNELS_SOURCE_PATH to a built codex-channels checkout as a fallback.")
       fi
     else
-      PENDING_STEPS+=("Run \`HERMIT_CODEX_CHANNELS_SOURCE_PATH=\"$CODEX_CHANNELS_SOURCE\" hermit-agent install-codex --cwd \"$PROJECT_DIR\"\` later if you want the Codex channels happy path.")
+      PENDING_STEPS+=("Run \`hermit-agent install-codex --cwd \"$PROJECT_DIR\"\` later if you want the Codex channels happy path.")
     fi
-  else
-    PENDING_STEPS+=("Clone/build codex-channels next to this repo (or set HERMIT_CODEX_CHANNELS_SOURCE_PATH), then run \`hermit-agent install-codex --cwd \"$PROJECT_DIR\"\`.")
   fi
 fi
 

@@ -125,13 +125,12 @@ hermit-agent install-codex
 ```
 
 That command:
+- installs a project-local `codex-channels` runtime under `.hermit/codex-channels-runtime`
 - writes project-local `.hermit/settings.json` defaults for `codex_channels`
-- bootstraps the `codex-channels` plugin wrapper into the workspace marketplace
+- generates a local plugin wrapper and marketplace entry for Codex discovery
 - runs a compact local runtime smoke check before reporting success
 
-Right now the happy path expects a built `codex-channels` source tree either:
-- next to this repo (`../codex-channels`), or
-- via `HERMIT_CODEX_CHANNELS_SOURCE_PATH=/absolute/path/to/codex-channels`
+The preferred path is package-first. If the packaged runtime is not available yet, Hermit can still fall back to a built local `codex-channels` source tree via `HERMIT_CODEX_CHANNELS_SOURCE_PATH` (or a sibling `../codex-channels` checkout).
 
 The default path is workspace-local and local-first; remote backends stay optional and out of the critical path.
 
