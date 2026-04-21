@@ -88,6 +88,38 @@ if [ -n "$OTHER_PIDS" ]; then
 fi
 
 # ──────────────────────────────────────────────────────────────
+# 0.5 Project-local Codex channels wiring (workspace marketplace,
+#     local state, and `.hermit/settings.json` codex_channels block).
+# ──────────────────────────────────────────────────────────────
+PROJECT_SETTINGS="$PROJECT_DIR/.hermit/settings.json"
+PROJECT_MARKETPLACE="$PROJECT_DIR/.agents/plugins/marketplace.json"
+PROJECT_CODEX_STATE="$PROJECT_DIR/.codex-channels"
+if [ -f "$PROJECT_SETTINGS" ] || [ -f "$PROJECT_MARKETPLACE" ] || [ -d "$PROJECT_CODEX_STATE" ]; then
+  if confirm "Remove project-local Codex channels setup (.hermit/settings.json block, marketplace entry, local state)?"; then
+    PYTHONPATH="$PROJECT_DIR${PYTHONPATH:+:$PYTHONPATH}" python3 - "$PROJECT_DIR" <<'PYEOF'
+import sys
+from hermit_agent.codex_channels_adapter import (
+    remove_codex_channels_settings,
+    remove_marketplace_plugin_entry,
+    remove_plugin_dir,
+    remove_runtime_dir,
+)
+
+cwd = sys.argv[1]
+remove_codex_channels_settings(cwd)
+remove_marketplace_plugin_entry(cwd)
+remove_plugin_dir(cwd)
+remove_runtime_dir(cwd)
+PYEOF
+    if [ -d "$PROJECT_CODEX_STATE" ]; then
+      rm -rf "$PROJECT_CODEX_STATE"
+      say "Removed $PROJECT_CODEX_STATE"
+    fi
+    say "Removed project-local Codex channels setup"
+  fi
+fi
+
+# ──────────────────────────────────────────────────────────────
 # 1. ~/.hermit/ — settings, gateway.db, handoffs, logs
 # ──────────────────────────────────────────────────────────────
 if [ -d "$HERMIT_HOME" ]; then

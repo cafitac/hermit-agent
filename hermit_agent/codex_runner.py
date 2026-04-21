@@ -10,6 +10,8 @@ from collections import defaultdict
 from queue import Empty
 from typing import TYPE_CHECKING, Any
 
+from .codex_channels_adapter import CodexChannelsWaitSession, build_interaction, load_codex_channels_settings
+
 logger = logging.getLogger("hermit_agent.codex_runner")
 
 if TYPE_CHECKING:
@@ -61,6 +63,7 @@ class CodexAppServerClient:
         sse,
         task_id: str,
         gw_log: GatewaySessionLog | None = None,
+        codex_channels_cfg: dict[str, Any] | None = None,
     ) -> None:
         self._command = command
         self._cwd = cwd
@@ -70,6 +73,7 @@ class CodexAppServerClient:
         self._sse = sse
         self._task_id = task_id
         self._gw_log = gw_log
+        self._codex_channels_cfg = codex_channels_cfg or {}
         self._process: subprocess.Popen[str] | None = None
         self._request_id = 0
         self._thread_id: str | None = None
@@ -346,6 +350,7 @@ class CodexAppServerClient:
             if method == "item/commandExecution/requestApproval":
                 decision = self._await_review(
                     method=method,
+                    request_id=request_id,
                     question=_format_command_approval(params),
                     options=["Yes (once)", "Always allow (session)", "No"],
                 )
@@ -355,6 +360,7 @@ class CodexAppServerClient:
             if method == "item/fileChange/requestApproval":
                 decision = self._await_review(
                     method=method,
+                    request_id=request_id,
                     question=_format_file_change_approval(params),
                     options=["Yes (once)", "Always allow (session)", "No"],
                 )
@@ -362,16 +368,16 @@ class CodexAppServerClient:
                 return
 
             if method == "item/permissions/requestApproval":
-                permissions, scope = self._await_permissions(params)
+                permissions, scope = self._await_permissions(request_id, params)
                 self._send_result(request_id, {"permissions": permissions, "scope": scope})
                 return
 
             if method == "item/tool/requestUserInput":
-                self._send_result(request_id, _tool_user_input_response(params, self._await_user_input(params)))
+                self._send_result(request_id, _tool_user_input_response(params, self._await_user_input(request_id, params)))
                 return
 
             if method == "mcpServer/elicitation/request":
-                answer = self._await_elicitation(params)
+                answer = self._await_elicitation(request_id, params)
                 self._send_result(request_id, answer)
                 return
 
@@ -383,7 +389,7 @@ class CodexAppServerClient:
             self._send_error(request_id, str(exc))
             raise
 
-    def _await_review(self, *, method: str, question: str, options: list[str]) -> str:
+    def _await_review(self, *, method: str, request_id: Any, question: str, options: list[str]) -> str:
         answer = _wait_for_reply(
             state=self._state,
             sse=self._sse,
@@ -391,6 +397,12 @@ class CodexAppServerClient:
             question=question,
             options=options,
             kind="permission_ask" if "commandExecution" in method or "permissions" in method else "waiting",
+            method=method,
+            request_id=request_id,
+            thread_id=self._thread_id,
+            turn_id=self._turn_id,
+            codex_channels_cfg=self._codex_channels_cfg,
+            cwd=self._cwd,
         )
         normalized = _normalize_answer(answer)
         if normalized in _ALWAYS_ANSWERS:
@@ -401,7 +413,7 @@ class CodexAppServerClient:
             return "decline"
         return "accept"
 
-    def _await_permissions(self, params: dict[str, Any]) -> tuple[dict[str, Any], str]:
+    def _await_permissions(self, request_id: Any, params: dict[str, Any]) -> tuple[dict[str, Any], str]:
         permissions = params.get("permissions") or {}
         question = _format_permissions_approval(params)
         answer = _wait_for_reply(
@@ -411,6 +423,12 @@ class CodexAppServerClient:
             question=question,
             options=["Yes (once)", "Always allow (session)", "No"],
             kind="permission_ask",
+            method="item/permissions/requestApproval",
+            request_id=request_id,
+            thread_id=self._thread_id,
+            turn_id=self._turn_id,
+            codex_channels_cfg=self._codex_channels_cfg,
+            cwd=self._cwd,
         )
         normalized = _normalize_answer(answer)
         if normalized in _CANCEL_ANSWERS:
@@ -419,7 +437,7 @@ class CodexAppServerClient:
             return {}, "turn"
         return permissions, "session" if normalized in _ALWAYS_ANSWERS else "turn"
 
-    def _await_user_input(self, params: dict[str, Any]) -> dict[str, list[str]]:
+    def _await_user_input(self, request_id: Any, params: dict[str, Any]) -> dict[str, list[str]]:
         questions = params.get("questions") or []
         rendered = []
         for q in questions:
@@ -434,13 +452,19 @@ class CodexAppServerClient:
             question="\n".join(rendered).strip() or "Codex requires input.",
             options=[opt.get("label", "") for opt in ((questions[0].get("options") or []) if questions else [])],
             kind="waiting",
+            method="item/tool/requestUserInput",
+            request_id=request_id,
+            thread_id=self._thread_id,
+            turn_id=self._turn_id,
+            codex_channels_cfg=self._codex_channels_cfg,
+            cwd=self._cwd,
         )
         answers: dict[str, list[str]] = {}
         for q in questions:
             answers[q["id"]] = [_resolve_option_answer(answer, q.get("options") or [])]
         return answers
 
-    def _await_elicitation(self, params: dict[str, Any]) -> dict[str, Any]:
+    def _await_elicitation(self, request_id: Any, params: dict[str, Any]) -> dict[str, Any]:
         mode = params.get("mode")
         message = params.get("message", "Codex requested input.")
         if mode == "url":
@@ -451,6 +475,12 @@ class CodexAppServerClient:
                 question=f"{message}\nURL: {params.get('url', '')}",
                 options=["Continue", "Cancel"],
                 kind="waiting",
+                method="mcpServer/elicitation/request",
+                request_id=request_id,
+                thread_id=self._thread_id,
+                turn_id=self._turn_id,
+                codex_channels_cfg=self._codex_channels_cfg,
+            cwd=self._cwd,
             )
             normalized = _normalize_answer(answer)
             if normalized in _CANCEL_ANSWERS or normalized in _NO_ANSWERS:
@@ -464,6 +494,12 @@ class CodexAppServerClient:
             question=message,
             options=["Submit", "Cancel"],
             kind="waiting",
+            method="mcpServer/elicitation/request",
+            request_id=request_id,
+            thread_id=self._thread_id,
+            turn_id=self._turn_id,
+            codex_channels_cfg=self._codex_channels_cfg,
+            cwd=self._cwd,
         )
         normalized = _normalize_answer(answer)
         if normalized in _CANCEL_ANSWERS or normalized in _NO_ANSWERS:
@@ -510,23 +546,71 @@ def _resolve_option_answer(answer: str, options: list[dict[str, Any]]) -> str:
     return answer
 
 
-def _wait_for_reply(*, state, sse, task_id: str, question: str, options: list[str], kind: str) -> str:
+def _wait_for_reply(
+    *,
+    state,
+    sse,
+    task_id: str,
+    question: str,
+    options: list[str],
+    kind: str,
+    method: str | None = None,
+    request_id: str | int | None = None,
+    thread_id: str | None = None,
+    turn_id: str | None = None,
+    codex_channels_cfg: dict[str, Any] | None = None,
+    cwd: str | None = None,
+) -> str:
     from .gateway.sse import SSEEvent
     state.status = "waiting"
     state.waiting_kind = kind
     state.question_queue.put({"question": question, "options": options or []})
     sse.publish_threadsafe(task_id, SSEEvent(type=kind, question=question, options=options or []))
-    while True:
-        if state.cancel_event.is_set():
-            raise CodexTaskInterrupted("Task cancelled")
+
+    session = None
+    settings = load_codex_channels_settings(codex_channels_cfg, cwd or os.getcwd())
+    if settings.enabled:
+        interaction_kind = "permissions_request" if kind == "permission_ask" and method == "item/permissions/requestApproval" else ("approval_request" if kind == "permission_ask" else "user_input_request")
         try:
-            answer = state.reply_queue.get(timeout=0.5)
-        except Empty:
-            continue
-        state.status = "running"
-        state.waiting_kind = None
-        sse.publish_threadsafe(task_id, SSEEvent(type="reply_ack", message="reply received"))
-        return str(answer)
+            session = CodexChannelsWaitSession(
+                settings=settings,
+                interaction=build_interaction(
+                    task_id=task_id,
+                    kind=interaction_kind,
+                    question=question,
+                    options=options or [],
+                    method=method,
+                    thread_id=thread_id,
+                    turn_id=turn_id,
+                    request_id=request_id,
+                ),
+            )
+            session.start()
+        except Exception:
+            session = None
+
+    try:
+        while True:
+            if state.cancel_event.is_set():
+                raise CodexTaskInterrupted("Task cancelled")
+            if session is not None:
+                answer = session.poll_response()
+                if answer is not None:
+                    state.status = "running"
+                    state.waiting_kind = None
+                    sse.publish_threadsafe(task_id, SSEEvent(type="reply_ack", message="reply received"))
+                    return str(answer)
+            try:
+                answer = state.reply_queue.get(timeout=0.25)
+            except Empty:
+                continue
+            state.status = "running"
+            state.waiting_kind = None
+            sse.publish_threadsafe(task_id, SSEEvent(type="reply_ack", message="reply received"))
+            return str(answer)
+    finally:
+        if session is not None:
+            session.terminate()
 
 
 def _format_command_approval(params: dict[str, Any]) -> str:
@@ -576,6 +660,7 @@ def run_codex_task(
     sse,
     gw_log: GatewaySessionLog | None = None,
     codex_command: str = "codex",
+    codex_channels_cfg: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     client = CodexAppServerClient(
         command=codex_command,
@@ -586,6 +671,7 @@ def run_codex_task(
         sse=sse,
         task_id=task_id,
         gw_log=gw_log,
+        codex_channels_cfg=codex_channels_cfg,
     )
     result = client.run(task)
     state.result = result or "[task complete]"
