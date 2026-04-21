@@ -38,6 +38,23 @@ class GatewayClient:
 
     def create_task(self, task: str, cwd: str, model: str, max_turns: int, parent_session_id: str | None = None) -> str:
         """POST /tasks → returns task_id."""
+        return self.create_task_payload(
+            task=task,
+            cwd=cwd,
+            model=model,
+            max_turns=max_turns,
+            parent_session_id=parent_session_id,
+        )["task_id"]
+
+    def create_task_payload(
+        self,
+        task: str,
+        cwd: str,
+        model: str,
+        max_turns: int,
+        parent_session_id: str | None = None,
+    ) -> dict:
+        """POST /tasks → returns the full response payload."""
         body: dict = {"task": task, "cwd": cwd, "model": model, "max_turns": max_turns}
         if parent_session_id is not None:
             body["parent_session_id"] = parent_session_id
@@ -47,7 +64,7 @@ class GatewayClient:
             headers=self._headers,
         )
         r.raise_for_status()
-        return r.json()["task_id"]
+        return r.json()
 
     def stream_events(self, task_id: str, shutdown_event: threading.Event) -> Iterator[dict]:
         """GET /tasks/{id}/stream → yield SSE events as dicts.

@@ -223,13 +223,13 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
 
             # Create task (including slash commands — handled by gateway)
             try:
-                resp = client._client.post(
-                    f"{client.base_url}/tasks",
-                    json={"task": text, "cwd": args.cwd, "model": args.model, "max_turns": args.max_turns, "parent_session_id": session_id},
-                    headers=client._headers,
+                data = client.create_task_payload(
+                    task=text,
+                    cwd=args.cwd,
+                    model=args.model,
+                    max_turns=args.max_turns,
+                    parent_session_id=session_id,
                 )
-                resp.raise_for_status()
-                data = resp.json()
             except Exception as e:
                 _send({"type": "error", "message": f"Task creation failed: {e}"})
                 _send({"type": "done"})
