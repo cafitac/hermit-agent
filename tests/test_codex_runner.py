@@ -396,6 +396,11 @@ def test_auto_route_falls_back_to_zai_when_codex_unavailable(monkeypatch):
         "select_llm_endpoint",
         lambda model, cfg: ("https://example.invalid", "k") if model == "glm-5.1" else ("", ""),
     )
+    monkeypatch.setattr(
+        config_mod,
+        "is_model_configured",
+        lambda model, cfg: model in {"gpt-5.4", "glm-5.1"},
+    )
 
     monkeypatch.setattr(task_runner, "create_llm_client", lambda **_k: object())
 

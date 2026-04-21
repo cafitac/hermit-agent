@@ -51,6 +51,8 @@ EXPECTED_TRIGGERS = {
 @pytest.mark.parametrize("skill_name", list(EXPECTED_TRIGGERS.keys()))
 def test_migrated_skill_exists(skill_name):
     """Migrated skill directory + SKILL.md must exist in ~/.claude/skills/."""
+    if not CLAUDE_SKILLS_DIR.exists():
+        pytest.skip(f"Claude skills directory not present: {CLAUDE_SKILLS_DIR}")
     skill_path = CLAUDE_SKILLS_DIR / skill_name / "SKILL.md"
     assert skill_path.exists(), f"Missing skill: {skill_path}"
 
