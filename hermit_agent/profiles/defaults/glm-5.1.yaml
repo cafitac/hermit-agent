@@ -1,0 +1,17 @@
+# glm-5.1 profile (z.ai coding lane / balanced external default)
+model: glm-5.1
+source: manual
+last_updated: 2026-04-21
+capabilities:
+  context_window: 131072
+  tool_calling_accuracy: 0.92
+  instruction_following: 0.84
+  long_context_reasoning: 0.74
+  tool_spam_tendency: 0.18
+  korean_fluency: 0.84
+  json_strictness: 0.89
+  self_reporting: 0.58
+notes:
+  - "Balanced external coding lane; some instruction-following guardrails remain helpful."
+  - "Context window is large enough that skill lazy-load can stay inactive by default."
+  - "Self-reporting is acceptable but not strong enough to disable all completion-report guardrails."
