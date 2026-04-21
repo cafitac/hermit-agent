@@ -65,6 +65,7 @@ dev = [
 
 [project.scripts]
 hermit = "hermit_agent.__main__:main"
+hermit-agent = "hermit_agent.__main__:main"
 hermit-gateway = "hermit_agent.gateway.__main__:main"
 hermit-setup = "hermit_agent.cli_setup:main"
 

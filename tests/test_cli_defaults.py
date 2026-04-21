@@ -44,3 +44,14 @@ class TestDefaultModel:
         monkeypatch.setattr("hermit_agent.config.GLOBAL_SETTINGS_PATH", tmp_path / "nope.json")
         ns = parse_args([])
         assert _resolve_model(ns) == "qwen3-coder:30b"
+
+
+def test_main_dispatches_install_codex(monkeypatch, capsys):
+    from hermit_agent import __main__ as main_mod
+
+    monkeypatch.setattr(main_mod.sys, "argv", ["hermit-agent", "install-codex", "--cwd", "/tmp/demo"])
+    monkeypatch.setattr("hermit_agent.install_codex.run_install_codex", lambda **kwargs: f"installed:{kwargs['cwd']}")
+
+    main_mod.main()
+
+    assert "installed:/tmp/demo" in capsys.readouterr().out

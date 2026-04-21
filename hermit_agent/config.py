@@ -48,6 +48,15 @@ DEFAULTS: dict[str, Any] = {
     "codex_command": "codex",
     "codex_default_model": "gpt-5.4",
     "codex_reasoning_effort": "medium",
+    "codex_channels": {
+        "enabled": False,
+        "host": "127.0.0.1",
+        "port": 4317,
+        "state_file": ".codex-channels/state.json",
+        "timeout_ms": 300000,
+        "package": "@cafitac/codex-channels",
+        "npx_command": "npx",
+    },
     "model": "qwen3-coder:30b",
     "routing": {
         "priority_models": [
