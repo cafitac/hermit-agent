@@ -325,6 +325,32 @@ Early, working, single-author. MIT. No release cadence. No roadmap promises. Clo
 ## Boundaries
 
 - Hermit does not modify `~/.claude/` — it only reads `~/.claude/skills/` for cross-tool skill reuse
+
+## Model guardrail profiles
+
+Hermit ships model profiles under `hermit_agent/profiles/defaults/` for the
+main built-in lanes:
+
+- `qwen3-coder:30b`
+- `gpt-5.4`
+- `gpt-5.3`
+- `glm-5.1`
+- `unknown` fallback
+
+These profiles drive guardrail activation defaults through
+`hermit_agent.guardrails.engine.GuardrailEngine`. If you want to tune a
+specific model locally without forking the repo, place an override file at:
+
+```text
+~/.hermit/profiles/<model-slug>.yaml
+```
+
+Examples:
+
+- `~/.hermit/profiles/gpt-5.4.yaml`
+- `~/.hermit/profiles/glm-5.1.yaml`
+
+User profiles override the built-in defaults when the model id matches.
 - Hermit does not require Claude Code; it just shines brightest as its sub-agent
 - Nothing phones home. Everything runs locally or through the LLM endpoint you configure
 

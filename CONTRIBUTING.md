@@ -54,6 +54,7 @@ Read `.claude/rules/hermit-conventions.md` and `.claude/rules/hermit-gateway-rul
 - `hermit_agent/` is the agent. Stays provider-agnostic.
 - Layered: view → service → model → infra. Cross-layer shortcuts are reviewed hard.
 - TDD for non-trivial changes. Red-green-verify, not test-after.
+- Guardrail profiles live under `hermit_agent/profiles/defaults/`; local machine overrides belong in `~/.hermit/profiles/` and should not be committed.
 
 ## Pull requests
 

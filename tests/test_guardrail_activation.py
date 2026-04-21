@@ -256,6 +256,29 @@ def test_real_registry_glm_5_1_profile():
     assert engine.is_active("G38") is False
 
 
+def test_user_profile_overrides_default_profile(tmp_path, monkeypatch):
+    import hermit_agent.guardrails.engine as engine_mod
+
+    user_profiles = tmp_path / "profiles"
+    user_profiles.mkdir(parents=True)
+    (user_profiles / "gpt-5.4.yaml").write_text(
+        """
+capabilities:
+  tool_spam_tendency: 0.5
+  instruction_following: 0.6
+  context_window: 32768
+  long_context_reasoning: 0.6
+  self_reporting: 0.3
+""".strip()
+    )
+    monkeypatch.setattr(engine_mod, "_USER_PROFILES_DIR", user_profiles)
+
+    engine = engine_mod.GuardrailEngine(model_id="gpt-5.4")
+    assert engine.is_active("G34") is True
+    assert engine.is_active("G45") is True
+    assert engine.is_active("G29A") is True
+
+
 def test_hot_reload():
     """Verify that YAML changes are reflected via hot-reload."""
     import yaml
