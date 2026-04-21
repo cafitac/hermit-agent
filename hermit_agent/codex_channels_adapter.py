@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import select
 import shutil
 import subprocess
+import tarfile
 import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.request import urlopen
 
 
 DEFAULT_STATE_FILE = ".codex-channels/state.json"
@@ -17,7 +20,7 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 4317
 DEFAULT_TIMEOUT_MS = 300_000
 DEFAULT_NPX = "npx"
-DEFAULT_PACKAGE_SPEC = "@cafitac/codex-channels@0.1.4"
+DEFAULT_PACKAGE_SPEC = "@cafitac/codex-channels@0.1.7"
 DEFAULT_RUNTIME_DIR = ".hermit/codex-channels-runtime"
 DEFAULT_PLUGIN_DIR = "plugins/codex-channels"
 DEFAULT_SOURCE_CANDIDATES = (
@@ -72,6 +75,7 @@ class InstallCodexReport:
     runtime_dir: str
     package_spec: str
     source_path: str | None
+    install_mode: str
 
 
 def _resolve_source_path(explicit: str | None, cwd: str) -> str | None:
@@ -95,6 +99,13 @@ def _resolve_source_path(explicit: str | None, cwd: str) -> str | None:
 def _resolve_path(value: str, cwd: str) -> str:
     path = Path(value)
     return str(path if path.is_absolute() else (Path(cwd) / path).resolve())
+
+
+def _package_version(package_spec: str) -> str:
+    match = re.search(r"@([0-9]+\.[0-9]+\.[0-9]+)$", package_spec)
+    if not match:
+        raise RuntimeError(f"Cannot derive codex-channels version from package spec: {package_spec}")
+    return match.group(1)
 
 
 def load_codex_channels_settings(cfg: dict[str, Any] | None, cwd: str) -> CodexChannelsSettings:
@@ -186,8 +197,9 @@ def build_runtime_install_command(*, settings: CodexChannelsSettings) -> list[st
     ]
 
 
-def build_runtime_local_install_command(*, settings: CodexChannelsSettings) -> list[str]:
-    if not settings.source_path:
+def build_runtime_local_install_command(*, settings: CodexChannelsSettings, source_path: str | None = None) -> list[str]:
+    root = source_path or settings.source_path
+    if not root:
         raise RuntimeError("codex-channels source path not found")
     return [
         "npm",
@@ -195,7 +207,7 @@ def build_runtime_local_install_command(*, settings: CodexChannelsSettings) -> l
         "--no-save",
         "--prefix",
         settings.runtime_dir,
-        *[str(Path(settings.source_path) / workspace) for workspace in LOCAL_WORKSPACES],
+        *[str(Path(root) / workspace) for workspace in LOCAL_WORKSPACES],
     ]
 
 
@@ -342,20 +354,56 @@ def _run_install_command(command: list[str], cwd: str) -> tuple[bool, str]:
         return False, output.strip()
 
 
-def install_runtime_package(*, settings: CodexChannelsSettings, cwd: str) -> tuple[str, list[str]]:
+def _download_release_source(settings: CodexChannelsSettings) -> str:
+    version = _package_version(settings.package_spec)
+    downloads_dir = Path(settings.runtime_dir) / "downloads"
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+    archive_path = downloads_dir / f"codex-channels-v{version}.tar.gz"
+    url = f"https://github.com/cafitac/codex-channels/archive/refs/tags/v{version}.tar.gz"
+    with urlopen(url) as response, open(archive_path, "wb") as handle:
+        handle.write(response.read())
+
+    source_root = Path(settings.runtime_dir) / "source"
+    if source_root.exists():
+        shutil.rmtree(source_root)
+    source_root.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(archive_path, "r:gz") as tar:
+        tar.extractall(source_root)
+    extracted = next((item for item in source_root.iterdir() if item.is_dir()), None)
+    if extracted is None:
+        raise RuntimeError("Failed to extract codex-channels source archive")
+    return str(extracted)
+
+
+def _prepare_downloaded_source(settings: CodexChannelsSettings) -> str:
+    extracted = _download_release_source(settings)
+    subprocess.run(["npm", "install"], cwd=extracted, check=True, capture_output=True, text=True)
+    subprocess.run(["npm", "run", "build"], cwd=extracted, check=True, capture_output=True, text=True)
+    return extracted
+
+
+def install_runtime_package(*, settings: CodexChannelsSettings, cwd: str) -> tuple[str, list[str], str | None]:
     Path(settings.runtime_dir).mkdir(parents=True, exist_ok=True)
+
     package_command = build_runtime_install_command(settings=settings)
     ok, output = _run_install_command(package_command, cwd)
-    if ok:
-        if Path(_installed_cli_entry(settings)).exists():
-            return "package", package_command
+    if ok and Path(_installed_cli_entry(settings)).exists():
+        return "package", package_command, None
+
     if settings.source_path:
         local_command = build_runtime_local_install_command(settings=settings)
         ok, local_output = _run_install_command(local_command, cwd)
         if ok and Path(_installed_cli_entry(settings)).exists():
-            return "local-source", local_command
-        raise RuntimeError(local_output or output or "failed to install codex-channels runtime")
-    raise RuntimeError(output or "failed to install codex-channels runtime")
+            return "local-source", local_command, settings.source_path
+        output = local_output or output
+
+    downloaded_source = _prepare_downloaded_source(settings)
+    downloaded_command = build_runtime_local_install_command(settings=settings, source_path=downloaded_source)
+    ok, downloaded_output = _run_install_command(downloaded_command, cwd)
+    if ok and Path(_installed_cli_entry(settings)).exists():
+        return "downloaded-source", downloaded_command, downloaded_source
+
+    raise RuntimeError(downloaded_output or output or "failed to install codex-channels runtime")
 
 
 def write_codex_channels_settings(cwd: str, *, settings: CodexChannelsSettings, codex_command: str) -> Path:
@@ -494,7 +542,7 @@ class CodexChannelsWaitSession:
 def install_codex_channels(*, cwd: str, codex_command: str = "codex", scope: str = "workspace") -> InstallCodexReport:
     settings = load_codex_channels_settings({}, cwd)
     ensure_install_prereqs(codex_command)
-    install_mode, install_command = install_runtime_package(settings=settings, cwd=cwd)
+    install_mode, install_command, source_path = install_runtime_package(settings=settings, cwd=cwd)
     plugin_path = _write_plugin_wrapper(cwd, settings)
     marketplace_path = _write_marketplace_entry(cwd, plugin_path)
     settings_path = write_codex_channels_settings(cwd, settings=settings, codex_command=codex_command)
@@ -531,5 +579,6 @@ def install_codex_channels(*, cwd: str, codex_command: str = "codex", scope: str
         plugin_path=str(plugin_path),
         runtime_dir=settings.runtime_dir,
         package_spec=settings.package_spec,
-        source_path=settings.source_path if install_mode == "local-source" else None,
+        source_path=source_path,
+        install_mode=install_mode,
     )
