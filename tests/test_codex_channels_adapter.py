@@ -23,7 +23,7 @@ from hermit_agent.codex_channels_adapter import (
 def _make_source_repo(tmp_path: Path) -> Path:
     source = tmp_path / "codex-channels"
     (source / "packages" / "cli" / "dist").mkdir(parents=True)
-    (source / "packages" / "cli" / "dist" / "index.js").write_text("console.log('ok')\n", encoding="utf-8")
+    (source / "packages" / "cli" / "dist" / "index.js").write_text("console.log(\'ok\')\n", encoding="utf-8")
     for workspace in (
         "packages/core",
         "packages/persistence-file",
@@ -65,7 +65,7 @@ def test_write_codex_channels_settings_enables_defaults(tmp_path: Path):
         state_file=str(tmp_path / ".codex-channels/state.json"),
         runtime_dir=str(tmp_path / ".hermit/codex-channels-runtime"),
         plugin_dir=str(tmp_path / "plugins/codex-channels"),
-        package_spec="@cafitac/codex-channels@0.1.4",
+        package_spec="@cafitac/codex-channels@0.1.7",
     )
     path = write_codex_channels_settings(str(tmp_path), settings=settings, codex_command="codex")
 
@@ -75,12 +75,11 @@ def test_write_codex_channels_settings_enables_defaults(tmp_path: Path):
     assert payload["codex_channels"]["state_file"] == ".codex-channels/state.json"
     assert payload["codex_channels"]["runtime_dir"] == ".hermit/codex-channels-runtime"
     assert payload["codex_channels"]["plugin_dir"] == "plugins/codex-channels"
-    assert payload["codex_channels"]["package_spec"] == "@cafitac/codex-channels@0.1.4"
+    assert payload["codex_channels"]["package_spec"] == "@cafitac/codex-channels@0.1.7"
 
 
-def test_install_codex_channels_prefers_package_and_falls_back_to_local_source(monkeypatch, tmp_path: Path):
+def test_install_codex_channels_falls_back_to_downloaded_source(monkeypatch, tmp_path: Path):
     source = _make_source_repo(tmp_path)
-    monkeypatch.setenv("HERMIT_CODEX_CHANNELS_SOURCE_PATH", str(source))
     monkeypatch.setattr("shutil.which", lambda cmd: f"/usr/bin/{cmd}")
 
     runs: list[list[str]] = []
@@ -96,11 +95,15 @@ def test_install_codex_channels_prefers_package_and_falls_back_to_local_source(m
 
     def fake_run(args, **kwargs):
         runs.append(args)
-        if args[:4] == ["npm", "install", "--no-save", "--prefix"] and "@cafitac/codex-channels@0.1.4" in args:
-            raise __import__("subprocess").CalledProcessError(1, args, stderr="package unavailable")
-        runtime_dir = Path(tmp_path / ".hermit" / "codex-channels-runtime" / "node_modules" / "@cafitac" / "codex-channels" / "dist")
+        runtime_dir = tmp_path / ".hermit" / "codex-channels-runtime" / "node_modules" / "@cafitac" / "codex-channels" / "dist"
+        if args[:4] == ["npm", "install", "--no-save", "--prefix"] and "@cafitac/codex-channels@0.1.7" in args:
+            return type("Completed", (), {"stdout": "ok", "stderr": "", "returncode": 0})()
+        if args[:2] == ["npm", "install"] and str(source) in kwargs.get("cwd", ""):
+            return type("Completed", (), {"stdout": "ok", "stderr": "", "returncode": 0})()
+        if args[:3] == ["npm", "run", "build"]:
+            return type("Completed", (), {"stdout": "ok", "stderr": "", "returncode": 0})()
         runtime_dir.mkdir(parents=True, exist_ok=True)
-        (runtime_dir / "index.js").write_text("console.log('ok')\n", encoding="utf-8")
+        (runtime_dir / "index.js").write_text("console.log(\'ok\')\n", encoding="utf-8")
         return type("Completed", (), {"stdout": "ok", "stderr": "", "returncode": 0})()
 
     def fake_popen(args, **kwargs):
@@ -109,6 +112,7 @@ def test_install_codex_channels_prefers_package_and_falls_back_to_local_source(m
 
     monkeypatch.setattr("subprocess.run", fake_run)
     monkeypatch.setattr("subprocess.Popen", fake_popen)
+    monkeypatch.setattr("hermit_agent.codex_channels_adapter._download_release_source", lambda settings: str(source))
 
     report = install_codex_channels(cwd=str(tmp_path), codex_command="codex", scope="workspace")
 
@@ -116,24 +120,26 @@ def test_install_codex_channels_prefers_package_and_falls_back_to_local_source(m
         state_file=str(tmp_path / ".codex-channels/state.json"),
         runtime_dir=str(tmp_path / ".hermit/codex-channels-runtime"),
         plugin_dir=str(tmp_path / "plugins/codex-channels"),
-        source_path=str(source),
+        package_spec="@cafitac/codex-channels@0.1.7",
     )
     assert runs[0] == build_runtime_install_command(settings=settings)
-    assert runs[1] == build_runtime_local_install_command(settings=settings)
+    assert runs[1] == ["npm", "install"]
+    assert runs[2] == ["npm", "run", "build"]
+    assert runs[3] == build_runtime_local_install_command(settings=settings, source_path=str(source))
     assert spawned[0] == build_runtime_serve_command(settings=settings)
-    assert runs[2] == build_runtime_status_command(settings=settings)
-    assert report.runtime_dir.endswith(".hermit/codex-channels-runtime")
-    assert report.plugin_path.endswith("plugins/codex-channels")
+    assert runs[4] == build_runtime_status_command(settings=settings)
+    assert report.install_mode == "downloaded-source"
     assert report.source_path == str(source)
 
 
 def test_build_runtime_submit_command_uses_installed_cli_entry(tmp_path: Path):
     runtime_dir = tmp_path / ".hermit" / "codex-channels-runtime" / "node_modules" / "@cafitac" / "codex-channels" / "dist"
     runtime_dir.mkdir(parents=True)
-    (runtime_dir / "index.js").write_text("console.log('ok')\n", encoding="utf-8")
+    (runtime_dir / "index.js").write_text("console.log(\'ok\')\n", encoding="utf-8")
     settings = CodexChannelsSettings(
         state_file=str(tmp_path / ".codex-channels/state.json"),
         runtime_dir=str(tmp_path / ".hermit/codex-channels-runtime"),
+        package_spec="@cafitac/codex-channels@0.1.7",
     )
     command = build_runtime_submit_command(settings=settings, interaction_file=str(tmp_path / "interaction.json"))
     assert command[:3] == ["node", str(runtime_dir / "index.js"), "submit"]
