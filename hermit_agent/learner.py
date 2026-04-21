@@ -14,6 +14,7 @@ import os
 import subprocess
 from pathlib import Path
 
+from .learner_extraction import build_failure_prompt, build_success_prompt, extract_skill_data
 from .learner_storage import SkillMeta
 from .learner_storage import add_hub_backlink as _add_hub_backlink
 from .learner_storage import current_day as _now
@@ -104,41 +105,8 @@ class Learner:
         if not self.llm:
             return None
 
-        prompt = f"""You are analyzing a coding agent's failed task.
-
-pytest output:
-{pytest_output[:3000]}
-
-Based on the failure, extract ONE concrete rule the agent should follow next time.
-
-Respond as JSON:
-{{
-  "name": "snake_case_rule_name",
-  "description": "one-line description",
-  "triggers": ["keyword1", "keyword2"],
-  "scope": ["app_name_or_file_pattern"],
-  "rule": "The actual rule in imperative form. Be specific with file paths and commands.",
-  "why": "Why this rule prevents the failure",
-  "bad_pattern": "What the agent did wrong",
-  "good_pattern": "What the agent should do instead",
-  "verify_cmd": "bash command to verify the agent followed this rule after task completion (exit 0 = success). Use empty string if not applicable. Example: 'git log --oneline -1 | grep -q .' to verify a commit was made."
-}}
-
-If no clear rule can be extracted, respond: NONE"""
-
-        try:
-            response = self.llm.chat([{"role": "user", "content": prompt}])
-            text = response.content.strip() if hasattr(response, "content") else str(response).strip()
-            if text == "NONE" or not text:
-                return None
-            if text.startswith("```"):
-                lines = text.splitlines()
-                text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
-            data = json.loads(text)
-            required = {"name", "description", "triggers", "rule"}
-            return data if required.issubset(data.keys()) else None
-        except Exception:
-            return None
+        prompt = build_failure_prompt(pytest_output)
+        return extract_skill_data(self.llm, prompt)
 
     def extract_from_success(self, messages: list[dict], tool_call_count: int) -> dict | None:
         """Extract a reusable pattern from a successful task with 5+ tool calls."""
@@ -156,42 +124,8 @@ If no clear rule can be extracted, respond: NONE"""
             f"[{m['role']}] {str(m['content'])[:300]}" for m in relevant
         )
 
-        prompt = f"""You are analyzing a coding agent's successfully completed task ({tool_call_count} tool calls).
-
-Conversation summary:
-{conversation_summary[:4000]}
-
-Extract ONE reusable skill/rule from this successful workflow that would help next time.
-Only extract if there's a genuinely non-obvious pattern worth saving.
-
-Respond as JSON:
-{{
-  "name": "snake_case_skill_name",
-  "description": "one-line description (Korean OK)",
-  "triggers": ["keyword1", "keyword2"],
-  "scope": ["file_pattern_or_app"],
-  "rule": "The reusable rule or workflow in imperative form.",
-  "why": "Why this pattern is worth saving",
-  "good_pattern": "What worked well",
-  "bad_pattern": "What to avoid",
-  "verify_cmd": "bash command to verify the agent followed this skill after task completion (exit 0 = success). Use empty string if not applicable. Example: 'git log --oneline -1 | grep -q .' to verify a commit was made, 'git diff --quiet' to verify no uncommitted changes."
-}}
-
-If no clear reusable pattern exists, respond: NONE"""
-
-        try:
-            response = self.llm.chat([{"role": "user", "content": prompt}])
-            text = response.content.strip() if hasattr(response, "content") else str(response).strip()
-            if text == "NONE" or not text:
-                return None
-            if text.startswith("```"):
-                lines = text.splitlines()
-                text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
-            data = json.loads(text)
-            required = {"name", "description", "triggers", "rule"}
-            return data if required.issubset(data.keys()) else None
-        except Exception:
-            return None
+        prompt = build_success_prompt(conversation_summary, tool_call_count)
+        return extract_skill_data(self.llm, prompt)
 
     def save_auto_learned(self, skill_data: dict) -> str | None:
         """Save a self-learned skill directly to auto-learned/ (no pending stage, auto-approved)."""
