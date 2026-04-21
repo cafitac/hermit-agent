@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 from pathlib import Path
 
 from .learner_extraction import build_failure_prompt, build_success_prompt, extract_skill_data

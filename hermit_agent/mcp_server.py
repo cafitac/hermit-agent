@@ -26,9 +26,6 @@ import os
 import sys
 import threading
 import time
-from pathlib import Path
-from typing import Any
-
 from .channels_core.event_adapters import channel_action_from_sse_event
 from .mcp_gateway import (
     gateway_headers as _gateway_headers_impl,
