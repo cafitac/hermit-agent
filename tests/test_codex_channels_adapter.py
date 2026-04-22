@@ -65,7 +65,7 @@ def test_write_codex_channels_settings_enables_defaults(tmp_path: Path):
         state_file=str(tmp_path / ".codex-channels/state.json"),
         runtime_dir=str(tmp_path / ".hermit/codex-channels-runtime"),
         plugin_dir=str(tmp_path / "plugins/codex-channels"),
-        package_spec="@cafitac/codex-channels@0.1.7",
+        package_spec="@cafitac/codex-channels@0.1.9",
     )
     path = write_codex_channels_settings(str(tmp_path), settings=settings, codex_command="codex")
 
@@ -75,7 +75,7 @@ def test_write_codex_channels_settings_enables_defaults(tmp_path: Path):
     assert payload["codex_channels"]["state_file"] == str(tmp_path / ".codex-channels/state.json")
     assert payload["codex_channels"]["runtime_dir"] == str(tmp_path / ".hermit/codex-channels-runtime")
     assert payload["codex_channels"]["plugin_dir"] == str(tmp_path / "plugins/codex-channels")
-    assert payload["codex_channels"]["package_spec"] == "@cafitac/codex-channels@0.1.7"
+    assert payload["codex_channels"]["package_spec"] == "@cafitac/codex-channels@0.1.9"
 
 
 def test_install_codex_channels_falls_back_to_downloaded_source(monkeypatch, tmp_path: Path):
@@ -96,7 +96,7 @@ def test_install_codex_channels_falls_back_to_downloaded_source(monkeypatch, tmp
     def fake_run(args, **kwargs):
         runs.append(args)
         runtime_dir = tmp_path / ".hermit" / "codex-channels-runtime" / "node_modules" / "@cafitac" / "codex-channels" / "dist"
-        if args[:4] == ["npm", "install", "--no-save", "--prefix"] and "@cafitac/codex-channels@0.1.7" in args:
+        if args[:4] == ["npm", "install", "--no-save", "--prefix"] and "@cafitac/codex-channels@0.1.9" in args:
             return type("Completed", (), {"stdout": "ok", "stderr": "", "returncode": 0})()
         if args[:2] == ["npm", "install"] and str(source) in kwargs.get("cwd", ""):
             return type("Completed", (), {"stdout": "ok", "stderr": "", "returncode": 0})()
@@ -120,13 +120,13 @@ def test_install_codex_channels_falls_back_to_downloaded_source(monkeypatch, tmp
         state_file=str(tmp_path / ".codex-channels/state.json"),
         runtime_dir=str(tmp_path / ".hermit/codex-channels-runtime"),
         plugin_dir=str(tmp_path / "plugins/codex-channels"),
-        package_spec="@cafitac/codex-channels@0.1.7",
+        package_spec="@cafitac/codex-channels@0.1.9",
     )
     resolved_settings = CodexChannelsSettings(
         state_file=str(tmp_path / ".codex-channels/state.json"),
         runtime_dir=str(tmp_path / ".hermit/codex-channels-runtime"),
         plugin_dir=str(tmp_path / "plugins/codex-channels"),
-        package_spec="@cafitac/codex-channels@0.1.7",
+        package_spec="@cafitac/codex-channels@0.1.9",
         source_path=str(source),
     )
     assert runs[0] == build_runtime_install_command(settings=settings)
@@ -149,7 +149,7 @@ def test_build_runtime_submit_command_uses_installed_cli_entry(tmp_path: Path):
     settings = CodexChannelsSettings(
         state_file=str(tmp_path / ".codex-channels/state.json"),
         runtime_dir=str(tmp_path / ".hermit/codex-channels-runtime"),
-        package_spec="@cafitac/codex-channels@0.1.7",
+        package_spec="@cafitac/codex-channels@0.1.9",
     )
     command = build_runtime_submit_command(settings=settings, interaction_file=str(tmp_path / "interaction.json"))
     assert command[:3] == ["node", str(runtime_dir / "index.js"), "submit"]
