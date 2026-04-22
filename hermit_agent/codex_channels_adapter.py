@@ -20,7 +20,7 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 4317
 DEFAULT_TIMEOUT_MS = 300_000
 DEFAULT_NPX = "npx"
-DEFAULT_PACKAGE_SPEC = "@cafitac/codex-channels@0.1.9"
+DEFAULT_PACKAGE_SPEC = "@cafitac/codex-channels@0.1.28"
 DEFAULT_RUNTIME_DIR = ".hermit/codex-channels-runtime"
 DEFAULT_PLUGIN_DIR = "plugins/codex-channels"
 DEFAULT_SOURCE_CANDIDATES = (
@@ -108,6 +108,17 @@ def _package_version(package_spec: str) -> str:
     return match.group(1)
 
 
+def _normalize_package_spec(value: str | None) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return DEFAULT_PACKAGE_SPEC
+    if re.search(r"@[0-9]+\.[0-9]+\.[0-9]+$", raw):
+        return raw
+    package_name = DEFAULT_PACKAGE_SPEC.rsplit("@", 1)[0]
+    default_version = _package_version(DEFAULT_PACKAGE_SPEC)
+    return f"{raw or package_name}@{default_version}"
+
+
 def load_codex_channels_settings(cfg: dict[str, Any] | None, cwd: str) -> CodexChannelsSettings:
     raw = cfg or {}
     block = raw.get("codex_channels") if isinstance(raw, dict) and isinstance(raw.get("codex_channels"), dict) else raw
@@ -119,6 +130,8 @@ def load_codex_channels_settings(cfg: dict[str, Any] | None, cwd: str) -> CodexC
     plugin_dir = _resolve_path(str(block.get("plugin_dir") or DEFAULT_PLUGIN_DIR), cwd)
     source_path = _resolve_source_path(str(block.get("source_path") or "").strip() or None, cwd)
 
+    package_value = block.get("package_spec") or block.get("package")
+
     return CodexChannelsSettings(
         enabled=bool(block.get("enabled", False)),
         host=str(block.get("host") or DEFAULT_HOST),
@@ -127,7 +140,7 @@ def load_codex_channels_settings(cfg: dict[str, Any] | None, cwd: str) -> CodexC
         timeout_ms=int(block.get("timeout_ms") or DEFAULT_TIMEOUT_MS),
         npx_command=str(block.get("npx_command") or DEFAULT_NPX),
         source_path=source_path,
-        package_spec=str(block.get("package_spec") or DEFAULT_PACKAGE_SPEC),
+        package_spec=_normalize_package_spec(str(package_value) if package_value else None),
         runtime_dir=runtime_dir,
         plugin_dir=plugin_dir,
     )
