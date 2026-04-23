@@ -1,6 +1,6 @@
 {
   "name": "@cafitac/hermit-agent",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "npm-first launcher for the Hermit runtime — MCP executor for Claude Code and Codex",
   "type": "module",
   "bin": {
