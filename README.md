@@ -103,6 +103,12 @@ hermit setup-claude
 
 The npm package is a thin launcher. On first run it bootstraps a managed Python runtime under `~/.hermit/npm-runtime`, installs `cafitac-hermit-agent` from PyPI, and then forwards to the normal Hermit CLI. That means you can start from npm alone without cloning the repo first, while Hermit's Python runtime remains the real implementation.
 
+When the npm-installed launcher detects a newer published version, `hermit` now prints a compact update hint on stderr. To upgrade the wrapper directly, run:
+
+```bash
+hermit self-update
+```
+
 Requirements for the npm-first path:
 
 - Node.js 20+
