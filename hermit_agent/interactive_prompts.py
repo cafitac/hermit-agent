@@ -3,6 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .codex_interaction_contract import (
+    codex_channels_interaction_kind_for_prompt,
+    default_tool_name_for_prompt,
+)
 from .codex_channels_adapter import build_interaction
 
 
@@ -21,13 +25,7 @@ class InteractivePrompt:
 
 
 def default_tool_name(*, prompt_kind: str, method: str | None = None) -> str:
-    if method == "item/commandExecution/requestApproval":
-        return "bash"
-    if method == "item/permissions/requestApproval":
-        return "bash"
-    if prompt_kind == "permission_ask":
-        return "bash"
-    return "ask"
+    return default_tool_name_for_prompt(prompt_kind=prompt_kind, method=method)
 
 
 def create_interactive_prompt(
@@ -81,13 +79,10 @@ def channel_notification_meta(prompt: InteractivePrompt) -> dict[str, str]:
 
 
 def codex_channels_interaction_kind(prompt: InteractivePrompt) -> str:
-    if prompt.method == "item/permissions/requestApproval":
-        return "permissions_request"
-    if prompt.method == "mcpServer/elicitation/request":
-        return "elicitation_request"
-    if prompt.prompt_kind == "permission_ask":
-        return "approval_request"
-    return "user_input_request"
+    return codex_channels_interaction_kind_for_prompt(
+        prompt_kind=prompt.prompt_kind,
+        method=prompt.method,
+    )
 
 
 def build_codex_channels_interaction(prompt: InteractivePrompt) -> dict[str, Any]:

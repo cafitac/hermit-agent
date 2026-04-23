@@ -52,6 +52,8 @@ def test_prepare_codex_task_handles_empty_body():
 def test_wait_for_codex_host_reply_uses_plain_text_user_input_request(monkeypatch):
     import hermit_agent.codex_runner as codex_runner
 
+    captured = {}
+
     class DummySSE:
         def __init__(self):
             self.events = []
@@ -59,10 +61,14 @@ def test_wait_for_codex_host_reply_uses_plain_text_user_input_request(monkeypatc
         def publish_threadsafe(self, task_id, event):
             self.events.append((task_id, event.type, event.question, event.tool_name))
 
+    def fake_await(prompt, env=None):
+        captured["prompt"] = prompt
+        return "staging"
+
     monkeypatch.setattr(
         codex_runner,
         "await_attached_codex_app_server_response",
-        lambda prompt, env=None: "staging",
+        fake_await,
     )
     monkeypatch.setattr(
         codex_runner,
@@ -83,6 +89,11 @@ def test_wait_for_codex_host_reply_uses_plain_text_user_input_request(monkeypatc
 
     assert answer == "staging"
     assert sse.events[0] == ("task-followup", "waiting", "Which environment should we use?", "ask")
+    assert captured["prompt"].method == "item/tool/requestUserInput"
+    assert captured["prompt"].request_id == "followup-task-followup"
+    assert captured["prompt"].params == {
+        "questions": [{"id": "followup", "question": "Which environment should we use?"}]
+    }
 
 
 def test_task_runner_codex_branch_uses_codex_backend(monkeypatch):
@@ -887,6 +898,8 @@ def test_wait_for_reply_falls_back_to_reply_queue_when_codex_channels_session_is
 def test_wait_for_reply_prefers_attached_codex_app_server_roundtrip(monkeypatch):
     import hermit_agent.codex_runner as codex_runner
 
+    captured = {}
+
     class DummySSE:
         def __init__(self):
             self.events = []
@@ -894,10 +907,14 @@ def test_wait_for_reply_prefers_attached_codex_app_server_roundtrip(monkeypatch)
         def publish_threadsafe(self, task_id, event):
             self.events.append((task_id, event.type, event.tool_name))
 
+    def fake_await(prompt, env=None):
+        captured["prompt"] = prompt
+        return "staging"
+
     monkeypatch.setattr(
         codex_runner,
         "await_attached_codex_app_server_response",
-        lambda prompt, env=None: "staging",
+        fake_await,
     )
     monkeypatch.setattr(
         codex_runner,
@@ -927,4 +944,14 @@ def test_wait_for_reply_prefers_attached_codex_app_server_roundtrip(monkeypatch)
     assert answer == "staging"
     assert sse.events[0] == ("task-attached", "waiting", "ask")
     assert sse.events[-1] == ("task-attached", "reply_ack", "")
+    assert state.question_queue.get_nowait() == {
+        "question": "Where?",
+        "options": ["staging", "prod"],
+        "tool_name": "ask",
+        "method": "item/tool/requestUserInput",
+    }
+    assert captured["prompt"].thread_id == "thr-attached"
+    assert captured["prompt"].turn_id == "turn-attached"
+    assert captured["prompt"].params == {"questions": [{"id": "target", "question": "Where?"}]}
+    assert state.waiting_kind is None
     assert state.waiting_prompt is None

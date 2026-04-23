@@ -11,6 +11,7 @@ from collections import defaultdict
 from queue import Empty
 from typing import TYPE_CHECKING, Any
 
+from .codex_interaction_contract import build_tool_user_input_result
 from .codex_channels_adapter import CodexChannelsWaitSession, load_codex_channels_settings
 from .codex_app_server_bridge import await_attached_codex_app_server_response
 from .interactive_prompts import (
@@ -387,7 +388,7 @@ class CodexAppServerClient:
                 return
 
             if method == "item/tool/requestUserInput":
-                self._send_result(request_id, _tool_user_input_response(params, self._await_user_input(request_id, params)))
+                self._send_result(request_id, build_tool_user_input_result(params, self._await_user_input(request_id, params)))
                 return
 
             if method == "mcpServer/elicitation/request":
@@ -687,16 +688,6 @@ def _format_permissions_approval(params: dict[str, Any]) -> str:
     reason = params.get("reason") or "Codex requested additional permissions."
     permissions = json.dumps(params.get("permissions") or {}, ensure_ascii=False)
     return f"[Codex permission request] additional permissions\n{reason}\n{permissions}"
-
-
-def _tool_user_input_response(params: dict[str, Any], answers: dict[str, list[str]]) -> dict[str, Any]:
-    return {
-        "answers": {
-            q["id"]: {"answers": answers.get(q["id"], [])}
-            for q in (params.get("questions") or [])
-        }
-    }
-
 
 def _codex_app_server_command(command: str) -> list[str]:
     ask_server_name = "hermit_ask_user"

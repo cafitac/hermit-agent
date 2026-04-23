@@ -116,6 +116,28 @@ class BufferedCodexAppServerTransport:
         return request
 
 
+def resolve_codex_app_server_transport(
+    *,
+    transport: CodexAppServerTransport | None = None,
+    request_sender: Callable[[dict[str, Any]], object] | None = None,
+    line_writer: Callable[[str], object] | None = None,
+    stream: Any | None = None,
+    stream_lock: threading.Lock | None = None,
+) -> CodexAppServerTransport | None:
+    if transport is not None:
+        return transport
+    if request_sender is not None:
+        return CallbackCodexAppServerTransport(request_sender=request_sender)
+    if line_writer is not None:
+        return JsonRpcLineCodexAppServerTransport(line_writer=line_writer)
+    if stream is not None:
+        return StreamJsonRpcCodexAppServerTransport(
+            stream=stream,
+            lock=stream_lock,
+        )
+    return None
+
+
 class CodexAppServerInteractiveSink:
     def __init__(
         self,
@@ -151,19 +173,51 @@ def build_codex_app_server_sink(
     stream_lock: threading.Lock | None = None,
     log_fn: Callable[[str], None] | None = None,
 ) -> CodexAppServerInteractiveSink | None:
-    resolved_transport = transport
-    if resolved_transport is None and request_sender is not None:
-        resolved_transport = CallbackCodexAppServerTransport(request_sender=request_sender)
-    if resolved_transport is None and line_writer is not None:
-        resolved_transport = JsonRpcLineCodexAppServerTransport(line_writer=line_writer)
-    if resolved_transport is None and stream is not None:
-        resolved_transport = StreamJsonRpcCodexAppServerTransport(
-            stream=stream,
-            lock=stream_lock,
-        )
+    resolved_transport = resolve_codex_app_server_transport(
+        transport=transport,
+        request_sender=request_sender,
+        line_writer=line_writer,
+        stream=stream,
+        stream_lock=stream_lock,
+    )
     if resolved_transport is None:
         return None
     return CodexAppServerInteractiveSink(transport=resolved_transport, log_fn=log_fn)
+
+
+def build_composed_interactive_sink(
+    *,
+    claude_sink: InteractivePromptSink,
+    codex_channels_sink: InteractivePromptSink,
+    app_server_sink: InteractivePromptSink | None = None,
+    transport: CodexAppServerTransport | None = None,
+    request_sender: Callable[[dict[str, Any]], object] | None = None,
+    line_writer: Callable[[str], object] | None = None,
+    stream: Any | None = None,
+    stream_lock: threading.Lock | None = None,
+    log_fn: Callable[[str], None] | None = None,
+    include_codex_channels: bool | None = None,
+) -> CompositeInteractivePromptSink:
+    resolved_app_server_sink = app_server_sink or build_codex_app_server_sink(
+        transport=transport,
+        request_sender=request_sender,
+        line_writer=line_writer,
+        stream=stream,
+        stream_lock=stream_lock,
+        log_fn=log_fn,
+    )
+    resolved_include_codex_channels = (
+        resolved_app_server_sink is None
+        if include_codex_channels is None
+        else include_codex_channels
+    )
+    sinks: list[InteractivePromptSink] = [claude_sink]
+    if resolved_include_codex_channels:
+        sinks.append(codex_channels_sink)
+    return compose_interactive_prompt_sinks(
+        *sinks,
+        optional_sink=resolved_app_server_sink,
+    )
 
 
 def maybe_start_codex_channels_wait_session(

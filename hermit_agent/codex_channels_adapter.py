@@ -7,7 +7,6 @@ import select
 import shutil
 import subprocess
 import tarfile
-import tempfile
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -490,20 +489,18 @@ class CodexChannelsWaitSession:
         self._settings = settings
         self._interaction = interaction
         self._process: subprocess.Popen[str] | None = None
-        self._interaction_file: str | None = None
 
     def start(self) -> None:
-        fd, interaction_file = tempfile.mkstemp(prefix="hermit-codex-channels-", suffix=".json")
-        os.close(fd)
-        Path(interaction_file).write_text(json.dumps(self._interaction, ensure_ascii=False), encoding="utf-8")
-        self._interaction_file = interaction_file
         self._process = subprocess.Popen(
-            build_runtime_submit_command(settings=self._settings, interaction_file=interaction_file),
-            stdin=subprocess.DEVNULL,
+            build_runtime_submit_command(settings=self._settings, interaction_file="-"),
+            stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
         )
+        assert self._process.stdin is not None
+        self._process.stdin.write(json.dumps(self._interaction, ensure_ascii=False))
+        self._process.stdin.close()
 
     def poll_response(self) -> str | None:
         if self._process is None or self._process.stdout is None:
@@ -540,12 +537,6 @@ class CodexChannelsWaitSession:
                 proc.kill()
                 proc.wait(timeout=5)
         self._process = None
-        if self._interaction_file:
-            try:
-                Path(self._interaction_file).unlink(missing_ok=True)
-            except Exception:
-                pass
-            self._interaction_file = None
 
 
 def install_codex_channels(*, cwd: str, codex_command: str = "codex", scope: str = "workspace") -> InstallCodexReport:

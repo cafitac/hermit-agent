@@ -8,6 +8,7 @@ from hermit_agent.codex_app_server_bridge import (
     ENV_CODEX_APP_SERVER_WRITER_ENCODING,
     ENV_CODEX_APP_SERVER_WRITER_FD,
     ENV_CODEX_APP_SERVER_WRITER_PATH,
+    _extract_answer_from_codex_result,
     attached_codex_app_server_fd,
     attach_codex_app_server_stream,
     attached_codex_app_server_path,
@@ -27,6 +28,7 @@ from hermit_agent.codex_app_server_bridge import (
     has_attached_codex_app_server_transport,
     swap_codex_app_server_transport,
 )
+from hermit_agent.interactive_prompts import create_interactive_prompt
 from hermit_agent.interactive_sinks import BufferedCodexAppServerTransport
 
 
@@ -357,3 +359,58 @@ def test_bootstrap_codex_app_server_from_env_invalid_fd_logs_and_returns_none():
     )
     assert handle is None
     assert any("invalid writer fd" in line for line in logs)
+
+
+def test_extract_answer_from_codex_result_matches_canonical_codex_channels_shapes():
+    command_prompt = create_interactive_prompt(
+        task_id="task-command",
+        question="Allow command?",
+        options=["Yes (once)", "Always allow (session)", "No"],
+        method="item/commandExecution/requestApproval",
+        request_id="req-command",
+    )
+    file_prompt = create_interactive_prompt(
+        task_id="task-file",
+        question="Allow file change?",
+        options=["Yes (once)", "Always allow (session)", "No"],
+        method="item/fileChange/requestApproval",
+        request_id="req-file",
+    )
+    permissions_prompt = create_interactive_prompt(
+        task_id="task-permissions",
+        question="Allow permissions?",
+        options=["Yes (once)", "Always allow (session)", "No"],
+        method="item/permissions/requestApproval",
+        request_id="req-permissions",
+    )
+    user_input_prompt = create_interactive_prompt(
+        task_id="task-input",
+        question="Where?",
+        options=["staging", "prod"],
+        method="item/tool/requestUserInput",
+        request_id="req-input",
+    )
+    elicitation_prompt = create_interactive_prompt(
+        task_id="task-elicitation",
+        question="Need more input",
+        options=["Submit", "Cancel"],
+        method="mcpServer/elicitation/request",
+        request_id="req-elicitation",
+    )
+
+    assert _extract_answer_from_codex_result(command_prompt, {"decision": "acceptForSession"}) == "Always allow (session)"
+    assert _extract_answer_from_codex_result(file_prompt, {"decision": "decline"}) == "No"
+    assert _extract_answer_from_codex_result(permissions_prompt, {"permissions": {"shell": {"execute": True}}, "scope": "session"}) == "Always allow (session)"
+    assert _extract_answer_from_codex_result(permissions_prompt, {"permissions": {}, "scope": "turn"}) == "No"
+    assert _extract_answer_from_codex_result(
+        user_input_prompt,
+        {"answers": {"target": {"answers": ["staging"]}}},
+    ) == "staging"
+    assert _extract_answer_from_codex_result(
+        elicitation_prompt,
+        {"action": "accept", "content": {"answer": "staging"}},
+    ) == "staging"
+    assert _extract_answer_from_codex_result(
+        elicitation_prompt,
+        {"action": "cancel"},
+    ) == "cancel"

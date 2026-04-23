@@ -11,6 +11,7 @@ from hermit_agent.interactive_sinks import (
     CodexAppServerInteractiveSink,
     CodexChannelsInteractiveSink,
     CompositeInteractivePromptSink,
+    build_composed_interactive_sink,
     JsonRpcLineCodexAppServerTransport,
     StreamJsonRpcCodexAppServerTransport,
     build_codex_app_server_sink,
@@ -313,6 +314,37 @@ def test_compose_interactive_prompt_sinks_accepts_optional_sink():
         "notify:optional:task-compose",
         "clear:base:task-compose",
         "clear:optional:task-compose",
+    ]
+
+
+def test_build_composed_interactive_sink_skips_codex_channels_when_app_server_sink_exists():
+    calls: list[str] = []
+
+    class Sink:
+        def __init__(self, name: str):
+            self.name = name
+
+        def notify(self, prompt):
+            calls.append(f"notify:{self.name}:{prompt.task_id}")
+
+        def clear(self, task_id, *, expected=None):
+            calls.append(f"clear:{self.name}:{task_id}")
+
+    composite = build_composed_interactive_sink(
+        claude_sink=Sink("claude"),
+        codex_channels_sink=Sink("channels"),
+        app_server_sink=Sink("app"),
+    )
+    prompt = create_interactive_prompt(task_id="task-composed", question="Q", options=[])
+
+    composite.notify(prompt)
+    composite.clear("task-composed")
+
+    assert calls == [
+        "notify:claude:task-composed",
+        "notify:app:task-composed",
+        "clear:claude:task-composed",
+        "clear:app:task-composed",
     ]
 
 

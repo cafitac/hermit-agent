@@ -113,7 +113,7 @@ def test_notify_channel_starts_codex_channels_wait_when_enabled(monkeypatch):
             m._codex_channel_waits.clear()
 
 
-def test_bridge_codex_channels_reply_posts_gateway_reply_and_cleans_up(monkeypatch):
+def test_codex_channels_sink_bridge_reply_posts_gateway_reply_and_cleans_up(monkeypatch):
     import hermit_agent.mcp_channel as m
 
     calls = {}
@@ -127,11 +127,12 @@ def test_bridge_codex_channels_reply_posts_gateway_reply_and_cleans_up(monkeypat
 
     monkeypatch.setattr(m, "_gateway_reply", lambda task_id, message: calls.setdefault("reply", (task_id, message)) or True)
     session = FakeSession()
+    prompt = m.create_interactive_prompt(task_id="task-9", question="", options=[])
 
     with m._codex_channel_waits_lock:
         m._codex_channel_waits["task-9"] = session
 
-    m._bridge_codex_channels_reply("task-9", session, poll_interval=0.0)
+    m._codex_channels_sink._bridge_reply(prompt, session, poll_interval=0.0)
 
     assert calls["reply"] == ("task-9", "approved")
     assert calls["terminated"] == 1
@@ -832,6 +833,51 @@ def test_notify_channel_falls_back_to_codex_channels_when_session_request_fails(
             m._current_loop = None
         with m._codex_channel_waits_lock:
             m._codex_channel_waits.clear()
+
+
+def test_current_interactive_sink_prefers_session_sink_over_attached_transport(monkeypatch):
+    import hermit_agent.mcp_channel as m
+
+    session_sink = object()
+    built = object()
+
+    monkeypatch.setattr(m, "_build_session_app_server_sink", lambda: session_sink)
+    monkeypatch.setattr(m, "get_attached_codex_app_server_transport", lambda: object())
+    monkeypatch.setattr(
+        m,
+        "_build_interactive_sink",
+        lambda **kwargs: built if kwargs == {"app_server_sink": session_sink, "include_codex_channels": False} else None,
+    )
+
+    assert m._current_interactive_sink() is built
+
+
+def test_current_interactive_sink_uses_attached_transport_when_no_session_sink(monkeypatch):
+    import hermit_agent.mcp_channel as m
+
+    built = object()
+
+    monkeypatch.setattr(m, "_build_session_app_server_sink", lambda: None)
+    monkeypatch.setattr(m, "get_attached_codex_app_server_transport", lambda: object())
+    monkeypatch.setattr(
+        m,
+        "_build_interactive_sink",
+        lambda **kwargs: built if kwargs == {"include_codex_channels": False} else None,
+    )
+
+    assert m._current_interactive_sink() is built
+
+
+def test_current_interactive_sink_falls_back_to_default_without_host_surface(monkeypatch):
+    import hermit_agent.mcp_channel as m
+
+    default_sink = object()
+
+    monkeypatch.setattr(m, "_build_session_app_server_sink", lambda: None)
+    monkeypatch.setattr(m, "get_attached_codex_app_server_transport", lambda: None)
+    monkeypatch.setattr(m, "_default_interactive_sink", default_sink)
+
+    assert m._current_interactive_sink() is default_sink
 
 
 def test_notify_visible_prompt_dedupes_repeated_messages(monkeypatch):

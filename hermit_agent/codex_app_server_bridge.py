@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .codex_interaction_contract import extract_answer_from_codex_result
 from .interactive_prompts import InteractivePrompt, build_codex_app_server_request
 from .interactive_sinks import (
     CodexAppServerTransport,
@@ -260,47 +261,7 @@ def is_attached_codex_app_server_roundtrip_enabled(
 
 
 def _extract_answer_from_codex_result(prompt: InteractivePrompt, result: dict[str, Any]) -> str:
-    method = prompt.method or ""
-    if method == "item/tool/requestUserInput":
-        answers = result.get("answers")
-        if isinstance(answers, dict):
-            for value in answers.values():
-                if isinstance(value, dict):
-                    answer_list = value.get("answers")
-                    if isinstance(answer_list, list) and answer_list:
-                        return str(answer_list[0])
-        return ""
-    if method in {"item/commandExecution/requestApproval", "item/fileChange/requestApproval"}:
-        decision = str(result.get("decision") or "")
-        if decision == "acceptForSession":
-            return "Always allow (session)"
-        if decision == "accept":
-            return "Yes (once)"
-        if decision == "decline":
-            return "No"
-        if decision == "cancel":
-            return "cancel"
-        return decision
-    if method == "item/permissions/requestApproval":
-        permissions = result.get("permissions")
-        scope = str(result.get("scope") or "")
-        if permissions and scope == "session":
-            return "Always allow (session)"
-        if permissions:
-            return "Yes (once)"
-        return "No"
-    if method == "mcpServer/elicitation/request":
-        action = str(result.get("action") or "")
-        content = result.get("content")
-        if action in {"cancel", "decline"}:
-            return "cancel"
-        if isinstance(content, dict):
-            if "answer" in content:
-                return str(content["answer"])
-            if "url" in content:
-                return str(content["url"])
-        return action
-    return str(result)
+    return extract_answer_from_codex_result(method=prompt.method, result=result)
 
 
 def await_attached_codex_app_server_response(

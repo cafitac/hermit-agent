@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 from hermit_agent.codex_channels_adapter import (
@@ -179,6 +180,63 @@ def test_build_runtime_submit_command_uses_installed_cli_entry(tmp_path: Path):
     command = build_runtime_submit_command(settings=settings, interaction_file=str(tmp_path / "interaction.json"))
     assert command[:3] == ["node", str(runtime_dir / "index.js"), "submit"]
     assert "--interaction-file" in command
+
+
+def test_codex_channels_wait_session_streams_interaction_to_submit_stdin(monkeypatch, tmp_path: Path):
+    from hermit_agent.codex_channels_adapter import CodexChannelsWaitSession
+
+    runtime_dir = tmp_path / ".hermit" / "codex-channels-runtime" / "node_modules" / "@cafitac" / "codex-channels" / "dist"
+    runtime_dir.mkdir(parents=True)
+    (runtime_dir / "index.js").write_text("console.log('ok')\n", encoding="utf-8")
+
+    writes: list[str] = []
+    captured = {}
+
+    class FakeStdin:
+        def write(self, text: str) -> None:
+            writes.append(text)
+
+        def close(self) -> None:
+            writes.append("<closed>")
+
+    class FakeProcess:
+        def __init__(self) -> None:
+            self.stdin = FakeStdin()
+            self.stdout = None
+            self.stderr = None
+
+        def poll(self):
+            return 0
+
+        def terminate(self) -> None:
+            return None
+
+        def wait(self, timeout=None) -> int:
+            return 0
+
+    def fake_popen(args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return FakeProcess()
+
+    monkeypatch.setattr(subprocess, "Popen", fake_popen)
+
+    settings = CodexChannelsSettings(
+        state_file=str(tmp_path / ".codex-channels/state.json"),
+        runtime_dir=str(tmp_path / ".hermit/codex-channels-runtime"),
+        package_spec=LATEST_SPEC,
+    )
+    session = CodexChannelsWaitSession(
+        settings=settings,
+        interaction={"id": "hermit-task-1-req-1", "kind": "approval_request"},
+    )
+
+    session.start()
+
+    assert captured["args"][:3] == ["node", str(runtime_dir / "index.js"), "submit"]
+    assert "--interaction-file" in captured["args"]
+    assert captured["args"][captured["args"].index("--interaction-file") + 1] == "-"
+    assert writes == ['{"id": "hermit-task-1-req-1", "kind": "approval_request"}', "<closed>"]
 
 
 def test_remove_codex_channels_assets(tmp_path: Path):

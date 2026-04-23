@@ -27,7 +27,7 @@ from .interactive_sinks import (
     CodexChannelsInteractiveSink,
     CodexAppServerTransport,
     InteractivePromptSink,
-    build_codex_app_server_sink,
+    build_composed_interactive_sink,
     compose_interactive_prompt_sinks,
 )
 
@@ -401,21 +401,16 @@ def _build_interactive_sink(
         and app_server_stream is None
     ):
         attached_transport = get_attached_codex_app_server_transport()
-    resolved_app_server_sink = app_server_sink or build_codex_app_server_sink(
+    return build_composed_interactive_sink(
+        claude_sink=_claude_mcp_sink,
+        codex_channels_sink=_codex_channels_sink,
+        app_server_sink=app_server_sink,
         transport=app_server_transport or attached_transport,
         line_writer=app_server_line_writer,
         stream=app_server_stream,
         stream_lock=app_server_stream_lock,
         log_fn=_log,
-    )
-    if include_codex_channels is None:
-        include_codex_channels = resolved_app_server_sink is None
-    sinks: list[InteractivePromptSink] = [_claude_mcp_sink]
-    if include_codex_channels:
-        sinks.append(_codex_channels_sink)
-    return compose_interactive_prompt_sinks(
-        *sinks,
-        optional_sink=resolved_app_server_sink,
+        include_codex_channels=include_codex_channels,
     )
 
 
@@ -437,12 +432,6 @@ def _current_interactive_sink():
 
 def _stop_codex_channels_wait(task_id: str, *, expected: CodexChannelsWaitSession | None = None) -> None:
     _codex_channels_sink.clear(task_id, expected=expected)
-
-
-def _bridge_codex_channels_reply(task_id: str, session: CodexChannelsWaitSession, *, poll_interval: float = 0.25) -> None:
-    prompt = create_interactive_prompt(task_id=task_id, question="", options=[])
-    _codex_channels_sink._bridge_reply(prompt, session, poll_interval=poll_interval)
-
 
 def _notify_channel(
     task_id: str,

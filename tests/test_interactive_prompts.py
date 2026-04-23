@@ -21,25 +21,54 @@ def test_create_interactive_prompt_defaults_tool_name_from_prompt_kind():
 
 
 def test_codex_channels_interaction_kind_prefers_method_specific_mappings():
-    permissions_prompt = create_interactive_prompt(
-        task_id="task-2",
-        question="Permissions?",
-        options=["Yes", "No"],
-        prompt_kind="permission_ask",
-        method="item/permissions/requestApproval",
-        request_id="req-2",
-    )
-    elicitation_prompt = create_interactive_prompt(
-        task_id="task-3",
-        question="Need URL",
-        options=["Submit", "Cancel"],
-        prompt_kind="waiting",
-        method="mcpServer/elicitation/request",
-        request_id="req-3",
-    )
+    prompts = {
+        "command": create_interactive_prompt(
+            task_id="task-2",
+            question="Run command?",
+            options=["Yes", "No"],
+            prompt_kind="permission_ask",
+            method="item/commandExecution/requestApproval",
+            request_id="req-2",
+        ),
+        "file_change": create_interactive_prompt(
+            task_id="task-3",
+            question="Apply patch?",
+            options=["Yes", "No"],
+            prompt_kind="waiting",
+            method="item/fileChange/requestApproval",
+            request_id="req-3",
+        ),
+        "permissions": create_interactive_prompt(
+            task_id="task-4",
+            question="Permissions?",
+            options=["Yes", "No"],
+            prompt_kind="permission_ask",
+            method="item/permissions/requestApproval",
+            request_id="req-4",
+        ),
+        "user_input": create_interactive_prompt(
+            task_id="task-5",
+            question="Where?",
+            options=["staging", "prod"],
+            prompt_kind="waiting",
+            method="item/tool/requestUserInput",
+            request_id="req-5",
+        ),
+        "elicitation": create_interactive_prompt(
+            task_id="task-6",
+            question="Need URL",
+            options=["Submit", "Cancel"],
+            prompt_kind="waiting",
+            method="mcpServer/elicitation/request",
+            request_id="req-6",
+        ),
+    }
 
-    assert codex_channels_interaction_kind(permissions_prompt) == "permissions_request"
-    assert codex_channels_interaction_kind(elicitation_prompt) == "elicitation_request"
+    assert codex_channels_interaction_kind(prompts["command"]) == "approval_request"
+    assert codex_channels_interaction_kind(prompts["file_change"]) == "approval_request"
+    assert codex_channels_interaction_kind(prompts["permissions"]) == "permissions_request"
+    assert codex_channels_interaction_kind(prompts["user_input"]) == "user_input_request"
+    assert codex_channels_interaction_kind(prompts["elicitation"]) == "elicitation_request"
 
 
 def test_prompt_helpers_build_stable_notification_and_interaction_payloads():
