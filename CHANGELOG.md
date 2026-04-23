@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## v0.3.2
+
+### Package metadata alignment
+- Renamed the published PyPI package metadata from `hermit-agent` to `cafitac-hermit-agent` so releases target the project that is actually owned and configured for publishing.
+- Kept the installed CLI entrypoints (`hermit`, `hermit-agent`, `hermit-gateway`, `hermit-setup`) unchanged while only adjusting package metadata for distribution.
+
 ## v0.3.1
 
 ### Codex interaction cleanup

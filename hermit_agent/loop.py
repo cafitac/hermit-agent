@@ -22,7 +22,7 @@ from .memory import MemorySystem
 from .permissions import PermissionChecker, PermissionMode
 from .tools import Tool, ToolResult
 
-VERSION = "0.3.1"
+VERSION = "0.3.2"
 
 
 def _current_date() -> str:

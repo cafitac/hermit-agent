@@ -3,8 +3,8 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hermit-agent"
-version = "0.3.1"
+name = "cafitac-hermit-agent"
+version = "0.3.2"
 description = "Run Claude Code cheaper: a Python MCP sub-agent that delegates grunt work to local ollama or z.ai."
 readme = "README.md"
 requires-python = ">=3.11"
