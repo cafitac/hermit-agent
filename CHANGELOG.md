@@ -2,6 +2,27 @@
 
 ## Unreleased
 
+## v0.3.7
+
+### Documentation refresh — dual-orchestrator positioning
+- Updated README tagline, diagram, and comparison table to reflect that Hermit works with both Claude Code and Codex as orchestrators (not just Claude Code).
+- Updated `pyproject.toml` and `package.json` descriptions to mention both orchestrators.
+- Added CHANGELOG entries for v0.3.5 and v0.3.6 that were previously missing.
+
+## v0.3.6
+
+### npm wrapper self-update and UX
+- Added `hermit self-update` command to upgrade the npm-installed launcher.
+- Launcher now prints a compact update hint on stderr when a newer version is detected.
+
+## v0.3.5
+
+### npm-first install support
+- Published `@cafitac/hermit-agent` to npm as a thin launcher.
+- On first run, bootstraps a managed Python runtime under `~/.hermit/npm-runtime`, installs `cafitac-hermit-agent` from PyPI, and forwards to the normal Hermit CLI.
+- Added `hermit setup-codex` and `hermit setup-claude` entrypoints for split install paths.
+- Clone-free install: `npm install -g @cafitac/hermit-agent && hermit setup-codex`.
+
 ## v0.3.4
 
 ### CI compatibility fixes

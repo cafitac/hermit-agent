@@ -2,28 +2,36 @@
 
 [![Python tests](https://github.com/cafitac/hermit-agent/actions/workflows/python-tests.yml/badge.svg)](https://github.com/cafitac/hermit-agent/actions/workflows/python-tests.yml)
 
-> **Run Claude Code 50–80% cheaper: Hermit is an MCP executor with Codex-first fallback routing (codex → z.ai → local) while Claude stays the orchestrator.**
+> **Run Claude Code or Codex 50–80% cheaper: Hermit is an MCP executor with Codex-first fallback routing (codex → z.ai → local) while your orchestrator stays in charge.**
 
-HermitAgent plugs into Claude Code as an MCP sub-agent. Claude keeps doing what it is best at — planning, interviewing, code review — and delegates the high-token grunt work (file edits, test runs, commit/push, refactors) to a low-cost executor (Codex, local ollama, or flat-rate z.ai).
+HermitAgent plugs into Claude Code or Codex as an MCP sub-agent. The orchestrator keeps doing what it does best — planning, interviewing, code review — and delegates the high-token grunt work (file edits, test runs, commit/push, refactors) to a low-cost executor (Codex, local ollama, or flat-rate z.ai).
 
-## v0.3.x highlights (cost-first execution)
+## Highlights
 
-- **Codex support is first-class**: Hermit can run tasks via Codex, with `gpt-5.4` at `medium` reasoning as the default Codex lane.
-- **Auto model routing when `model` is omitted**: configurable via `routing.priority_models` in `settings.json`, and providers that are not configured/installed are skipped automatically (default chain: `gpt-5.4 medium -> glm -> local ollama`).
-- **Explicit model requests are strict**: if you ask for a specific model and it is unavailable, Hermit returns a clear unavailable error instead of silently switching providers.
-- **MCP + gateway auto-start**: `bin/mcp-server.sh` now ensures the local gateway is up, so Claude Code/Codex startup is simpler.
+- **Dual orchestrator support**: Hermit works as an MCP sub-agent for both Claude Code and Codex. Either one stays the planner; Hermit does the execution.
+- **Codex-first routing**: `gpt-5.4` at `medium` reasoning is the default executor lane when available.
+- **Auto model routing when `model` is omitted**: configurable via `routing.priority_models` in `settings.json` — providers not configured or installed are skipped automatically (default chain: `gpt-5.4 medium → glm → local ollama`).
+- **Explicit model requests are strict**: if you ask for a specific model and it is unavailable, Hermit returns a clear error instead of silently switching providers.
+- **npm-first install (clone-free)**: `npm install -g @cafitac/hermit-agent && hermit setup-codex` (or `hermit setup-claude`) — no repo checkout needed.
+- **Self-update**: `hermit self-update` pulls the latest published version.
+- **Standalone MCP launcher**: `hermit-mcp-server` auto-starts the gateway, so both Claude Code and Codex can bring up the full stack from the MCP entrypoint alone.
+- **Model guardrail profiles**: per-model safety profiles under `hermit_agent/profiles/defaults/`, with user overrides via `~/.hermit/profiles/`.
 
 ```
-┌──────────────┐   MCP   ┌──────────────┐   any OpenAI-compatible   ┌───────┐
-│  Claude Code │ ──────▶ │  HermitAgent │ ────────────────────────▶ │  LLM  │
-│ (planner)    │         │  (executor)  │                           └───────┘
-└──────────────┘         └──────────────┘
-     $$$                      ~$0 / flat-rate
+┌──────────────┐
+│  Claude Code │──┐
+│  (planner)   │  │    ┌──────────────┐   any OpenAI-compatible   ┌───────┐
+└──────────────┘  ├───▶│  HermitAgent │ ────────────────────────▶ │  LLM  │
+                  │    │  (executor)  │                           └───────┘
+┌──────────────┐  │    └──────────────┘
+│    Codex     │──┘         ~$0 / flat-rate
+│  (planner)   │
+└──────────────┘
 ```
 
 ## Why
 
-Claude Code is great, but a `/feature-develop` session easily burns 100k+ Claude tokens on mechanical work — reading files, running `pytest`, formatting diffs, writing conventional-commit messages — that any competent code model can do. HermitAgent exposes three MCP tools (`run_task`, `reply_task`, `check_task`) so Claude Code can delegate whole skills to a cheaper model while the user stays in the familiar Claude Code UI.
+Claude Code and Codex are great, but a `/feature-develop` session easily burns 100k+ orchestrator tokens on mechanical work — reading files, running `pytest`, formatting diffs, writing conventional-commit messages — that any competent code model can do. HermitAgent exposes three MCP tools (`run_task`, `reply_task`, `check_task`) so the orchestrator (Claude Code or Codex) can delegate whole skills to a cheaper model while the user stays in the familiar UI.
 
 ## The pattern
 
@@ -45,7 +53,7 @@ Full protocol: [`docs/measure-savings.md`](docs/measure-savings.md). Executor co
 
 The product is the **pattern**, not any specific skill:
 
-> Claude does reasoning, judgment, and quality gates.
+> The orchestrator (Claude Code or Codex) does reasoning, judgment, and quality gates.
 > A cheap local / flat-rate executor does the grunt work.
 > They talk to each other over MCP, so the switch is one word in a slash command.
 
@@ -77,13 +85,13 @@ Everything else in the repo is there to make that pattern work cleanly:
 | **LiteLLM** | Generic multi-provider proxy | Not coding-specific, no understanding of CC workflow |
 | **OpenHands / aider** | Standalone agent, replaces Claude Code | Full migration away from CC; big UX change |
 | **Anthropic Agent SDK** | Official sub-agent framework | DIY: you still write the executor, the local-model wiring, the MCP glue |
-| **HermitAgent** | Claude **stays** the orchestrator; Hermit is the executor | Narrower scope, but drop-in: `/foo` → `/foo-hermit` |
+| **HermitAgent** | Claude or Codex **stays** the orchestrator; Hermit is the executor | Narrower scope, but drop-in: `/foo` → `/foo-hermit` |
 
-If you don't use Claude Code, you don't need HermitAgent. If you do, and the monthly bill or the rate limits are a problem, this is what it is for.
+If you don't use Claude Code or Codex, you don't need HermitAgent. If you do, and the monthly bill or the rate limits are a problem, this is what it is for.
 
 ### Where the project is heading
 
-The bundled skills still give Claude the full interview phase before delegating. The direction this project is moving in is the opposite: **Claude does only the final verification pass** — the executor does the interview, the plan, the implementation, the tests, the commit — and Claude is only woken up at the end to reject, accept, or ask for a narrow revision. The less Claude does, the more of the bill disappears. The existing `-hermit` skills are the conservative checkpoint on that spectrum; your own variants can push further.
+The bundled skills still give the orchestrator the full interview phase before delegating. The direction this project is moving in is the opposite: **the orchestrator does only the final verification pass** — the executor does the interview, the plan, the implementation, the tests, the commit — and the orchestrator is only woken up at the end to reject, accept, or ask for a narrow revision. The less the orchestrator does, the more of the bill disappears. The existing `-hermit` skills are the conservative checkpoint on that spectrum; your own variants can push further.
 
 ## Install
 
@@ -256,7 +264,7 @@ Then in Claude Code:
 /feature-develop-hermit <ticket-or-short-task>
 ```
 
-Claude interviews you about the ticket, writes the plan, and delegates the implementation to Hermit over MCP. You watch Hermit's progress in the Claude Code session; the executor tokens never hit your Claude bill.
+Claude interviews you about the ticket, writes the plan, and delegates the implementation to Hermit over MCP. You watch Hermit's progress in the session; the executor tokens never hit your orchestrator bill.
 
 ### Standalone (no Claude Code)
 
@@ -433,7 +441,7 @@ Examples:
 - `~/.hermit/profiles/glm-5.1.yaml`
 
 User profiles override the built-in defaults when the model id matches.
-- Hermit does not require Claude Code; it just shines brightest as its sub-agent
+- Hermit does not require Claude Code or Codex; it just shines brightest as their sub-agent
 - Nothing phones home. Everything runs locally or through the LLM endpoint you configure
 
 ## License
