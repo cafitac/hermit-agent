@@ -1,6 +1,6 @@
 {
   "name": "@cafitac/hermit-agent",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "description": "npm-first launcher for the Hermit Python runtime",
   "type": "module",
   "bin": {

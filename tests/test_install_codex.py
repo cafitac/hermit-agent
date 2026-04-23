@@ -14,10 +14,12 @@ def test_run_install_codex_reports_marketplace_registration(monkeypatch):
 
     monkeypatch.setattr("hermit_agent.install_codex.install_codex_channels", lambda **kwargs: DummyReport())
     monkeypatch.setattr("hermit_agent.install_codex.ensure_codex_marketplace_registered", lambda **kwargs: "registered")
+    monkeypatch.setattr("hermit_agent.install_codex.ensure_codex_mcp_registered", lambda **kwargs: "registered")
     monkeypatch.setattr("hermit_agent.install_codex.remove_codex_reply_hook", lambda **kwargs: "removed")
 
     text = run_install_codex(cwd="/tmp/demo", codex_command="codex", scope="workspace")
 
     assert "Hermit Codex integration is ready." in text
     assert "- Codex marketplace registration: registered" in text
+    assert "- Codex MCP registration: registered" in text
     assert "- legacy Codex reply hook: removed" in text

@@ -7,6 +7,7 @@ from hermit_agent.install_flow import (
     PLACEHOLDER_GATEWAY_KEY,
     InstallSummary,
     StartupHealSummary,
+    ensure_codex_mcp_registered,
     ensure_codex_channels_ready,
     ensure_codex_marketplace_registered,
     ensure_gateway_api_key,
@@ -17,6 +18,7 @@ from hermit_agent.install_flow import (
     inspect_claude_mcp_registration,
     probe_gateway_health,
     register_claude_mcp,
+    resolve_hermit_mcp_stdio_entry,
     run_install,
     run_startup_self_heal,
 )
@@ -67,6 +69,19 @@ def test_register_claude_mcp_writes_user_wide_stdio_entry(tmp_path):
     assert payload["mcpServers"]["other"]["command"] == "other"
 
 
+def test_register_claude_mcp_accepts_prebuilt_entry(tmp_path):
+    claude_json = tmp_path / ".claude.json"
+    entry = {"type": "stdio", "command": "/tmp/hermit/npm-runtime/venv/bin/hermit-mcp-server"}
+
+    status, path, backup = register_claude_mcp(entry=entry, claude_json_path=claude_json)
+
+    payload = json.loads(claude_json.read_text(encoding="utf-8"))
+    assert status == "registered"
+    assert path == claude_json
+    assert backup is None
+    assert payload["mcpServers"]["hermit-channel"] == entry
+
+
 def test_register_claude_mcp_repairs_invalid_json_by_resetting_to_clean_payload(tmp_path):
     claude_json = tmp_path / ".claude.json"
     claude_json.write_text("{not-json", encoding="utf-8")
@@ -93,6 +108,63 @@ def test_inspect_claude_mcp_registration_reports_missing_and_registered(tmp_path
 
     claude_json.write_text(json.dumps({"mcpServers": {"hermit-channel": {"type": "stdio", "command": str(command)}}}), encoding="utf-8")
     assert inspect_claude_mcp_registration(command_path=command, claude_json_path=claude_json) == "registered"
+
+
+def test_resolve_hermit_mcp_stdio_entry_prefers_npm_runtime(monkeypatch, tmp_path):
+    launcher = tmp_path / ".hermit" / "npm-runtime" / "venv" / "bin" / "hermit-mcp-server"
+    launcher.parent.mkdir(parents=True)
+    launcher.write_text("", encoding="utf-8")
+    monkeypatch.setattr("hermit_agent.install_flow.Path.home", lambda: tmp_path)
+
+    entry = resolve_hermit_mcp_stdio_entry(cwd="/tmp/demo")
+
+    assert entry == {"type": "stdio", "command": str(launcher)}
+
+
+def test_ensure_codex_mcp_registered_replaces_mismatched_entry(tmp_path, monkeypatch):
+    calls: list[list[str]] = []
+
+    class Result:
+        def __init__(self, returncode=0, stdout="", stderr=""):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    monkeypatch.setattr(
+        "hermit_agent.install_flow.resolve_hermit_mcp_stdio_entry",
+        lambda *, cwd: {"type": "stdio", "command": "/tmp/hermit/npm-runtime/venv/bin/hermit-mcp-server"},
+    )
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        if args[:4] == ["codex", "mcp", "get", "hermit-channel"]:
+            return Result(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "transport": {
+                            "command": "/Users/reddit/Project/claude-code/bin/mcp-server.sh",
+                            "args": [],
+                        }
+                    }
+                ),
+            )
+        if args[:4] == ["codex", "mcp", "remove", "hermit-channel"]:
+            return Result(returncode=0)
+        if args[:4] == ["codex", "mcp", "add", "hermit-channel"]:
+            return Result(returncode=0)
+        raise AssertionError(args)
+
+    monkeypatch.setattr("hermit_agent.install_flow.subprocess.run", fake_run)
+
+    status = ensure_codex_mcp_registered(cwd=str(tmp_path), codex_command="codex")
+
+    assert status == "registered"
+    assert calls == [
+        ["codex", "mcp", "get", "hermit-channel", "--json"],
+        ["codex", "mcp", "remove", "hermit-channel"],
+        ["codex", "mcp", "add", "hermit-channel", "--", "/tmp/hermit/npm-runtime/venv/bin/hermit-mcp-server"],
+    ]
 
 
 def test_ensure_gateway_api_key_creates_and_persists_key(tmp_path, monkeypatch):
@@ -304,6 +376,10 @@ def test_run_install_accepts_defaults_and_invokes_optional_steps(tmp_path, monke
         lambda **kwargs: "registered",
     )
     monkeypatch.setattr(
+        "hermit_agent.install_flow.ensure_codex_mcp_registered",
+        lambda **kwargs: "registered",
+    )
+    monkeypatch.setattr(
         "hermit_agent.install_flow.remove_codex_reply_hook",
         lambda **kwargs: "removed",
     )
@@ -318,6 +394,7 @@ def test_run_install_accepts_defaults_and_invokes_optional_steps(tmp_path, monke
     assert summary.codex_reply_hook_status == "removed"
     assert summary.codex_runtime_version == "0.1.31"
     assert any("runtime dir: /tmp/runtime" == item for item in summary.codex_details)
+    assert any("codex mcp registration: registered" == item for item in summary.codex_details)
 
 
 def test_run_startup_self_heal_repairs_common_local_state(tmp_path, monkeypatch):

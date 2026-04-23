@@ -113,7 +113,21 @@ def ensure_gateway_api_key(*, settings_path: Path) -> tuple[bool, str]:
     return created, api_key
 
 
-def inspect_claude_mcp_registration(*, command_path: Path, claude_json_path: Path | None = None) -> str:
+def resolve_hermit_mcp_stdio_entry(*, cwd: str) -> dict[str, object]:
+    home = Path.home()
+    candidates = (
+        home / ".hermit" / "npm-runtime" / "venv" / "bin" / "hermit-mcp-server",
+        home / ".hermit" / "npm-runtime" / "venv" / "Scripts" / "hermit-mcp-server.exe",
+        Path(cwd) / ".venv" / "bin" / "hermit-mcp-server",
+        Path(cwd) / ".venv" / "Scripts" / "hermit-mcp-server.exe",
+    )
+    for candidate in candidates:
+        if candidate.exists():
+            return {"type": "stdio", "command": str(candidate)}
+    return {"type": "stdio", "command": str(Path(cwd) / "bin" / "mcp-server.sh")}
+
+
+def inspect_claude_mcp_registration(*, command_path: Path | None = None, claude_json_path: Path | None = None, entry: dict[str, object] | None = None) -> str:
     target = claude_json_path or (Path.home() / ".claude.json")
     if not target.exists():
         return "missing"
@@ -121,13 +135,13 @@ def inspect_claude_mcp_registration(*, command_path: Path, claude_json_path: Pat
     if not isinstance(payload, dict):
         return "invalid"
     entry = (((payload.get("mcpServers") or {}) if isinstance(payload.get("mcpServers"), dict) else {}).get("hermit-channel"))
-    expected = {"type": "stdio", "command": str(command_path)}
+    expected = entry if entry is not None else {"type": "stdio", "command": str(command_path)}
     return "registered" if entry == expected else "missing"
 
 
-def register_claude_mcp(*, command_path: Path, claude_json_path: Path | None = None) -> tuple[str, Path, Path | None]:
+def register_claude_mcp(*, command_path: Path | None = None, claude_json_path: Path | None = None, entry: dict[str, object] | None = None) -> tuple[str, Path, Path | None]:
     target = claude_json_path or (Path.home() / ".claude.json")
-    entry = {"type": "stdio", "command": str(command_path)}
+    resolved_entry = entry if entry is not None else {"type": "stdio", "command": str(command_path)}
     name = "hermit-channel"
 
     payload = _load_json(target)
@@ -163,10 +177,10 @@ def register_claude_mcp(*, command_path: Path, claude_json_path: Path | None = N
     if isinstance(legacy, dict) and legacy.get("type") in {"http", "sse"}:
         mcp_servers.pop("hermit", None)
 
-    if mcp_servers.get(name) == entry:
+    if mcp_servers.get(name) == resolved_entry:
         return "unchanged", target, backup_path
 
-    mcp_servers[name] = entry
+    mcp_servers[name] = resolved_entry
     _write_json(target, payload)
     return "registered", target, backup_path
 
@@ -232,6 +246,50 @@ def ensure_codex_marketplace_registered(*, cwd: str, codex_command: str, scope: 
         return "unchanged"
     if "added marketplace" in output:
         return "registered"
+    return "registered"
+
+
+def ensure_codex_mcp_registered(*, cwd: str, codex_command: str) -> str:
+    desired_entry = resolve_hermit_mcp_stdio_entry(cwd=cwd)
+    desired_command = str(desired_entry["command"])
+    desired_args = [str(arg) for arg in desired_entry.get("args", []) or []]
+
+    current = subprocess.run(
+        [codex_command, "mcp", "get", "hermit-channel", "--json"],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if current.returncode == 0:
+        try:
+            payload = json.loads(current.stdout)
+        except Exception:
+            payload = {}
+        transport = payload.get("transport") if isinstance(payload, dict) else {}
+        current_command = str((transport or {}).get("command") or "")
+        current_args = [str(arg) for arg in ((transport or {}).get("args") or [])]
+        if current_command == desired_command and current_args == desired_args:
+            return "unchanged"
+        subprocess.run(
+            [codex_command, "mcp", "remove", "hermit-channel"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+
+    proc = subprocess.run(
+        [codex_command, "mcp", "add", "hermit-channel", "--", desired_command, *desired_args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if proc.returncode != 0:
+        message = proc.stderr.strip() or proc.stdout.strip() or "failed to register Codex MCP"
+        raise RuntimeError(message)
     return "registered"
 
 
@@ -381,7 +439,7 @@ def run_install(
         )
         if register_mcp:
             try:
-                status, path, backup = register_claude_mcp(command_path=Path(cwd) / "bin" / "mcp-server.sh")
+                status, path, backup = register_claude_mcp(entry=resolve_hermit_mcp_stdio_entry(cwd=cwd))
                 summary.mcp_registration_status = status
                 summary.mcp_registration_path = str(path)
                 summary.mcp_backup_path = str(backup) if backup else None
@@ -409,6 +467,9 @@ def run_install(
                     cwd=cwd,
                     codex_command=codex_command,
                     scope=codex_scope,
+                )
+                summary.codex_details.append(
+                    f"codex mcp registration: {ensure_codex_mcp_registered(cwd=cwd, codex_command=codex_command)}"
                 )
                 summary.codex_reply_hook_status = remove_codex_reply_hook(cwd=cwd)
                 summary.codex_details.extend(details)
@@ -439,7 +500,7 @@ def run_startup_self_heal(*, cwd: str) -> StartupHealSummary:
         summary.gateway_api_key_created = created
 
     summary.gateway_status = ensure_gateway_running(cwd=cwd)
-    summary.mcp_registration_status = inspect_claude_mcp_registration(command_path=Path(cwd) / "bin" / "mcp-server.sh")
+    summary.mcp_registration_status = inspect_claude_mcp_registration(entry=resolve_hermit_mcp_stdio_entry(cwd=cwd))
     summary.codex_runtime_status = "installed" if get_codex_runtime_version(cwd=cwd) else "missing"
     return summary
 
