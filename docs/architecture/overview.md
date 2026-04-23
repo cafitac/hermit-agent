@@ -75,6 +75,7 @@ Claude Code
       → Tool.execute()
       → AskUserQuestionTool
         → question_queue.put()
+        → waiting_prompt snapshot update
         → notify_fn()  ← _send_channel_notification()
         → reply_queue.get()   (blocks)
   ← {status: "waiting", question}

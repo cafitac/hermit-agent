@@ -5,12 +5,20 @@ import logging
 import os
 import select
 import subprocess
+import sys
 import threading
 from collections import defaultdict
 from queue import Empty
 from typing import TYPE_CHECKING, Any
 
-from .codex_channels_adapter import CodexChannelsWaitSession, build_interaction, load_codex_channels_settings
+from .codex_channels_adapter import CodexChannelsWaitSession, load_codex_channels_settings
+from .codex_app_server_bridge import await_attached_codex_app_server_response
+from .interactive_prompts import (
+    build_codex_channels_interaction,
+    create_interactive_prompt,
+    waiting_prompt_snapshot,
+)
+from .interactive_sinks import maybe_start_codex_channels_wait_session, write_codex_app_server_message
 
 logger = logging.getLogger("hermit_agent.codex_runner")
 
@@ -21,6 +29,21 @@ _YES_ANSWERS = {"", "y", "yes", "1", "accept", "approve", "allow"}
 _ALWAYS_ANSWERS = {"2", "always", "yolo", "accept for session", "acceptforsession"}
 _NO_ANSWERS = {"n", "no", "decline", "deny"}
 _CANCEL_ANSWERS = {"cancel", "abort", "__cancelled__"}
+
+
+def _prepare_codex_task(task: str) -> str:
+    guidance = (
+        "Hermit interactive-input contract:\n"
+        "- If you need missing user input, request it through the host interactive input surface.\n"
+        "- Do not claim that ask_user_question is unavailable.\n"
+        "- Do not print a question as your final answer when you still need user input.\n"
+        "- For free-text questions, request a plain text response from the host.\n"
+        "- For choice questions, request host input with the available options.\n"
+        "- After the user replies, continue the task and then produce the final answer.\n"
+    )
+    if not task.strip():
+        return guidance
+    return f"{guidance}\nTask:\n{task}"
 
 
 def is_codex_model(model: str) -> bool:
@@ -108,7 +131,7 @@ class CodexAppServerClient:
                 "turn/start",
                 {
                     "threadId": self._thread_id,
-                    "input": [{"type": "text", "text": task}],
+                    "input": [{"type": "text", "text": _prepare_codex_task(task)}],
                     "effort": self._reasoning_effort,
                 },
             )
@@ -138,16 +161,7 @@ class CodexAppServerClient:
     def _start_process(self) -> None:
         env = dict(os.environ)
         self._process = subprocess.Popen(
-            [
-                self._command,
-                "app-server",
-                "-c",
-                "mcp_servers={}",
-                "--disable",
-                "codex_hooks",
-                "--listen",
-                "stdio://",
-            ],
+            _codex_app_server_command(self._command),
             cwd=self._cwd,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -235,9 +249,7 @@ class CodexAppServerClient:
         proc = self._process
         if proc is None or proc.stdin is None:
             raise CodexTaskFailed("Codex app-server stdin is unavailable")
-        with self._stdout_lock:
-            proc.stdin.write(json.dumps(message, ensure_ascii=False) + "\n")
-            proc.stdin.flush()
+        write_codex_app_server_message(proc.stdin, message, lock=self._stdout_lock)
 
     def _dispatch_message(self, message: dict[str, Any]) -> bool:
         if self._gw_log is not None:
@@ -353,6 +365,7 @@ class CodexAppServerClient:
                     request_id=request_id,
                     question=_format_command_approval(params),
                     options=["Yes (once)", "Always allow (session)", "No"],
+                    params=params,
                 )
                 self._send_result(request_id, {"decision": decision})
                 return
@@ -363,6 +376,7 @@ class CodexAppServerClient:
                     request_id=request_id,
                     question=_format_file_change_approval(params),
                     options=["Yes (once)", "Always allow (session)", "No"],
+                    params=params,
                 )
                 self._send_result(request_id, {"decision": decision})
                 return
@@ -389,7 +403,15 @@ class CodexAppServerClient:
             self._send_error(request_id, str(exc))
             raise
 
-    def _await_review(self, *, method: str, request_id: Any, question: str, options: list[str]) -> str:
+    def _await_review(
+        self,
+        *,
+        method: str,
+        request_id: Any,
+        question: str,
+        options: list[str],
+        params: dict[str, Any],
+    ) -> str:
         answer = _wait_for_reply(
             state=self._state,
             sse=self._sse,
@@ -401,6 +423,7 @@ class CodexAppServerClient:
             request_id=request_id,
             thread_id=self._thread_id,
             turn_id=self._turn_id,
+            request_params=params,
             codex_channels_cfg=self._codex_channels_cfg,
             cwd=self._cwd,
         )
@@ -427,6 +450,7 @@ class CodexAppServerClient:
             request_id=request_id,
             thread_id=self._thread_id,
             turn_id=self._turn_id,
+            request_params=params,
             codex_channels_cfg=self._codex_channels_cfg,
             cwd=self._cwd,
         )
@@ -456,6 +480,7 @@ class CodexAppServerClient:
             request_id=request_id,
             thread_id=self._thread_id,
             turn_id=self._turn_id,
+            request_params=params,
             codex_channels_cfg=self._codex_channels_cfg,
             cwd=self._cwd,
         )
@@ -479,6 +504,7 @@ class CodexAppServerClient:
                 request_id=request_id,
                 thread_id=self._thread_id,
                 turn_id=self._turn_id,
+                request_params=params,
                 codex_channels_cfg=self._codex_channels_cfg,
             cwd=self._cwd,
             )
@@ -498,6 +524,7 @@ class CodexAppServerClient:
             request_id=request_id,
             thread_id=self._thread_id,
             turn_id=self._turn_id,
+            request_params=params,
             codex_channels_cfg=self._codex_channels_cfg,
             cwd=self._cwd,
         )
@@ -558,36 +585,55 @@ def _wait_for_reply(
     request_id: str | int | None = None,
     thread_id: str | None = None,
     turn_id: str | None = None,
+    request_params: dict[str, Any] | None = None,
     codex_channels_cfg: dict[str, Any] | None = None,
     cwd: str | None = None,
 ) -> str:
     from .gateway.sse import SSEEvent
+
+    prompt = create_interactive_prompt(
+        task_id=task_id,
+        question=question,
+        options=options or [],
+        prompt_kind=kind,
+        method=method,
+        request_id=request_id,
+        thread_id=thread_id,
+        turn_id=turn_id,
+        params=request_params,
+    )
+
     state.status = "waiting"
-    state.waiting_kind = kind
-    state.question_queue.put({"question": question, "options": options or []})
-    sse.publish_threadsafe(task_id, SSEEvent(type=kind, question=question, options=options or []))
+    state.waiting_kind = prompt.prompt_kind
+    state.waiting_prompt = waiting_prompt_snapshot(prompt)
+    state.question_queue.put(waiting_prompt_snapshot(prompt))
+    event_type = "permission_ask" if prompt.prompt_kind == "permission_ask" else "waiting"
+    sse.publish_threadsafe(
+        task_id,
+        SSEEvent(
+            type=event_type,
+            question=prompt.question,
+            options=list(prompt.options),
+            tool_name=prompt.tool_name,
+        ),
+    )
+
+    attached_answer = await_attached_codex_app_server_response(prompt, env=dict(os.environ))
+    if attached_answer is not None:
+        state.status = "running"
+        state.waiting_kind = None
+        state.waiting_prompt = None
+        sse.publish_threadsafe(task_id, SSEEvent(type="reply_ack", message="reply received"))
+        return attached_answer
 
     session = None
     settings = load_codex_channels_settings(codex_channels_cfg, cwd or os.getcwd())
-    if settings.enabled:
-        interaction_kind = "permissions_request" if kind == "permission_ask" and method == "item/permissions/requestApproval" else ("approval_request" if kind == "permission_ask" else "user_input_request")
-        try:
-            session = CodexChannelsWaitSession(
-                settings=settings,
-                interaction=build_interaction(
-                    task_id=task_id,
-                    kind=interaction_kind,
-                    question=question,
-                    options=options or [],
-                    method=method,
-                    thread_id=thread_id,
-                    turn_id=turn_id,
-                    request_id=request_id,
-                ),
-            )
-            session.start()
-        except Exception:
-            session = None
+    session = maybe_start_codex_channels_wait_session(
+        prompt,
+        settings=settings,
+        session_factory=CodexChannelsWaitSession,
+        interaction_builder=build_codex_channels_interaction,
+    )
 
     try:
         while True:
@@ -598,6 +644,7 @@ def _wait_for_reply(
                 if answer is not None:
                     state.status = "running"
                     state.waiting_kind = None
+                    state.waiting_prompt = None
                     sse.publish_threadsafe(task_id, SSEEvent(type="reply_ack", message="reply received"))
                     return str(answer)
             try:
@@ -606,9 +653,11 @@ def _wait_for_reply(
                 continue
             state.status = "running"
             state.waiting_kind = None
+            state.waiting_prompt = None
             sse.publish_threadsafe(task_id, SSEEvent(type="reply_ack", message="reply received"))
             return str(answer)
     finally:
+        state.waiting_prompt = None
         if session is not None:
             session.terminate()
 
@@ -647,6 +696,49 @@ def _tool_user_input_response(params: dict[str, Any], answers: dict[str, list[st
             for q in (params.get("questions") or [])
         }
     }
+
+
+def _codex_app_server_command(command: str) -> list[str]:
+    ask_server_name = "hermit_ask_user"
+    python = json.dumps(sys.executable)
+    args = json.dumps(["-m", "hermit_agent.codex_ask_mcp"])
+    return [
+        command,
+        "app-server",
+        "-c",
+        "mcp_servers={}",
+        "-c",
+        f"mcp_servers.{ask_server_name}.command={python}",
+        "-c",
+        f"mcp_servers.{ask_server_name}.args={args}",
+        "--disable",
+        "codex_hooks",
+        "--listen",
+        "stdio://",
+    ]
+
+
+def wait_for_codex_host_reply(
+    *,
+    state,
+    sse,
+    task_id: str,
+    question: str,
+    cwd: str,
+) -> str:
+    return _wait_for_reply(
+        state=state,
+        sse=sse,
+        task_id=task_id,
+        question=question,
+        options=[],
+        kind="waiting",
+        method="item/tool/requestUserInput",
+        request_id=f"followup-{task_id}",
+        request_params={"questions": [{"id": "followup", "question": question}]},
+        codex_channels_cfg={},
+        cwd=cwd,
+    )
 
 
 def run_codex_task(

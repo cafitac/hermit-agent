@@ -9,7 +9,7 @@ def test_task_api_reply_cancel_and_status_payload():
     state = GatewayTaskState(task_id="task-1")
     state.status = "waiting"
     state.waiting_kind = "permission_ask"
-    state.question_queue.put({"question": "Allow?", "options": ["Yes", "No"]})
+    state.waiting_prompt = {"question": "Allow?", "options": ["Yes", "No"], "tool_name": "bash"}
 
     assert api.reply(state, "yes") == {"status": "ok", "task_id": "task-1"}
     assert state.reply_queue.get_nowait() == "yes"
@@ -17,6 +17,7 @@ def test_task_api_reply_cancel_and_status_payload():
     payload = api.status_payload(state, include_kind=True)
     assert payload["question"] == "Allow?"
     assert payload["kind"] == "permission_ask"
+    assert payload["tool_name"] == "bash"
 
     assert api.cancel(state) == {"status": "cancelled", "task_id": "task-1"}
     assert state.cancel_event.is_set() is True

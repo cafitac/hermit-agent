@@ -28,6 +28,7 @@ class SSEEvent(BaseModel):
     # New fields (bridge TUI only)
     token: str = ""
     tool_name: str = ""
+    method: str = ""
     detail: str = ""
     content: str = ""
     is_error: bool = False

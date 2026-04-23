@@ -17,6 +17,44 @@ PID_FILE="$LOG_DIR/gateway.pid"
 
 mkdir -p "$LOG_DIR"
 
+port_listeners() {
+    lsof -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null | awk '!seen[$0]++'
+}
+
+is_dashboard_listener() {
+    PID="$1"
+    CMD="$(ps -p "$PID" -o command= 2>/dev/null || true)"
+    case "$CMD" in
+        *agent_learner.cli.main*serve-dashboard-fastapi*|*serve-dashboard-fastapi*)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+clear_dashboard_conflicts() {
+    FOUND=0
+    for PID in $(port_listeners); do
+        if ! is_dashboard_listener "$PID"; then
+            continue
+        fi
+        FOUND=1
+        echo "Stopping dashboard listener on port $PORT (PID $PID) ..."
+        kill "$PID" 2>/dev/null || true
+        for _i in 1 2 3 4 5 6 7 8 9 10; do
+            kill -0 "$PID" 2>/dev/null || break
+            sleep 0.2
+        done
+        if kill -0 "$PID" 2>/dev/null; then
+            echo "  Dashboard PID $PID did not exit on SIGTERM; sending SIGKILL"
+            kill -9 "$PID" 2>/dev/null || true
+        fi
+    done
+    return $FOUND
+}
+
 # --stop / --status do not need a working Python install. Handle them
 # before the venv discovery so uninstall (which may have already removed
 # the venv) can still tell us to stop the daemon.
@@ -71,6 +109,7 @@ fi
 # ── Command handling (start paths only) ──────────────────────────────
 case "${1:-}" in
     --daemon)
+        clear_dashboard_conflicts || true
         echo "Starting HermitAgent AI Gateway (daemon) on $HOST:$PORT ..."
         echo "  Python: $PYTHON"
         echo "  Log: $LOG_FILE"
@@ -90,6 +129,7 @@ case "${1:-}" in
         ;;
 
     *)
+        clear_dashboard_conflicts || true
         echo "Starting HermitAgent AI Gateway on $HOST:$PORT ..."
         echo "  Python: $PYTHON"
         echo "  Log: $LOG_FILE"

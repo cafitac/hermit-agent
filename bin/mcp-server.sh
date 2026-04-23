@@ -18,11 +18,16 @@ PORT="${2:-3737}"
 GATEWAY_URL="${HERMIT_MCP_GATEWAY_URL:-http://127.0.0.1:8765}"
 AUTO_GATEWAY="${HERMIT_MCP_AUTO_GATEWAY:-1}"
 GATEWAY_WAIT_SEC="${HERMIT_MCP_GATEWAY_WAIT_SEC:-8}"
+RESTART_IDLE_GATEWAY="${HERMIT_MCP_RESTART_IDLE_GATEWAY:-0}"
 
 mkdir -p "$LOG_DIR"
 
 gateway_health_check() {
-    curl -fsS "$GATEWAY_URL/health" >/dev/null 2>&1
+    RESPONSE="$(curl -fsS "$GATEWAY_URL/health" 2>/dev/null || true)"
+    [ -n "$RESPONSE" ] || return 1
+    printf '%s' "$RESPONSE" \
+        | python3 -c "import json,sys; data=json.load(sys.stdin); sys.exit(0 if data.get('service') == 'hermit_agent-gateway' else 1)" \
+        >/dev/null 2>&1
 }
 
 gateway_active_tasks() {
@@ -43,9 +48,14 @@ ensure_gateway() {
             echo "  Gateway: healthy, $ACTIVE active task(s) — skipping restart" >&2
             return 0
         fi
-        echo "  Gateway: restarting (idle, picking up latest code) ..." >&2
-        ./bin/gateway.sh --stop >/dev/null 2>&1 || true
-        sleep 1
+        if [ "$RESTART_IDLE_GATEWAY" = "1" ] || [ "$RESTART_IDLE_GATEWAY" = "true" ] || [ "$RESTART_IDLE_GATEWAY" = "yes" ]; then
+            echo "  Gateway: restarting (idle, picking up latest code) ..." >&2
+            ./bin/gateway.sh --stop >/dev/null 2>&1 || true
+            sleep 1
+        else
+            echo "  Gateway: healthy and idle — reusing existing process" >&2
+            return 0
+        fi
     else
         echo "  Gateway: starting automatically ..." >&2
     fi

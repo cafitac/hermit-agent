@@ -2,10 +2,18 @@
 
 ## Unreleased
 
-### Codex channels bootstrap
-- Added an experimental `hermit-agent install-codex` happy path that writes project-local Codex-channel settings, bootstraps the workspace plugin entry, and runs a local runtime smoke check.
-- Added installer/uninstaller hooks for the project-local Codex channels setup, including workspace marketplace cleanup and `.codex-channels` state removal.
-- Added a thin Codex interaction adapter path so Codex approvals and free-text waits can also listen on a `codex-channels` runtime while preserving the existing Hermit reply queue fallback.
+## v0.3.1
+
+### Codex interaction cleanup
+- Removed product-CLI-only Codex smoke subcommands after migrating their proof out of the main entrypoint.
+- Preserved method-aware interaction routing in the live `hermit-channel` path instead of collapsing prompts to a prompt-kind-only model.
+- Narrowed legacy Codex reply-hook cleanup so old hook removal does not delete unrelated `UserPromptSubmit` hooks.
+- Removed the legacy Codex reply-hook runtime path and proof-only bridge leftovers that no longer contribute to the live interaction flow.
+
+### Codex setup via Hermit
+- Added an experimental `hermit-agent setup-codex` happy path that prepares Hermit's Codex integration, writes the needed project-local settings, and runs a local smoke check.
+- Added installer/uninstaller hooks for Hermit's local Codex integration assets, including workspace marketplace cleanup and local async-interaction state removal.
+- Added a thin internal Codex interaction adapter path so Codex approvals and free-text waits can flow through Hermit while preserving the existing Hermit reply queue fallback.
 - Switched the happy path toward a package-first local runtime install, with local source-tree fallback kept only for development and unreleased-package scenarios.
 
 

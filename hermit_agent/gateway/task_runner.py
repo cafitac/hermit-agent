@@ -177,6 +177,7 @@ def _run(
         logger.exception("task %s failed (model=%s): %s", task_id, requested_model, message)
         state.status = "error"
         state.waiting_kind = None
+        state.waiting_prompt = None
         state.result = message
         state.result_queue.put({"status": "error", "message": message})
         sse.publish_threadsafe(task_id, SSEEvent(type="error", message=message))

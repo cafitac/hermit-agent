@@ -12,6 +12,9 @@ class _Action:
     question: str = ''
     options: tuple[str, ...] = ()
     message: str | None = None
+    prompt_kind: str = ''
+    tool: str = ''
+    method: str = ''
 
 
 def test_dispatch_channel_action_routes_each_supported_kind():
@@ -22,7 +25,7 @@ def test_dispatch_channel_action_routes_each_supported_kind():
 
     dispatch_channel_action(
         task_id='task-1',
-        action=_Action(kind='prompt', question='Continue?', options=('Yes', 'No')),
+        action=_Action(kind='prompt', question='Continue?', options=('Yes', 'No'), prompt_kind='waiting', tool='ask', method='item/tool/requestUserInput'),
         notify_channel=notify_channel,
         notify_done=notify_done,
         notify_error=notify_error,
@@ -53,7 +56,7 @@ def test_dispatch_channel_action_routes_each_supported_kind():
         notify_running=notify_running,
     )
 
-    notify_channel.assert_called_once_with('task-1', 'Continue?', ['Yes', 'No'])
+    notify_channel.assert_called_once_with('task-1', 'Continue?', ['Yes', 'No'], prompt_kind='waiting', tool_name='ask', method='item/tool/requestUserInput')
     notify_done.assert_called_once_with('task-1', 'Finished')
     notify_error.assert_called_once_with('task-1', 'Boom')
     notify_running.assert_called_once_with('task-1')

@@ -47,7 +47,13 @@ def test_channel_action_from_sse_prompt_event():
     action = channel_action_from_sse_event(
         {"type": "permission_ask", "question": "[Permission request]", "options": ["Yes", "No"]}
     )
-    assert action == ChannelAction(kind="prompt", question="[Permission request]", options=("Yes", "No"))
+    assert action == ChannelAction(
+        kind="prompt",
+        question="[Permission request]",
+        options=("Yes", "No"),
+        prompt_kind="permission_ask",
+        tool="bash",
+    )
 
 
 def test_channel_action_from_done_and_reply_ack_events():

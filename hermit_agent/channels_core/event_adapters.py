@@ -11,9 +11,12 @@ class ChannelAction:
     question: str = ""
     options: tuple[str, ...] = ()
     message: str = ""
+    prompt_kind: Literal["waiting", "permission_ask"] | str = ""
+    tool: str = ""
+    method: str = ""
 
 
-def _prompt_fields(event: Mapping[str, Any]) -> tuple[str, list[str], str] | None:
+def _prompt_fields(event: Mapping[str, Any]) -> tuple[str, list[str], str, str] | None:
     event_type = event.get("type", "")
     if event_type not in ("waiting", "permission_ask"):
         return None
@@ -21,6 +24,7 @@ def _prompt_fields(event: Mapping[str, Any]) -> tuple[str, list[str], str] | Non
         event.get("question", ""),
         list(event.get("options", []) or []),
         "ask" if event_type == "waiting" else event.get("tool_name", "bash"),
+        str(event.get("method", "") or ""),
     )
 
 
@@ -71,7 +75,7 @@ def bridge_messages_from_sse_event(
 
     prompt = _prompt_fields(event)
     if prompt is not None:
-        question, options, tool = prompt
+        question, options, tool, _method = prompt
         return [{
             "type": "permission_ask",
             "tool": tool,
@@ -86,8 +90,15 @@ def channel_action_from_sse_event(event: Mapping[str, Any]) -> ChannelAction | N
     """Interpret SSE events into MCP-channel side effects."""
     prompt = _prompt_fields(event)
     if prompt is not None:
-        question, options, _tool = prompt
-        return ChannelAction(kind="prompt", question=question, options=tuple(options))
+        question, options, tool, method = prompt
+        return ChannelAction(
+            kind="prompt",
+            question=question,
+            options=tuple(options),
+            prompt_kind=str(event.get("type", "")),
+            tool=tool,
+            method=method,
+        )
 
     event_type = event.get("type", "")
     if event_type == "done":

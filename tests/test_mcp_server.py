@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 import os
 import sys
-import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -73,7 +72,14 @@ def test_sse_bridge_waiting_event():
             "question": "Continue?",
             "options": ["Yes", "No"],
         })
-        mock_notify.assert_called_once_with("test-task-1", "Continue?", ["Yes", "No"])
+        mock_notify.assert_called_once_with(
+            "test-task-1",
+            "Continue?",
+            ["Yes", "No"],
+            prompt_kind="waiting",
+            tool_name="ask",
+            method="",
+        )
 
 
 def test_sse_bridge_done_event():
@@ -116,7 +122,14 @@ def test_sse_bridge_permission_ask_event():
             "question": "[Permission request] bash",
             "options": ["Yes", "No"],
         })
-        mock_notify.assert_called_once()
+        mock_notify.assert_called_once_with(
+            "test-task-4",
+            "[Permission request] bash",
+            ["Yes", "No"],
+            prompt_kind="permission_ask",
+            tool_name="bash",
+            method="",
+        )
 
 
 def test_sse_bridge_reply_ack_event():
@@ -210,3 +223,43 @@ def test_gateway_headers_without_api_key():
         assert "Authorization" not in headers
     finally:
         m._GATEWAY_API_KEY = old_key
+
+
+def test_bootstrap_codex_app_server_writer_from_env_caches_handle(monkeypatch):
+    from hermit_agent import mcp_server as m
+
+    calls = {}
+
+    class DummyHandle:
+        def close(self):
+            calls["closed"] = calls.get("closed", 0) + 1
+
+    monkeypatch.setattr(
+        m,
+        "bootstrap_codex_app_server_from_env",
+        lambda **kwargs: calls.setdefault("handle", DummyHandle()),
+    )
+    m._CODEX_APP_SERVER_HANDLE = None
+    try:
+        first = m._bootstrap_codex_app_server_writer_from_env()
+        second = m._bootstrap_codex_app_server_writer_from_env()
+        assert first is second
+        assert first is calls["handle"]
+    finally:
+        m._CODEX_APP_SERVER_HANDLE = None
+
+
+def test_cleanup_codex_app_server_writer_closes_handle():
+    from hermit_agent import mcp_server as m
+
+    calls = {}
+
+    class DummyHandle:
+        def close(self):
+            calls["closed"] = calls.get("closed", 0) + 1
+
+    m._CODEX_APP_SERVER_HANDLE = DummyHandle()
+    m._cleanup_codex_app_server_writer()
+
+    assert calls["closed"] == 1
+    assert m._CODEX_APP_SERVER_HANDLE is None

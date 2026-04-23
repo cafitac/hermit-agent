@@ -61,6 +61,8 @@ Edit `~/.claude.json` and add under the project's `mcpServers` block:
 
 A single Python MCP server exposed under the name `hermit-channel` handles both the task delegation tools (`run_task` / `reply_task` / `check_task` / `register_task`) and the push-notification channel (`waiting` / `running` / `done`). The name is intentionally `hermit-channel` so the `--dangerously-load-development-channels server:hermit-channel` flag (next step) picks it up as a development channel.
 
+For operators, the important thing is simple: Claude Code or Codex should connect to **`hermit-channel`**. If you inspect MCP state, that is the name you should expect to see. Any extra local assets Hermit creates for async approvals or free-text replies are internal implementation details, not the primary integration surface.
+
 ### Option B — user-wide
 
 Same JSON, but under the top-level `mcpServers` key instead of nested under a project.

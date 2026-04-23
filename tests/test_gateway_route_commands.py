@@ -156,7 +156,7 @@ async def test_reply_status_and_cancel_routes_use_real_task_state():
     task_id, state = create_registered_task_state()
     state.status = "waiting"
     state.waiting_kind = "permission_ask"
-    state.question_queue.put({"question": "Allow?", "options": ["Yes", "No"]})
+    state.waiting_prompt = {"question": "Allow?", "options": ["Yes", "No"], "tool_name": "bash"}
 
     try:
         status = await get_task_status(task_id=task_id, auth=auth)
@@ -170,6 +170,8 @@ async def test_reply_status_and_cancel_routes_use_real_task_state():
             "token_totals": {"prompt_tokens": 0, "completion_tokens": 0},
             "question": "Allow?",
             "options": ["Yes", "No"],
+            "tool_name": "bash",
+            "method": "",
             "kind": "permission_ask",
         }
         assert replied == {"status": "ok", "task_id": task_id}

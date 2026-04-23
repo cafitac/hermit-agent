@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
+from .install_flow import run_install, run_startup_self_heal
+
 
 class DiagStatus(Enum):
     PASS = "PASS"
@@ -134,3 +136,24 @@ def run_diagnostics(cwd: str | None = None, home: str | None = None) -> DiagRepo
         _check_sensitive_deny(),
     ]
     return DiagReport(checks=checks)
+
+
+def format_doctor_fix_summary(*, cwd: str) -> str:
+    startup = run_startup_self_heal(cwd=cwd)
+    install = run_install(
+        cwd=cwd,
+        assume_yes=True,
+        skip_mcp_register=False,
+        skip_codex=False,
+    )
+
+    lines = ["Hermit doctor --fix complete.", "", "Repairs:"]
+    lines.append(f"- startup heal: gateway={startup.gateway_status}, mcp={startup.mcp_registration_status}, codex={startup.codex_runtime_status}")
+    lines.append(f"- install flow: gateway={install.gateway_status}, mcp={install.mcp_registration_status}, codex={install.codex_install_status}")
+    lines.append("- codex-facing surface remains: hermit-channel MCP")
+    if install.codex_runtime_version:
+        lines.append(f"- codex integration runtime version: {install.codex_runtime_version}")
+    if install.next_steps:
+        lines.extend(["", "Next:"])
+        lines.extend([f"{i}. {step}" for i, step in enumerate(install.next_steps, 1)])
+    return "\n".join(lines)

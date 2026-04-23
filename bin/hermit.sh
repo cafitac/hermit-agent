@@ -45,14 +45,17 @@ VENV_SITE=$(ls -d "$VENV_DIR"/lib/python*/site-packages 2>/dev/null | head -1)
 # user hops into a Claude Code session next, MCP/run_task traffic lands
 # on something alive. Opt out with HERMIT_AUTO_GATEWAY=0.
 _GW_URL="${HERMIT_GATEWAY_URL:-http://127.0.0.1:8765}"
+gateway_identity_ok() {
+  PYTHONPATH="$HERMIT_DIR:$VENV_SITE" "$VENV_PYTHON" -m hermit_agent.launcher_health "$_GW_URL" >/dev/null 2>&1
+}
 if [ "${HERMIT_AUTO_GATEWAY:-1}" != "0" ]; then
-  if ! curl -sf --max-time 1 "$_GW_URL/health" >/dev/null 2>&1; then
+  if ! gateway_identity_ok; then
     echo "hermit: gateway not reachable at $_GW_URL — starting daemon..." >&2
     "$HERMIT_DIR/bin/gateway.sh" --daemon >/dev/null 2>&1 || \
       echo "hermit: gateway --daemon failed (see ~/.hermit/gateway.log); continuing anyway." >&2
     # Give it a moment to come up before the preflight below.
     for _i in 1 2 3 4 5; do
-      curl -sf --max-time 1 "$_GW_URL/health" >/dev/null 2>&1 && break
+      gateway_identity_ok && break
       sleep 0.5
     done
   fi

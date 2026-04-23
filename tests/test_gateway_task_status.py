@@ -10,10 +10,10 @@ def test_peek_waiting_prompt_returns_question_and_preserves_queue():
     prompt = {"question": "Allow?", "options": ["Yes", "No"]}
     state.question_queue.put(prompt)
 
-    assert state.peek_waiting_prompt() == prompt
+    assert state.peek_waiting_prompt() == {**prompt, "tool_name": "", "method": ""}
     result = peek_waiting_prompt(state)
 
-    assert result == prompt
+    assert result == {**prompt, "tool_name": "", "method": ""}
     assert state.question_queue.qsize() == 1
     assert state.question_queue.get_nowait() == prompt
 
@@ -41,6 +41,8 @@ def test_waiting_status_payload_includes_kind_and_prompt():
         "token_totals": {"prompt_tokens": 1, "completion_tokens": 2},
         "question": "[Permission request] bash",
         "options": ["Yes (once)", "No"],
+        "tool_name": "",
+        "method": "",
         "kind": "permission_ask",
     }
 
@@ -50,7 +52,7 @@ def test_waiting_status_payload_can_skip_kind_for_mcp_shape():
     state.status = "waiting"
     state.waiting_kind = "waiting"
     state.token_totals = {"prompt_tokens": 3, "completion_tokens": 4}
-    state.question_queue.put({"question": "Continue?", "options": ["Yes", "No"]})
+    state.question_queue.put({"question": "Continue?", "options": ["Yes", "No"], "tool_name": "ask"})
 
     result = {
         "task_id": state.task_id,
@@ -66,7 +68,23 @@ def test_waiting_status_payload_can_skip_kind_for_mcp_shape():
         "token_totals": {"prompt_tokens": 3, "completion_tokens": 4},
         "question": "Continue?",
         "options": ["Yes", "No"],
+        "tool_name": "ask",
+        "method": "",
     }
+
+
+def test_peek_waiting_prompt_prefers_waiting_snapshot_without_queue_mutation():
+    state = GatewayTaskState(task_id="t3b")
+    state.waiting_prompt = {"question": "Snapshot prompt", "options": ["Go"], "tool_name": "ask"}
+    state.question_queue.put({"question": "Queued prompt", "options": ["Stop"], "tool_name": "bash"})
+
+    assert state.peek_waiting_prompt() == {
+        "question": "Snapshot prompt",
+        "options": ["Go"],
+        "tool_name": "ask",
+        "method": "",
+    }
+    assert state.question_queue.qsize() == 1
 
 
 def test_task_actions_reply_and_cancel_preserve_waiting_semantics():

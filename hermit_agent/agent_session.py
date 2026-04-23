@@ -217,6 +217,7 @@ class MCPAgentSession(AgentSessionBase):
         permission_checker=None,            # MCPPermissionChecker instance (DI, prevent circular imports)
         max_turns: int = 200,
         parent_session_id: str | None = None,
+        task_mode: str | None = None,
     ):
         from .permissions import PermissionMode
         super().__init__(
@@ -235,6 +236,7 @@ class MCPAgentSession(AgentSessionBase):
         self._notify_error_fn = notify_error_fn
         self._permission_checker = permission_checker
         self.parent_session_id = parent_session_id
+        self._task_mode = task_mode
         self._emitter_handler = None  # injected after _setup_agent (use set_emitter_handler)
         llm._cancel_event = state.cancel_event
 
@@ -253,6 +255,22 @@ class MCPAgentSession(AgentSessionBase):
         # MCPPermissionChecker is defined in mcp_server.py → DI to avoid circular import
         if self._permission_checker is not None and self._agent is not None:
             self._agent.permission_checker = self._permission_checker
+
+    def _prepare_prompt(self, task: str) -> str:
+        prepared = super()._prepare_prompt(task)
+        if self._task_mode != "interview":
+            return prepared
+        interview_contract = (
+            "<interaction_contract>\n"
+            "- This task requires missing user input before completion.\n"
+            "- You MUST call the ask_user_question tool before you continue.\n"
+            "- Ask exactly one concise question unless the user answer creates a new blocker.\n"
+            "- Do NOT output the question as your final answer.\n"
+            "- Do NOT guess missing values.\n"
+            "- After the user replies, continue and produce the final answer.\n"
+            "</interaction_contract>\n\n"
+        )
+        return f"{interview_contract}{prepared}"
 
     def set_emitter_handler(self, handler) -> None:
         """Set emitter event handler. Must be set before calling run()."""

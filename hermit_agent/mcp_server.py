@@ -26,6 +26,8 @@ import os
 import sys
 import threading
 import time
+import httpx
+from .codex_app_server_bridge import bootstrap_codex_app_server_from_env
 from .channels_core.event_adapters import channel_action_from_sse_event
 from .mcp_gateway import (
     gateway_headers as _gateway_headers_impl,
@@ -34,14 +36,10 @@ from .mcp_gateway import (
 )
 from .mcp_paths import resolve_git_cwd
 from .mcp_results import (
-    HEAD_SIZE,
-    RESULT_CAP,
-    TAIL_SIZE,
     result_to_text as _result_to_text,
     truncate_result as _truncate_result,
 )
-from .mcp_schema import DEFAULT_MODEL as _DEFAULT_MODEL
-from .mcp_schema import PROTOCOL_VERSION, SERVER_INFO, TOOLS
+from .mcp_schema import TOOLS
 from .mcp_actions import dispatch_channel_action
 from .mcp_channel import (
     _notify_channel,
@@ -49,6 +47,7 @@ from .mcp_channel import (
     _notify_error,
     _notify_reply,
     _notify_running,
+    _remember_task_context,
     _set_active_session,
 )
 from .mcp_sse_bridge import _SSEBridge as _BaseSSEBridge
@@ -107,6 +106,7 @@ _consecutive_failures = 0
 _MAX_CONSECUTIVE_FAILURES = 3
 _last_health_check = 0.0
 _HEALTH_CHECK_INTERVAL = 120.0
+_CODEX_APP_SERVER_HANDLE = None
 
 
 def _init_gateway_client() -> None:
@@ -116,6 +116,26 @@ def _init_gateway_client() -> None:
         load_settings=load_settings,
         log_fn=_log,
     )
+
+
+def _bootstrap_codex_app_server_writer_from_env():
+    global _CODEX_APP_SERVER_HANDLE
+    if _CODEX_APP_SERVER_HANDLE is not None:
+        return _CODEX_APP_SERVER_HANDLE
+    _CODEX_APP_SERVER_HANDLE = bootstrap_codex_app_server_from_env(
+        env=os.environ,
+        stream_lock=threading.Lock(),
+        log_fn=_log,
+    )
+    return _CODEX_APP_SERVER_HANDLE
+
+
+def _cleanup_codex_app_server_writer() -> None:
+    global _CODEX_APP_SERVER_HANDLE
+    handle = _CODEX_APP_SERVER_HANDLE
+    _CODEX_APP_SERVER_HANDLE = None
+    if handle is not None:
+        handle.close()
 
 
 def _gateway_headers() -> dict[str, str]:
@@ -215,7 +235,7 @@ def _shutdown_all_bridges() -> None:
     _log(f"[shutdown] {_sse_bridges} SSE bridges cleaned up" if task_ids else "[shutdown] no active SSE bridges")
 
 
-def _build_mcp_app(host: str = "0.0.0.0", port: int = 3737) -> "FastMCP":
+def _build_mcp_app(host: str = "0.0.0.0", port: int = 3737):
     """Create a FastMCP app and register the 4 tools."""
     from mcp.server.fastmcp import FastMCP
 
@@ -246,6 +266,7 @@ def _build_mcp_app(host: str = "0.0.0.0", port: int = 3737) -> "FastMCP":
         notify_reply=_notify_reply,
         notify_channel=_notify_channel,
         truncate_result=_truncate_result,
+        remember_task_context=_remember_task_context,
     )
 
     @mcp_app.tool()
@@ -337,6 +358,8 @@ def main_http(port: int = 3737) -> None:
         _log("[gateway] WARNING: Gateway health check failed on startup")
 
     atexit.register(_shutdown_all_bridges)
+    atexit.register(_cleanup_codex_app_server_writer)
+    _bootstrap_codex_app_server_writer_from_env()
 
     mcp_app = _build_mcp_app(host="0.0.0.0", port=port)
     mcp_app.run(transport="streamable-http")
@@ -354,6 +377,8 @@ def main() -> None:
         _log("[gateway] WARNING: Gateway health check failed on startup")
 
     atexit.register(_shutdown_all_bridges)
+    atexit.register(_cleanup_codex_app_server_writer)
+    _bootstrap_codex_app_server_writer_from_env()
 
     mcp_app = _build_mcp_app()
     mcp_app.run(transport="stdio")

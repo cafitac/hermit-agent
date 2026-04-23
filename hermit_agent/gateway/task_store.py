@@ -24,6 +24,7 @@ class GatewayTaskState:
     result_queue: queue.Queue = field(default_factory=queue.Queue)
     status: str = "running"       # running | waiting | done | error | cancelled
     waiting_kind: str | None = None
+    waiting_prompt: dict[str, object] | None = None
     result: str | None = None
     token_totals: dict = field(default_factory=lambda: {"prompt_tokens": 0, "completion_tokens": 0})
     parent_session_id: str | None = None
@@ -45,6 +46,10 @@ class GatewayTaskState:
             self.reply_queue.put("__CANCELLED__")
 
     def peek_waiting_prompt(self) -> dict[str, object]:
+        if self.waiting_prompt is not None:
+            prompt = dict(self.waiting_prompt)
+            prompt.setdefault("method", "")
+            return prompt
         try:
             q_item = self.question_queue.get_nowait()
         except Exception:
@@ -54,6 +59,8 @@ class GatewayTaskState:
             return {
                 "question": q_item.get("question", ""),
                 "options": q_item.get("options", []),
+                "tool_name": q_item.get("tool_name", ""),
+                "method": q_item.get("method", ""),
             }
         finally:
             self.question_queue.put_nowait(q_item)

@@ -71,7 +71,7 @@ async def test_check_reply_and_cancel_task_use_real_state():
     state = create_task("task-check")
     state.status = "waiting"
     state.waiting_kind = "permission_ask"
-    state.question_queue.put({"question": "Allow?", "options": ["Yes", "No"]})
+    state.waiting_prompt = {"question": "Allow?", "options": ["Yes", "No"], "tool_name": "bash"}
 
     try:
         checked = await check_task("task-check")
@@ -84,6 +84,8 @@ async def test_check_reply_and_cancel_task_use_real_state():
             "token_totals": {"prompt_tokens": 0, "completion_tokens": 0},
             "question": "Allow?",
             "options": ["Yes", "No"],
+            "tool_name": "bash",
+            "method": "",
         }
         assert replied == {"status": "ok", "task_id": "task-check"}
         assert state.reply_queue.get_nowait() == "yes"

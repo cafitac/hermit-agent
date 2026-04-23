@@ -93,6 +93,14 @@ cd hermit-agent
 ./install.sh
 ```
 
+Or, once installed from PyPI / editable mode, use the guided installer entrypoint:
+
+```bash
+hermit install
+```
+
+`hermit install` is the product-facing setup path: it asks a few yes/no questions, repairs or creates the local gateway API key, ensures the local gateway is running, offers MCP registration in `~/.claude.json`, and can install or refresh the Codex channels path without making the user edit config files manually.
+
 What the installer does automatically:
 
 - Creates a project-local `.venv`, bootstraps `uv` inside it, and runs `uv pip install -e '.[test]'`.
@@ -116,23 +124,36 @@ Useful flags:
 
 Every prompt is idempotent: re-running the installer detects the existing API key, MCP entry, alias, and ollama model and reports them unchanged instead of duplicating.
 
-### Codex channels happy path (experimental)
+### Codex async-interaction path (experimental)
 
-If you want the Codex path to bootstrap `codex-channels` for local-first interaction routing, run:
+If you want Codex approval requests and free-text waits to flow through Hermit without manual polling, run:
 
 ```bash
-hermit-agent install-codex
+hermit-agent setup-codex
 ```
 
 That command:
-- installs a project-local `codex-channels` runtime under `.hermit/codex-channels-runtime`
-- writes project-local `.hermit/settings.json` defaults for `codex_channels`
-- generates a local plugin wrapper and marketplace entry for Codex discovery
-- runs a compact local runtime smoke check before reporting success
+- keeps **Hermit** as the public Codex-facing surface
+- prepares Hermit's local async approval / reply path for Codex
+- writes the needed project-local Hermit settings
+- bootstraps the Codex discovery assets Hermit needs
+- registers the local Codex marketplace root automatically
+- prefers Codex app-server visible prompts when the host exposes that surface
+- removes Hermit's legacy Codex UserPromptSubmit reply hook if it was installed earlier
+- runs a compact local smoke check before reporting success
 
-The preferred path is package-first. If the packaged runtime is not available yet, Hermit can still fall back to a built local `codex-channels` source tree via `HERMIT_CODEX_CHANNELS_SOURCE_PATH` (or a sibling `../codex-channels` checkout).
+From an operator point of view, the important check is still:
 
-The default path is workspace-local and local-first; remote backends stay optional and out of the critical path.
+```bash
+codex mcp list
+codex mcp get hermit-channel
+```
+
+If `hermit-channel` is present, Codex is pointed at Hermit correctly. The rest of the async reply transport is an internal Hermit implementation detail.
+
+The preferred path is package-first. If Hermit's default packaged Codex support is unavailable, it can still fall back to a built sibling checkout via `HERMIT_CODEX_CHANNELS_SOURCE_PATH` (or `../codex-channels`).
+
+The default path is user-scope and local-first so Codex can discover the bridge across workspaces; remote backends stay optional and out of the critical path.
 
 To reverse everything: `./uninstall.sh` walks back through the same steps with per-item prompts (`--yes` accepts all; `--keep-data` leaves `~/.hermit/` alone). Ollama models are never deleted — remove manually with `ollama rm <model>`.
 

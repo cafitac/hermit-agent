@@ -35,3 +35,22 @@ def test_yes_variants_accepted(reply):
 def test_no_variants_rejected(reply):
     c = _checker_with_reply(reply)
     assert c.check('bash', {'command': 'ls'}, is_read_only=False) is False
+
+
+def test_attached_codex_app_server_permission_roundtrip_accepts(monkeypatch):
+    c = _checker_with_reply("unused")
+    monkeypatch.setattr(
+        "hermit_agent.gateway.permission.await_attached_codex_app_server_response",
+        lambda prompt, env=None: "Yes (once)",
+    )
+    assert c.check("bash", {"command": "ls"}, is_read_only=False) is True
+
+
+def test_attached_codex_app_server_permission_roundtrip_can_flip_yolo(monkeypatch):
+    c = _checker_with_reply("unused")
+    monkeypatch.setattr(
+        "hermit_agent.gateway.permission.await_attached_codex_app_server_response",
+        lambda prompt, env=None: "Always allow (yolo)",
+    )
+    assert c.check("bash", {"command": "ls"}, is_read_only=False) is True
+    assert c.mode == PermissionMode.YOLO
