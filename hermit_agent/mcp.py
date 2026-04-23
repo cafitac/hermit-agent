@@ -26,6 +26,7 @@ import time
 from pathlib import Path
 
 from .tools import Tool, ToolResult
+from .version import VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +81,7 @@ class MCPClient:
         init_result = self._send_request("initialize", {
             "protocolVersion": "2024-11-05",
             "capabilities": {"tools": {}},
-            "clientInfo": {"name": "hermit_agent", "version": "0.1.0"},
+            "clientInfo": {"name": "hermit_agent", "version": VERSION},
         })
 
         if "error" in init_result:

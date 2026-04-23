@@ -6,6 +6,7 @@ import { readFile } from "node:fs/promises";
 
 export const DEFAULT_PYPI_SPEC = "cafitac-hermit-agent";
 const packageJsonPath = new URL("../../package.json", import.meta.url);
+const packageRoot = path.dirname(new URL("../../package.json", import.meta.url).pathname);
 
 export function getHermitHome(env = process.env) {
   return env.HERMIT_HOME || path.join(os.homedir(), ".hermit");
@@ -17,6 +18,7 @@ export function getRuntimeLayout({
 } = {}) {
   const scriptsDir = platform === "win32" ? "Scripts" : "bin";
   const launcherName = platform === "win32" ? "hermit.exe" : "hermit";
+  const gatewayLauncherName = platform === "win32" ? "hermit-gateway.exe" : "hermit-gateway";
   const pythonName = platform === "win32" ? "python.exe" : "python";
   const runtimeRoot = path.join(hermitHome, "npm-runtime");
   const venvDir = path.join(runtimeRoot, "venv");
@@ -25,7 +27,76 @@ export function getRuntimeLayout({
     venvDir,
     installMetaPath: path.join(runtimeRoot, "install-meta.json"),
     launcherPath: path.join(venvDir, scriptsDir, launcherName),
+    gatewayLauncherPath: path.join(venvDir, scriptsDir, gatewayLauncherName),
     pythonPath: path.join(venvDir, scriptsDir, pythonName),
+  };
+}
+
+export function resolvePackagedUiEntry(fsImpl = fs) {
+  const uiEntry = path.join(packageRoot, "hermit-ui", "dist", "app.js");
+  return fsImpl.existsSync(uiEntry) ? uiEntry : null;
+}
+
+export function shouldLaunchInteractiveUi({
+  args,
+  stdoutIsTTY,
+  stdinIsTTY,
+  uiEntry,
+}) {
+  return args.length === 0 && stdoutIsTTY && stdinIsTTY && Boolean(uiEntry);
+}
+
+export async function probeGatewayHealth(baseUrl = process.env.HERMIT_GATEWAY_URL || "http://127.0.0.1:8765") {
+  try {
+    const response = await fetch(`${baseUrl.replace(/\/$/, "")}/health`);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+export async function ensureGatewayForUi({
+  env = process.env,
+  layout,
+  fsImpl = fs,
+  spawnImpl = spawn,
+  waitMs = 5000,
+}) {
+  const autoGateway = String(env.HERMIT_AUTO_GATEWAY ?? "1").trim().toLowerCase();
+  if (["0", "false", "no"].includes(autoGateway)) {
+    return;
+  }
+  if (await probeGatewayHealth(env.HERMIT_GATEWAY_URL)) {
+    return;
+  }
+  if (!fsImpl.existsSync(layout.gatewayLauncherPath)) {
+    return;
+  }
+
+  spawnImpl(layout.gatewayLauncherPath, [], {
+    stdio: "ignore",
+    env,
+    detached: true,
+  }).unref?.();
+
+  const deadline = Date.now() + waitMs;
+  while (Date.now() < deadline) {
+    if (await probeGatewayHealth(env.HERMIT_GATEWAY_URL)) {
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+}
+
+export function buildInteractiveUiEnv({
+  env = process.env,
+  layout,
+}) {
+  return {
+    ...env,
+    HERMIT_PYTHON: layout.pythonPath,
+    HERMIT_VENV_DIR: layout.venvDir,
+    HERMIT_DIR: packageRoot,
   };
 }
 
@@ -156,18 +227,42 @@ export function spawnHermit({
   spawnImpl = spawn,
   spawnSyncImpl = spawnSync,
   wrapperVersion = "0.0.0",
+  stdoutIsTTY = Boolean(process.stdout.isTTY),
+  stdinIsTTY = Boolean(process.stdin.isTTY),
 }) {
   const layout = bootstrapRuntime({ env, platform, fsImpl, spawnSyncImpl, wrapperVersion });
-  const child = spawnImpl(layout.launcherPath, args, {
-    stdio: "inherit",
-    env,
-  });
-  child.on("exit", (code, signal) => {
-    if (signal) {
-      process.kill(process.pid, signal);
-      return;
+  const uiEntry = resolvePackagedUiEntry(fsImpl);
+
+  const spawnChild = async () => {
+    if (
+      shouldLaunchInteractiveUi({
+        args,
+        stdoutIsTTY,
+        stdinIsTTY,
+        uiEntry,
+      })
+    ) {
+      await ensureGatewayForUi({ env, layout, fsImpl, spawnImpl });
+      return spawnImpl("node", [uiEntry], {
+        stdio: "inherit",
+        env: buildInteractiveUiEnv({ env, layout }),
+      });
     }
-    process.exit(code ?? 1);
+
+    return spawnImpl(layout.launcherPath, args, {
+      stdio: "inherit",
+      env,
+    });
+  };
+
+  return spawnChild().then(child => {
+    child.on("exit", (code, signal) => {
+      if (signal) {
+        process.kill(process.pid, signal);
+        return;
+      }
+      process.exit(code ?? 1);
+    });
+    return child;
   });
-  return child;
 }

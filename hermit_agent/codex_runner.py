@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 from .codex_interaction_contract import build_tool_user_input_result
 from .codex_channels_adapter import CodexChannelsWaitSession, load_codex_channels_settings
 from .codex_app_server_bridge import await_attached_codex_app_server_response
+from .version import VERSION
 from .interactive_prompts import (
     build_codex_channels_interaction,
     create_interactive_prompt,
@@ -113,7 +114,7 @@ class CodexAppServerClient:
         try:
             self._request(
                 "initialize",
-                {"clientInfo": {"name": "hermit_agent", "version": "0.1.0"}},
+                {"clientInfo": {"name": "hermit_agent", "version": VERSION}},
             )
             self._notify("initialized")
             thread = self._request(
