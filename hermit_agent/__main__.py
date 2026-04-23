@@ -6,6 +6,7 @@ Usage:
   hermit_agent "message" --channel cli    # CLI channel (stdin/stdout, Standalone mode)
   hermit_agent --model qwen3:14b         # Specify model
   hermit_agent install                    # Guided setup/install flow
+  hermit_agent setup-claude              # Prepare Hermit's Claude integration
   hermit_agent setup-codex               # Prepare Hermit's Codex integration
   hermit_agent --yolo                    # Run without permission checks
   hermit_agent --base-url http://server/v1  # Use remote Hermit gateway or custom endpoint
@@ -77,6 +78,14 @@ def _build_install_codex_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cwd", default=os.getcwd(), help="Working directory")
     parser.add_argument("--codex-command", default="codex", help="Codex CLI command")
     parser.add_argument("--scope", choices=["workspace", "user"], default="user", help="Plugin bootstrap scope")
+    return parser
+
+
+def _build_install_claude_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Prepare Hermit's Claude integration")
+    parser.add_argument("--cwd", default=os.getcwd(), help="Working directory")
+    parser.add_argument("--yes", action="store_true", help="Accept recommended installer choices non-interactively")
+    parser.add_argument("--skip-mcp-register", action="store_true", help="Skip ~/.claude.json registration")
     return parser
 
 
@@ -382,6 +391,13 @@ def main():
             print(format_doctor_fix_summary(cwd=doctor_args.cwd))
         else:
             print(run_diagnostics(cwd=doctor_args.cwd).format())
+        return
+
+    if len(sys.argv) > 1 and sys.argv[1] in {"setup-claude", "install-claude"}:
+        from .install_claude import run_install_claude
+
+        install_args = _build_install_claude_parser().parse_args(sys.argv[2:])
+        print(run_install_claude(cwd=install_args.cwd, assume_yes=install_args.yes, skip_mcp_register=install_args.skip_mcp_register))
         return
 
     if len(sys.argv) > 1 and sys.argv[1] in {"setup-codex", "install-codex"}:

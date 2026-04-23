@@ -1,0 +1,30 @@
+{
+  "name": "@cafitac/hermit-agent",
+  "version": "0.3.4",
+  "description": "npm-first launcher for the Hermit Python runtime",
+  "type": "module",
+  "bin": {
+    "hermit": "npm-wrapper/bin/hermit.js",
+    "hermit-agent": "npm-wrapper/bin/hermit.js"
+  },
+  "scripts": {
+    "postinstall": "node npm-wrapper/postinstall.js",
+    "test:npm-wrapper": "node --test npm-wrapper/__tests__/*.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "npm-wrapper/",
+    "README.md"
+  ],
+  "license": "MIT",
+  "keywords": [
+    "hermit",
+    "claude-code",
+    "codex",
+    "mcp",
+    "python",
+    "npm"
+  ]
+}

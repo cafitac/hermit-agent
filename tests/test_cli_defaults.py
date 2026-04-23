@@ -66,12 +66,32 @@ def test_main_dispatches_setup_codex(monkeypatch, capsys):
     assert "installed:/tmp/demo" in capsys.readouterr().out
 
 
+def test_main_dispatches_setup_claude(monkeypatch, capsys):
+    from hermit_agent import __main__ as main_mod
+
+    monkeypatch.setattr(main_mod.sys, "argv", ["hermit-agent", "setup-claude", "--cwd", "/tmp/demo"])
+    monkeypatch.setattr("hermit_agent.install_claude.run_install_claude", lambda **kwargs: f"claude:{kwargs['cwd']}")
+
+    main_mod.main()
+
+    assert "claude:/tmp/demo" in capsys.readouterr().out
+
+
 def test_setup_codex_parser_defaults_to_user_scope():
     from hermit_agent.__main__ import _build_install_codex_parser
 
     ns = _build_install_codex_parser().parse_args([])
 
     assert ns.scope == "user"
+
+
+def test_setup_claude_parser_defaults():
+    from hermit_agent.__main__ import _build_install_claude_parser
+
+    ns = _build_install_claude_parser().parse_args([])
+
+    assert ns.yes is False
+    assert ns.skip_mcp_register is False
 
 
 def test_install_parser_defaults_codex_scope_to_user():
@@ -91,6 +111,17 @@ def test_main_dispatches_install_codex_alias(monkeypatch, capsys):
     main_mod.main()
 
     assert "installed:/tmp/demo" in capsys.readouterr().out
+
+
+def test_main_dispatches_install_claude_alias(monkeypatch, capsys):
+    from hermit_agent import __main__ as main_mod
+
+    monkeypatch.setattr(main_mod.sys, "argv", ["hermit-agent", "install-claude", "--cwd", "/tmp/demo"])
+    monkeypatch.setattr("hermit_agent.install_claude.run_install_claude", lambda **kwargs: f"claude:{kwargs['cwd']}")
+
+    main_mod.main()
+
+    assert "claude:/tmp/demo" in capsys.readouterr().out
 
 
 def test_main_dispatches_install(monkeypatch, capsys):

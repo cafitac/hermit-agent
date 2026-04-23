@@ -87,6 +87,29 @@ The bundled skills still give Claude the full interview phase before delegating.
 
 ## Install
 
+### npm-first (clone-free)
+
+```bash
+npm install -g @cafitac/hermit-agent
+hermit setup-codex
+```
+
+Or, if you only want the Claude-facing setup path first:
+
+```bash
+npm install -g @cafitac/hermit-agent
+hermit setup-claude
+```
+
+The npm package is a thin launcher. On first run it bootstraps a managed Python runtime under `~/.hermit/npm-runtime`, installs `cafitac-hermit-agent` from PyPI, and then forwards to the normal Hermit CLI. That means you can start from npm alone without cloning the repo first, while Hermit's Python runtime remains the real implementation.
+
+Requirements for the npm-first path:
+
+- Node.js 20+
+- Python 3.11+
+
+### Source checkout
+
 ```bash
 git clone https://github.com/cafitac/hermit-agent.git
 cd hermit-agent
@@ -158,6 +181,16 @@ If `hermit-channel` is present, Codex is pointed at Hermit correctly. The rest o
 The preferred path is package-first. If Hermit's default packaged Codex support is unavailable, it can still fall back to a built sibling checkout via `HERMIT_CODEX_CHANNELS_SOURCE_PATH` (or `../codex-channels`).
 
 The default path is user-scope and local-first so Codex can discover the bridge across workspaces; remote backends stay optional and out of the critical path.
+
+### Claude-focused setup path
+
+If you want the Claude-facing install path without also provisioning the Codex async runtime, run:
+
+```bash
+hermit setup-claude
+```
+
+This uses the same install flow, but skips the Codex runtime/bootstrap work and focuses on the gateway, API key, and Claude MCP registration path.
 
 To reverse everything: `./uninstall.sh` walks back through the same steps with per-item prompts (`--yes` accepts all; `--keep-data` leaves `~/.hermit/` alone). Ollama models are never deleted — remove manually with `ollama rm <model>`.
 
