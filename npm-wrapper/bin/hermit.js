@@ -31,7 +31,7 @@ try {
     }
   }
 
-  spawnHermit({ args, wrapperVersion });
+  await spawnHermit({ args, wrapperVersion });
 } catch (error) {
   console.error(`[hermit npm wrapper] ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);

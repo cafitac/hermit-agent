@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from typing import Any
+from .version import VERSION
 
-SERVER_INFO = {"name": "hermit_agent", "version": "0.2.0"}
+SERVER_INFO = {"name": "hermit_agent", "version": VERSION}
 PROTOCOL_VERSION = "2024-11-05"
 DEFAULT_MODEL = "qwen3-coder:30b"
 

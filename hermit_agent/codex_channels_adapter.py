@@ -12,6 +12,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 from urllib.request import urlopen
+from .version import VERSION
 
 
 DEFAULT_STATE_FILE = ".codex-channels/state.json"
@@ -274,7 +275,7 @@ def _write_plugin_wrapper(cwd: str, settings: CodexChannelsSettings) -> Path:
 
     plugin_manifest = {
         "name": "codex-channels",
-        "version": "0.1.0",
+        "version": VERSION,
         "description": "Local-first interaction runtime for Codex-first workflows.",
         "skills": "./skills/",
         "mcpServers": "./.mcp.json",

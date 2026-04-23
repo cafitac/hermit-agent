@@ -21,8 +21,7 @@ from .llm_client import LLMClientBase, LLMResponse
 from .memory import MemorySystem
 from .permissions import PermissionChecker, PermissionMode
 from .tools import Tool, ToolResult
-
-VERSION = "0.3.4"
+from .version import VERSION
 
 
 def _current_date() -> str:
