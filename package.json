@@ -1,6 +1,6 @@
 {
   "name": "@cafitac/hermit-agent",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "npm-first launcher for the Hermit Python runtime",
   "type": "module",
   "bin": {
@@ -18,6 +18,18 @@
     "npm-wrapper/",
     "README.md"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cafitac/hermit-agent.git"
+  },
+  "homepage": "https://github.com/cafitac/hermit-agent#readme",
+  "bugs": {
+    "url": "https://github.com/cafitac/hermit-agent/issues"
+  },
   "license": "MIT",
   "keywords": [
     "hermit",
