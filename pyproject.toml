@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cafitac-hermit-agent"
 version = "0.3.7"
-description = "Hermit keeps Claude Code as the orchestrator while a local MCP executor handles Codex-aware coding work."
+description = "Hermit keeps Claude Code or Codex as the orchestrator while a local MCP executor handles cost-aware coding work."
 readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "MIT"}

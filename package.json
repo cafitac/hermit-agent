@@ -1,7 +1,7 @@
 {
   "name": "@cafitac/hermit-agent",
   "version": "0.3.7",
-  "description": "npm-first launcher for the Hermit Python runtime",
+  "description": "npm-first launcher for the Hermit runtime — MCP executor for Claude Code and Codex",
   "type": "module",
   "bin": {
     "hermit": "npm-wrapper/bin/hermit.js",
@@ -35,6 +35,7 @@
     "hermit",
     "claude-code",
     "codex",
+    "coding-agent",
     "mcp",
     "python",
     "npm"
