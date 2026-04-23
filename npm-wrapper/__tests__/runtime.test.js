@@ -65,9 +65,10 @@ test("needsBootstrap returns false only when launcher exists and spec matches", 
       return target === layout.launcherPath || target === layout.installMetaPath;
     },
     readFileSync() {
-      return JSON.stringify({ packageSpec: DEFAULT_PYPI_SPEC });
+      return JSON.stringify({ packageSpec: DEFAULT_PYPI_SPEC, wrapperVersion: "0.3.5" });
     },
   };
-  assert.equal(needsBootstrap({ layout, packageSpec: DEFAULT_PYPI_SPEC, fsImpl }), false);
-  assert.equal(needsBootstrap({ layout, packageSpec: "cafitac-hermit-agent==other", fsImpl }), true);
+  assert.equal(needsBootstrap({ layout, packageSpec: DEFAULT_PYPI_SPEC, wrapperVersion: "0.3.5", fsImpl }), false);
+  assert.equal(needsBootstrap({ layout, packageSpec: "cafitac-hermit-agent==other", wrapperVersion: "0.3.5", fsImpl }), true);
+  assert.equal(needsBootstrap({ layout, packageSpec: DEFAULT_PYPI_SPEC, wrapperVersion: "0.3.6", fsImpl }), true);
 });

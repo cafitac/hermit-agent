@@ -2,8 +2,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
 
 export const DEFAULT_PYPI_SPEC = "cafitac-hermit-agent";
+const packageJsonPath = new URL("../../package.json", import.meta.url);
 
 export function getHermitHome(env = process.env) {
   return env.HERMIT_HOME || path.join(os.homedir(), ".hermit");
@@ -71,16 +73,23 @@ export function readInstallMeta(layout, fsImpl = fs) {
   }
 }
 
+export async function readWrapperVersion() {
+  const raw = await readFile(packageJsonPath, "utf8");
+  const parsed = JSON.parse(raw);
+  return parsed.version ?? "0.0.0";
+}
+
 export function needsBootstrap({
   layout,
   packageSpec,
+  wrapperVersion,
   fsImpl = fs,
 }) {
   if (!fsImpl.existsSync(layout.launcherPath)) {
     return true;
   }
   const meta = readInstallMeta(layout, fsImpl);
-  return meta?.packageSpec !== packageSpec;
+  return meta?.packageSpec !== packageSpec || meta?.wrapperVersion !== wrapperVersion;
 }
 
 export function buildBootstrapPlan({
@@ -98,12 +107,13 @@ export function buildBootstrapPlan({
 export function writeInstallMeta({
   layout,
   packageSpec,
+  wrapperVersion,
   fsImpl = fs,
 }) {
   fsImpl.mkdirSync(layout.runtimeRoot, { recursive: true });
   fsImpl.writeFileSync(
     layout.installMetaPath,
-    JSON.stringify({ packageSpec }, null, 2) + "\n",
+    JSON.stringify({ packageSpec, wrapperVersion }, null, 2) + "\n",
     "utf8",
   );
 }
@@ -113,11 +123,12 @@ export function bootstrapRuntime({
   platform = process.platform,
   fsImpl = fs,
   spawnSyncImpl = spawnSync,
+  wrapperVersion = "0.0.0",
 } = {}) {
   const packageSpec = env.HERMIT_NPM_PYPI_SPEC || DEFAULT_PYPI_SPEC;
   const layout = getRuntimeLayout({ platform, hermitHome: getHermitHome(env) });
 
-  if (!needsBootstrap({ layout, packageSpec, fsImpl })) {
+  if (!needsBootstrap({ layout, packageSpec, wrapperVersion, fsImpl })) {
     return layout;
   }
 
@@ -133,7 +144,7 @@ export function bootstrapRuntime({
       throw new Error(`bootstrap command failed: ${step.command} ${step.args.join(" ")}`);
     }
   }
-  writeInstallMeta({ layout, packageSpec, fsImpl });
+  writeInstallMeta({ layout, packageSpec, wrapperVersion, fsImpl });
   return layout;
 }
 
@@ -144,8 +155,9 @@ export function spawnHermit({
   fsImpl = fs,
   spawnImpl = spawn,
   spawnSyncImpl = spawnSync,
+  wrapperVersion = "0.0.0",
 }) {
-  const layout = bootstrapRuntime({ env, platform, fsImpl, spawnSyncImpl });
+  const layout = bootstrapRuntime({ env, platform, fsImpl, spawnSyncImpl, wrapperVersion });
   const child = spawnImpl(layout.launcherPath, args, {
     stdio: "inherit",
     env,
