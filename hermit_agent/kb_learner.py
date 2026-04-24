@@ -19,7 +19,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import subprocess
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -408,7 +407,7 @@ If no domain knowledge was discovered, respond: []"""
 
     def promote_all_pending_if_tests_pass(self, pytest_passed: bool) -> list[str]:
         """Promote all pending pages to wiki when tests pass."""
-        promoted = []
+        promoted: list[str] = []
         if not pytest_passed:
             return promoted
         for p in list(Path(self.pending_dir).glob("*.md")):

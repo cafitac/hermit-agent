@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import queue
 
-import pytest
 
 from hermit_agent.interfaces.base import ChannelInterface
 from hermit_agent.interfaces.cli import CLIChannel

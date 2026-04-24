@@ -137,7 +137,6 @@ class RunSkillTool(Tool):
                 content=f"[Skill: {skill_name}]\nFollow these instructions:\n\n{full_body}{trailing}"
             )
 
-        phase_titles = [p["title"] for p in phases]
         available_hint = ", ".join(
             f"phase={p['number']} ({p['title']})" for p in phases
         )

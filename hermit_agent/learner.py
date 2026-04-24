@@ -397,7 +397,6 @@ class Learner:
           False = verify_cmd non-zero (failure — includes LLM false positives)
           None  = verify_cmd not defined (no signal)
         """
-        import subprocess
 
         rules = _load_verify_rules()
         results: dict[str, bool | None] = {}

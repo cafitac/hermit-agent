@@ -47,8 +47,8 @@ def test_unchanged_lines_have_space_prefix_not_minus_plus():
         out = _edit(tmp, path, "TARGET", "CHANGED")
 
         # "-TARGET" and "+CHANGED" must be present.
-        assert any(l.strip().startswith("-") and "TARGET" in l for l in out.splitlines())
-        assert any(l.strip().startswith("+") and "CHANGED" in l for l in out.splitlines())
+        assert any(line.strip().startswith("-") and "TARGET" in line for line in out.splitlines())
+        assert any(line.strip().startswith("+") and "CHANGED" in line for line in out.splitlines())
 
         # Unchanged context lines (line2, line5, etc.) must not start with -/+.
         for line in out.splitlines():

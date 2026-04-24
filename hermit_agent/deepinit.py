@@ -1,9 +1,12 @@
 """Deepinit — AI-readable codebase documentation via hierarchical AGENTS.md auto-generation."""
 
+from __future__ import annotations
+
 import os
+from typing import Any
 
 
-def generate_agents_md(cwd: str, llm) -> list[str]:
+def generate_agents_md(cwd: str, llm: Any) -> list[str]:
     """Create AGENTS.md in each main directory. Return the list of created file paths."""
     created = []
     # Find directories with source files
@@ -21,11 +24,11 @@ def generate_agents_md(cwd: str, llm) -> list[str]:
         file_list = '\n'.join(f'- {f}' for f in source_files[:20])
         # Read first 30 lines of each file for context
         snippets = []
-        for f in source_files[:5]:
+        for filename in source_files[:5]:
             try:
-                with open(os.path.join(root, f)) as fh:
+                with open(os.path.join(root, filename), encoding="utf-8") as fh:
                     snippet = ''.join(fh.readlines()[:30])
-                snippets.append(f"### {f}\n```\n{snippet}\n```")
+                snippets.append(f"### {filename}\n```\n{snippet}\n```")
             except Exception:
                 pass
 
@@ -36,8 +39,8 @@ def generate_agents_md(cwd: str, llm) -> list[str]:
             system="Generate concise directory documentation. Markdown format.",
         )
         if response.content:
-            with open(agents_path, 'w') as f:
-                f.write(response.content)
+            with open(agents_path, 'w', encoding="utf-8") as handle:
+                handle.write(response.content)
             created.append(agents_path)
 
     return created

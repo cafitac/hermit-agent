@@ -8,9 +8,6 @@ from hermit_agent.codex_channels_adapter import (
     CodexChannelsSettings,
     build_interaction,
     build_runtime_install_command,
-    build_runtime_local_install_command,
-    build_runtime_serve_command,
-    build_runtime_status_command,
     build_runtime_submit_command,
     install_codex_channels,
     load_codex_channels_settings,
@@ -147,13 +144,6 @@ def test_install_codex_channels_falls_back_to_downloaded_source(monkeypatch, tmp
         runtime_dir=str(tmp_path / ".hermit/codex-channels-runtime"),
         plugin_dir=str(tmp_path / "plugins/codex-channels"),
         package_spec=LATEST_SPEC,
-    )
-    resolved_settings = CodexChannelsSettings(
-        state_file=str(tmp_path / ".codex-channels/state.json"),
-        runtime_dir=str(tmp_path / ".hermit/codex-channels-runtime"),
-        plugin_dir=str(tmp_path / "plugins/codex-channels"),
-        package_spec=LATEST_SPEC,
-        source_path=str(source),
     )
     assert runs[0] == build_runtime_install_command(settings=settings)
     assert runs[1] == ["npm", "install"]

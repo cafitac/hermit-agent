@@ -252,7 +252,8 @@ def ensure_codex_marketplace_registered(*, cwd: str, codex_command: str, scope: 
 def ensure_codex_mcp_registered(*, cwd: str, codex_command: str) -> str:
     desired_entry = resolve_hermit_mcp_stdio_entry(cwd=cwd)
     desired_command = str(desired_entry["command"])
-    desired_args = [str(arg) for arg in desired_entry.get("args", []) or []]
+    raw_args = desired_entry.get("args", [])
+    desired_args = [str(arg) for arg in raw_args] if isinstance(raw_args, list) else []
 
     current = subprocess.run(
         [codex_command, "mcp", "get", "hermit-channel", "--json"],

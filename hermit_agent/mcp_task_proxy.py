@@ -11,7 +11,7 @@ class MCPGatewayProxy:
     gateway_url: str
     gateway_client: httpx.Client
     gateway_headers: Callable[[], dict[str, str]]
-    start_sse_bridge: Callable[[str], None]
+    start_sse_bridge: Callable[[str], Any]
     cleanup_sse_bridge: Callable[[str], None]
     notify_error: Callable[[str, str], None]
     notify_reply: Callable[[str, str], None]

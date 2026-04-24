@@ -65,14 +65,16 @@ def _load_state_interactions(state_file: Path) -> list[dict[str, Any]]:
 
 
 def _build_pending_interaction(item: dict[str, Any], *, host: str, port: int, state_file: str) -> PendingInteraction:
-    payload = item.get("payload") if isinstance(item.get("payload"), dict) else {}
+    raw_payload = item.get("payload")
+    payload: dict[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
     question = sanitize_dynamic_text(str(payload.get("message") or payload.get("question") or "").strip())
     header = sanitize_dynamic_text(str(payload.get("header") or "").strip()) or None
-    policy = item.get("policy") if isinstance(item.get("policy"), dict) else {}
+    raw_policy = item.get("policy")
+    policy: dict[str, Any] = raw_policy if isinstance(raw_policy, dict) else {}
     return PendingInteraction(
         interaction_id=str(item.get("id") or ""),
         question=question,
-        options=_normalize_options(payload.get("options") if isinstance(payload, dict) else []),
+        options=_normalize_options(payload.get("options") if isinstance(payload.get("options"), list) else None),
         kind=str(item.get("kind") or ""),
         host=host,
         port=port,
@@ -318,12 +320,16 @@ def run_pending_interaction_loop(*, cwd: str) -> bool:
             return handled_any
         if handled_any:
             channel = CLIChannel()
+            yes_no_options = [
+                PendingOption(label="yes", value="yes"),
+                PendingOption(label="no", value="no"),
+            ]
             answer = _resolve_cli_answer(
                 channel._present_question(
                     "There are still pending interactions. Answer another one?",
                     ["yes", "no"],
                 ),
-                ["yes", "no"],
+                yes_no_options,
             ).lower()
             if answer not in {"yes", "y", "1"}:
                 return handled_any

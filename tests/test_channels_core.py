@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import queue
 
 from hermit_agent.channels_core.approvals import ApprovalDecision, parse_permission_reply
 from hermit_agent.channels_core.event_adapters import (

@@ -72,7 +72,6 @@ def test_build_handoff_rich_captures_errors():
 def test_build_handoff_rich_no_llm_call():
     """build_handoff_rich must be purely rule-based — no LLM attribute."""
     import inspect
-    from hermit_agent import session_wrap
     src = inspect.getsource(build_handoff_rich)
     # Must not call any llm.chat or requests.post
     assert "llm.chat" not in src

@@ -1,8 +1,7 @@
 """Phase 2 TDD: loop.py learner auto-trigger test."""
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch, call
-import pytest
+from unittest.mock import MagicMock, patch
 
 from hermit_agent.loop import AgentLoop, _STATIC_SYSTEM_PROMPT
 

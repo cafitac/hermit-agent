@@ -1,5 +1,4 @@
 import os
-import pytest
 from unittest.mock import MagicMock
 from hermit_agent.learner import Learner
 

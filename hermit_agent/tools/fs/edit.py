@@ -55,7 +55,7 @@ def _format_edit_diff(path: str, old_string: str, new_string: str, start_line: i
     ))
 
     # The first 2 lines of unified_diff are `--- ` / `+++ ` headers — discard and use hunks only.
-    hunks = [l for l in diff_lines if not (l.startswith("--- ") or l.startswith("+++ "))]
+    hunks = [line for line in diff_lines if not (line.startswith("--- ") or line.startswith("+++ "))]
 
     # Adjust hunk header start line number to actual file position (start_line)
     rebased: list[str] = []
@@ -77,8 +77,8 @@ def _format_edit_diff(path: str, old_string: str, new_string: str, start_line: i
         else:
             rebased.append(line)
 
-    removed = sum(1 for l in rebased if l.startswith("-") and not l.startswith("---"))
-    added = sum(1 for l in rebased if l.startswith("+") and not l.startswith("+++"))
+    removed = sum(1 for line in rebased if line.startswith("-") and not line.startswith("---"))
+    added = sum(1 for line in rebased if line.startswith("+") and not line.startswith("+++"))
 
     parts = [f"Update({display_path})"]
     if added > removed:
@@ -87,7 +87,7 @@ def _format_edit_diff(path: str, old_string: str, new_string: str, start_line: i
         parts.append(f"  -{removed - added} lines")
     else:
         parts.append(f"  ~{added} lines")
-    parts.extend("  " + l for l in rebased)
+    parts.extend("  " + line for line in rebased)
     return "\n".join(parts)
 
 

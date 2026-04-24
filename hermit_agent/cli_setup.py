@@ -8,12 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import secrets
 import sys
-from pathlib import Path
 
-from .config import DEFAULTS, GLOBAL_SETTINGS_PATH, init_settings_file, settings_path
+from .config import DEFAULTS, GLOBAL_SETTINGS_PATH
 
 
 def _prompt(prompt: str, default: str = "") -> str:

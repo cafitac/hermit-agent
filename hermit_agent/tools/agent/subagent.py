@@ -6,8 +6,8 @@ Uses lazy import pattern to avoid circular dependencies:
 
 from __future__ import annotations
 
-import os
 import threading
+from typing import Any, Callable
 
 from ..base import Tool, ToolResult
 
@@ -41,10 +41,10 @@ class SubAgentTool(Tool):
         self._emitter = emitter
         self._permission_checker = permission_checker
         # Background agent support: (results_list, lock) set by AgentLoop after construction
-        self._bg_queue: tuple[list, threading.Lock] | None = None
-        self._bg_notify: callable | None = None
+        self._bg_queue: tuple[list[dict[str, str]], threading.Lock] | None = None
+        self._bg_notify: Callable[[str], None] | None = None
 
-    def input_schema(self) -> dict:
+    def input_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -151,7 +151,7 @@ class SubAgentTool(Tool):
         except Exception:
             return None
 
-    def execute(self, input: dict) -> ToolResult:
+    def execute(self, input: dict[str, Any]) -> ToolResult:
         prompt = input["prompt"]
         description = input.get("description", "sub-agent task")
         subagent_type = input.get("subagent_type", "general-purpose")

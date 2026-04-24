@@ -35,31 +35,37 @@ class ZaiAdapter(ProviderAdapter):
         self._anthropic_base_url = anthropic_base_url.rstrip("/")
         self._api_key = api_key
 
-    async def forward_openai(self, req_body: dict, stream: bool) -> AsyncIterator[bytes]:
+    def forward_openai(self, req_body: dict, stream: bool) -> AsyncIterator[bytes]:
         url = f"{self._openai_base_url}/chat/completions"
         headers = {"Authorization": f"Bearer {self._api_key}"}
-        if stream:
-            async with httpx.AsyncClient(timeout=_CLIENT_TIMEOUT) as client:
-                async with client.stream("POST", url, json=req_body, headers=headers) as resp:
-                    async for chunk in resp.aiter_bytes():
-                        yield chunk
-        else:
-            async with httpx.AsyncClient(timeout=_CLIENT_TIMEOUT) as client:
-                resp = await client.post(url, json=req_body, headers=headers)
-                yield resp.content
+        async def _gen() -> AsyncIterator[bytes]:
+            if stream:
+                async with httpx.AsyncClient(timeout=_CLIENT_TIMEOUT) as client:
+                    async with client.stream("POST", url, json=req_body, headers=headers) as resp:
+                        async for chunk in resp.aiter_bytes():
+                            yield chunk
+            else:
+                async with httpx.AsyncClient(timeout=_CLIENT_TIMEOUT) as client:
+                    resp = await client.post(url, json=req_body, headers=headers)
+                    yield resp.content
 
-    async def forward_anthropic(self, req_body: dict, stream: bool) -> AsyncIterator[bytes]:
+        return _gen()
+
+    def forward_anthropic(self, req_body: dict, stream: bool) -> AsyncIterator[bytes]:
         url = f"{self._anthropic_base_url}/v1/messages"
         headers = {
             "x-api-key": self._api_key,
             "anthropic-version": "2023-06-01",
         }
-        if stream:
-            async with httpx.AsyncClient(timeout=_CLIENT_TIMEOUT) as client:
-                async with client.stream("POST", url, json=req_body, headers=headers) as resp:
-                    async for chunk in resp.aiter_bytes():
-                        yield chunk
-        else:
-            async with httpx.AsyncClient(timeout=_CLIENT_TIMEOUT) as client:
-                resp = await client.post(url, json=req_body, headers=headers)
-                yield resp.content
+        async def _gen() -> AsyncIterator[bytes]:
+            if stream:
+                async with httpx.AsyncClient(timeout=_CLIENT_TIMEOUT) as client:
+                    async with client.stream("POST", url, json=req_body, headers=headers) as resp:
+                        async for chunk in resp.aiter_bytes():
+                            yield chunk
+            else:
+                async with httpx.AsyncClient(timeout=_CLIENT_TIMEOUT) as client:
+                    resp = await client.post(url, json=req_body, headers=headers)
+                    yield resp.content
+
+        return _gen()

@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import subprocess
 
-from ..base import Tool, ToolResult, _expand_path
+from ..base import Tool, ToolResult
 
 
 class RunTestsTool(Tool):
@@ -50,7 +50,6 @@ class RunTestsTool(Tool):
         }
 
     def execute(self, input: dict) -> ToolResult:
-        import subprocess
         from pathlib import Path
 
         test_path = input.get("path", "")

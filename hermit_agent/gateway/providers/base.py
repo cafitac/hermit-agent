@@ -13,11 +13,11 @@ class ProviderAdapter(ABC):
     """
 
     @abstractmethod
-    async def forward_openai(self, req_body: dict, stream: bool) -> AsyncIterator[bytes]:
+    def forward_openai(self, req_body: dict, stream: bool) -> AsyncIterator[bytes]:
         """Forward a request using the OpenAI chat/completions wire format."""
         ...
 
     @abstractmethod
-    async def forward_anthropic(self, req_body: dict, stream: bool) -> AsyncIterator[bytes]:
+    def forward_anthropic(self, req_body: dict, stream: bool) -> AsyncIterator[bytes]:
         """Forward a request using the Anthropic messages wire format."""
         ...

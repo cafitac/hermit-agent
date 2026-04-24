@@ -2,7 +2,8 @@
 
 Class hierarchy:
   LLMClientBase          — common interface (HTTP, retry, streaming, model routing)
-  ├── OllamaClient       — local Ollama (qwen extensions: reasoning_effort, etc.)
+  ├── LocalLLMClient     — local backend (MLX, llama.cpp, Ollama)
+  │   └── OllamaClient   — thin subclass for qwen3 reasoning_effort support
   └── OpenAICompatClient — standard OpenAI-compatible external API
       └── ZAIClient      — z.ai/GLM (glm-5.1/glm-4.7 model routing)
 
@@ -62,7 +63,7 @@ def _with_retry(func, max_retries: int = 3, base_delay: float = _FLAT_RETRY_DELA
     Exponential backoff was too long relative to external API rate-limit recovery and looked like a hang.
     If a Retry-After header is present, its value takes priority.
     """
-    last_error = None
+    last_error: Exception | None = None
     for attempt in range(max_retries + 1):
         try:
             return func()
@@ -427,11 +428,12 @@ class LLMClientBase(ABC):
 # Concrete implementations
 # ---------------------------------------------------------------------------
 
-class OllamaClient(LLMClientBase):
-    """Local ollama LLM client.
+class LocalLLMClient(LLMClientBase):
+    """Local LLM client for any local backend (MLX, llama.cpp, Ollama).
 
-    Supports ollama extended parameters (reasoning_effort) for qwen3.
-"""
+    All local backends expose an OpenAI-compatible /v1 endpoint, so this
+    single class handles them all via URL-based dispatch.
+    """
 
     MODEL_ROUTING = {
         "quality": "qwen3-coder:30b",
@@ -446,6 +448,16 @@ class OllamaClient(LLMClientBase):
         api_key: str | None = None,
     ):
         super().__init__(base_url, model, api_key)
+
+    def _provider_extra_params(self, stream: bool) -> dict:
+        return {}
+
+
+class OllamaClient(LocalLLMClient):
+    """Thin subclass adding qwen3 reasoning_effort support for Ollama.
+
+    Use LocalLLMClient for non-ollama local backends (MLX, llama.cpp).
+    """
 
     def _provider_extra_params(self, stream: bool) -> dict:
         """reasoning_effort: qwen3 thinking mode control parameter."""
@@ -521,15 +533,24 @@ def create_llm_client(
     base_url: str = "http://localhost:11434/v1",
     model: str | None = None,
     api_key: str | None = None,
+    local_backend: str | None = None,
 ) -> LLMClientBase:
-    """Auto-detects the provider from base_url and returns the appropriate client."""
+    """Auto-detects the provider from base_url and returns the appropriate client.
+
+    For local hosts, uses OllamaClient (qwen3 reasoning_effort) only when
+    local_backend is "ollama".  All other local backends get LocalLLMClient.
+    """
     url = base_url.lower()
 
     if "z.ai" in url:
         return ZAIClient(base_url=base_url, model=model or "glm-5.1", api_key=api_key)
 
     if any(h in url for h in _LOCAL_HOSTS):
-        return OllamaClient(base_url=base_url, model=model or "qwen3-coder:30b", api_key=api_key)
+        # Ollama gets the subclass with reasoning_effort support
+        if local_backend == "ollama":
+            return OllamaClient(base_url=base_url, model=model or "qwen3-coder:30b", api_key=api_key)
+        # MLX, llama.cpp, or unspecified → generic local client
+        return LocalLLMClient(base_url=base_url, model=model or "qwen3-coder:30b", api_key=api_key)
 
     # Unknown external server → handled as standard OpenAI-compat
     return OpenAICompatClient(base_url=base_url, model=model or "gpt-4o", api_key=api_key)

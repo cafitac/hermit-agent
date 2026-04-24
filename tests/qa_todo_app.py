@@ -130,7 +130,6 @@ class QAReport:
         BOLD = "\033[1m"
         GREEN = "\033[32m"
         RED = "\033[31m"
-        CYAN = "\033[36m"
         DIM = "\033[2m"
         RESET = "\033[0m"
 
@@ -310,7 +309,7 @@ def main():
     os.makedirs(workdir, exist_ok=True)
 
     print(f"{'=' * 60}")
-    print(f"QA TEST: Todo App Build")
+    print("QA TEST: Todo App Build")
     print(f"{'=' * 60}")
     print(f"Model:   {args.model}")
     print(f"Workdir: {workdir}")

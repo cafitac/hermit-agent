@@ -12,6 +12,7 @@ import subprocess
 import sys
 import threading
 import uuid
+from typing import Callable
 
 from .auto_agents import AutoAgentRunner
 from .context import ContextManager, estimate_messages_tokens
@@ -532,11 +533,14 @@ class AgentLoop:
         self._total_test_passes = 0
         self._total_test_failures_total = 0
         self._loop_reentry_count = 0
+        self._last_tool_sigs: list[tuple[str, str]] = []
+        self._tool_repeat_count = 0
+        self._ran_ralph = False
 
         # Inject emitter + permission_checker into SubAgentTool (after permission_checker is created)
         if "sub_agent" in self.tools:
-            self.tools["sub_agent"]._emitter = self.emitter
-            self.tools["sub_agent"]._permission_checker = self.permission_checker
+            setattr(self.tools["sub_agent"], "_emitter", self.emitter)
+            setattr(self.tools["sub_agent"], "_permission_checker", self.permission_checker)
         self.hook_runner = HookRunner()
         self.hook_runner.run_hooks(HookEvent.ON_START, "", {})
 
@@ -965,8 +969,11 @@ class AgentLoop:
     def run(self, user_message: str) -> str:
         """Run the agent loop. Streams output in real time if streaming is enabled."""
         # G38b: Reset text loop detection state on run() entry
-        self._last_text_sig: str = ""
-        self._text_repeat_count: int = 0
+        self._last_text_sig = ""
+        self._text_repeat_count = 0
+        # Reset tool repeat detection on each user turn (prevents cross-turn false positives)
+        self._last_tool_sigs = []
+        self._tool_repeat_count = 0
         # G41: Save PR body to pinned_reminders (for re-injection after compact)
         self._pin_pr_body(user_message)
         # Slash command -> skill execution enables auto-continue
@@ -978,7 +985,7 @@ class AgentLoop:
         self._detect_user_correction(user_message)
 
         # -- First turn: LLM classification (minimal prompt, no tools, no context) --
-        if not self._context_injected and not self.messages:
+        if not self._context_injected and not self.messages and getattr(self, "session_kind", None) != "interactive":
             classify_response = self._classify_with_minimal_call(user_message)
             if classify_response is not None:
                 # Simple question -> return classification response as-is.
@@ -1274,16 +1281,18 @@ class AgentLoop:
                 return response.content or "[No response]"
 
             # Loop detection: force stop on 3+ consecutive identical tool+args repeats
+            # Polling tools (monitor, check_task) are exempt — repeated identical calls are intentional
+            _POLLING_TOOLS = {"monitor", "mcp__hermit-channel__check_task"}
             if response.tool_calls:
                 call_sig = [(tc.name, json.dumps(tc.arguments, sort_keys=True)) for tc in response.tool_calls]
-                if not hasattr(self, "_last_tool_sigs"):
-                    self._last_tool_sigs = []
-                if self._last_tool_sigs and self._last_tool_sigs == call_sig:
-                    self._tool_repeat_count = getattr(self, "_tool_repeat_count", 0) + 1
-                else:
-                    self._tool_repeat_count = 0
-                self._last_tool_sigs = call_sig
-                if self._tool_repeat_count >= 4:
+                is_polling = all(tc.name in _POLLING_TOOLS for tc in response.tool_calls)
+                if not is_polling:
+                    if self._last_tool_sigs and self._last_tool_sigs == call_sig:
+                        self._tool_repeat_count += 1
+                    else:
+                        self._tool_repeat_count = 0
+                    self._last_tool_sigs = call_sig
+                if not is_polling and self._tool_repeat_count >= 4:
                     self.messages.append({"role": "assistant", "content": "Stopping: identical tool call repeated."})
                     self.last_termination = "tool_loop"
                     return "Stopping: identical tool call repeated. Please try a different approach."
@@ -1788,7 +1797,7 @@ This file is the configuration file that HermitAgent references when working on 
 
 
 @slash_command("doctor", "Diagnose HermitAgent setup (HERMIT.md, hooks, skills, permissions)")
-def cmd_doctor(agent: AgentLoop, args: str) -> str:
+def cmd_doctor_diag(agent: AgentLoop, args: str) -> str:
     from .doctor import run_diagnostics
 
     return run_diagnostics(cwd=agent.cwd).format()
@@ -1810,7 +1819,7 @@ def cmd_wrap(agent: AgentLoop, args: str) -> str:
 
 
 @slash_command("plan", "Plan artifact (save/list/load) — save|list|load [name]")
-def cmd_plan(agent: AgentLoop, args: str) -> str:
+def cmd_plan_artifact(agent: AgentLoop, args: str) -> str:
     from .plans import list_plans, load_plan, save_plan
 
     tokens = args.split(None, 1)
@@ -1987,7 +1996,7 @@ def cmd_status(agent: AgentLoop, args: str) -> str:
 
 
 @slash_command("plan", "Trigger the PlanAgent to create a plan")
-def cmd_plan(agent: AgentLoop, args: str) -> str:
+def cmd_plan_generate(agent: AgentLoop, args: str) -> str:
     topic = args.strip() if args.strip() else "the current task"
     agent.messages.append(
         {
@@ -2085,7 +2094,7 @@ def cmd_ralph(agent: AgentLoop, args: str) -> str:
     agent.emitter.model_changed(prev_model, agent.llm.model)
 
     ralph = Ralph(llm=agent.llm, tools=list(agent.tools.values()), cwd=agent.cwd, emitter=agent.emitter)
-    ralph._parent_agent = agent  # btw: for receiving user messages during execution
+    setattr(ralph, "_parent_agent", agent)  # btw: for receiving user messages during execution
     state = ralph.start(args.strip())
     save_state(state)
 
@@ -2215,7 +2224,7 @@ def cmd_mcp(agent: AgentLoop, args: str) -> str:
 
 
 @slash_command("doctor", "Check environment and configuration")
-def cmd_doctor(agent: AgentLoop, args: str) -> str:
+def cmd_doctor_env(agent: AgentLoop, args: str) -> str:
     checks = []
     # LLM connectivity check
     try:

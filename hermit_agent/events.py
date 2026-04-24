@@ -44,7 +44,7 @@ class AgentEventEmitter:
             elif event_type == "tool_result":
                 prefix = "  ⎿  ERR: " if data.get("is_error") else "  ⎿  "
                 content = data.get("content", "")
-                lines = "\n".join(f"[{ts}] {prefix}{l}" for l in (content or "(empty)").splitlines())
+                lines = "\n".join(f"[{ts}] {prefix}{line}" for line in (content or "(empty)").splitlines())
                 line = lines + "\n"
             elif event_type == "progress":
                 line = f"[{ts}]   {data.get('content', '')}\n"

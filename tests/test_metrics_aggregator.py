@@ -1,13 +1,12 @@
 """MetricsAggregator unit tests (Phase 2)."""
 
 import json
-import os
 import tempfile
 from pathlib import Path
 
 import pytest
 
-from hermit_agent.metrics.aggregator import MetricsAggregator, SessionStats, _parse_session
+from hermit_agent.metrics.aggregator import MetricsAggregator, _parse_session
 
 
 # ── Helpers ──────────────────────────────────────────────────────

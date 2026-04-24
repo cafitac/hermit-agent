@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import urllib.parse
 import xml.etree.ElementTree as ET
+from typing import Any
 
 import requests
 
@@ -71,10 +72,12 @@ class WebSearchTool(Tool):
     def _search_ddg(self, query: str, max_results: int) -> list[dict]:
         try:
             try:
-                from ddgs import DDGS
+                from ddgs import DDGS as _PrimaryDDGS
+                ddgs_cls: Any = _PrimaryDDGS
             except ImportError:
-                from duckduckgo_search import DDGS
-            return DDGS().text(query, max_results=max_results) or []
+                from duckduckgo_search import DDGS as _FallbackDDGS
+                ddgs_cls = _FallbackDDGS
+            return ddgs_cls().text(query, max_results=max_results) or []
         except Exception:
             return []
 

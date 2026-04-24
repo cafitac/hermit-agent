@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from hermit_agent.bridge_payloads import build_gateway_task_request, build_ready_payload
+from hermit_agent.bridge_payloads import (
+    build_interactive_message_request,
+    build_interactive_session_request,
+    build_ready_payload,
+)
 
 
 def test_build_ready_payload_matches_bridge_contract():
@@ -21,20 +25,21 @@ def test_build_ready_payload_matches_bridge_contract():
         "commands": {"/help": "Get help"},
     }
 
-
-def test_build_gateway_task_request_matches_bridge_task_creation_shape():
-    payload = build_gateway_task_request(
-        task="do work",
+def test_build_interactive_session_request_matches_private_bridge_shape():
+    payload = build_interactive_session_request(
         cwd="/tmp/project",
         model="__auto__",
-        max_turns=9,
         parent_session_id="session-1",
+        session_id="interactive-1",
     )
 
     assert payload == {
-        "task": "do work",
         "cwd": "/tmp/project",
         "model": "__auto__",
-        "max_turns": 9,
         "parent_session_id": "session-1",
+        "session_id": "interactive-1",
     }
+
+
+def test_build_interactive_message_request_matches_private_turn_shape():
+    assert build_interactive_message_request(message="hello") == {"message": "hello"}

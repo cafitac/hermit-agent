@@ -169,7 +169,7 @@ type: {mem_type}
             lines = Path(index_path).read_text().splitlines()
 
         # Remove existing entry
-        lines = [l for l in lines if f"({filename})" not in l and f"[{name}]" not in l]
+        lines = [line for line in lines if f"({filename})" not in line and f"[{name}]" not in line]
 
         # Add new entry
         lines.append(f"- [{name}]({filename}) — {description}")

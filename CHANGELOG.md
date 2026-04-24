@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## v0.3.10
+
+### TUI interactive session runtime and codebase hygiene
+- Reworked the standalone TUI to use a gateway-private interactive session runtime so multi-turn continuity survives across normal turns without widening the public MCP task APIs.
+- Added private interactive session routes, transcript persistence in `mode='interactive'`, explicit `/resume`-driven recovery, and recap/lineage alignment around the interactive runtime.
+- Removed the dormant `BridgeAgentSession` / bridge-learning path and cleaned up stale bridge task-shaped plumbing that no longer matched the active TUI architecture.
+- Tightened the Python codebase with behavior-preserving type and lint cleanup across the Hermit runtime, MCP adapter path, provider interfaces, install flow, interaction helpers, and supporting tests until `mypy hermit_agent` and `ruff check hermit_agent tests` passed cleanly.
+
 ## v0.3.7
 
 ### Documentation refresh — dual-orchestrator positioning

@@ -1,7 +1,6 @@
 """Phase 3 TDD: learner_guard.py security scan test."""
 from __future__ import annotations
 
-import pytest
 from hermit_agent.learner_guard import scan_skill_content
 
 

@@ -23,7 +23,8 @@ import logging
 import os
 import subprocess
 import time
-from pathlib import Path
+from dataclasses import dataclass
+from typing import Any, IO
 
 from .tools import Tool, ToolResult
 from .version import VERSION
@@ -35,7 +36,7 @@ MCP_CONFIG_PATHS = [
     ".hermit/mcp.json",
 ]
 
-MCP_CONFIG_TEMPLATE = {
+MCP_CONFIG_TEMPLATE: dict[str, dict[str, dict[str, object]]] = {
     "servers": {
         # Example: filesystem server (commented out by default)
         # "filesystem": {
@@ -47,106 +48,148 @@ MCP_CONFIG_TEMPLATE = {
 }
 
 
-class MCPClient:
-    """MCP client — stdio transport. Communicates with external MCP servers via JSON-RPC."""
+@dataclass
+class _ProcessState:
+    proc: subprocess.Popen[str]
+    stdin: IO[str]
+    stdout: IO[str]
+    stderr: IO[str]
 
-    def __init__(self, name: str, command: str, args: list[str] = None, env: dict = None):
+
+class MCPClient:
+    """MCP client — stdio transport."""
+
+    def __init__(
+        self,
+        name: str,
+        command: str,
+        args: list[str] | None = None,
+        env: dict[str, str] | None = None,
+    ):
         self.name = name
         self.command = command
-        self.args = args or []
-        self.env = env
-        self._process: subprocess.Popen | None = None
+        self.args = list(args or [])
+        self.env = dict(env) if env is not None else None
+        self._process: _ProcessState | None = None
         self._request_id = 0
-        self._tools: list[dict] = []
+        self._tools: list[dict[str, Any]] = []
 
     def connect(self) -> None:
         """Starts the MCP server subprocess and performs the initialization handshake."""
-        if self._process and self._process.poll() is None:
+        if self.is_connected:
             return
 
-        env = {**os.environ}
-        if self.env:
+        env = dict(os.environ)
+        if self.env is not None:
             env.update(self.env)
 
-        self._process = subprocess.Popen(
-            [self.command] + self.args,
+        proc = subprocess.Popen(
+            [self.command, *self.args],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             env=env,
         )
+        if proc.stdin is None or proc.stdout is None or proc.stderr is None:
+            proc.kill()
+            raise RuntimeError(f"MCP server '{self.name}' failed to expose stdio pipes")
 
-        # MCP initialize handshake
-        init_result = self._send_request("initialize", {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {"tools": {}},
-            "clientInfo": {"name": "hermit_agent", "version": VERSION},
-        })
+        self._process = _ProcessState(
+            proc=proc,
+            stdin=proc.stdin,
+            stdout=proc.stdout,
+            stderr=proc.stderr,
+        )
 
+        init_result = self._send_request(
+            "initialize",
+            {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {"tools": {}},
+                "clientInfo": {"name": "hermit_agent", "version": VERSION},
+            },
+        )
         if "error" in init_result:
             raise RuntimeError(f"MCP init failed for '{self.name}': {init_result['error']}")
 
-        # Send initialized notification (no response expected)
-        notification = {"jsonrpc": "2.0", "method": "notifications/initialized"}
-        self._write_message(notification)
+        self._write_message({"jsonrpc": "2.0", "method": "notifications/initialized"})
 
     def disconnect(self) -> None:
         """Terminates the MCP server process."""
-        if self._process:
-            try:
-                self._process.stdin.close()
-                self._process.wait(timeout=5)
-            except Exception:
-                self._process.kill()
-            finally:
-                self._process = None
+        process = self._process
+        if process is None:
+            return
+        try:
+            process.stdin.close()
+            process.proc.wait(timeout=5)
+        except Exception:
+            process.proc.kill()
+        finally:
+            self._process = None
 
-    def list_tools(self) -> list[dict]:
+    def list_tools(self) -> list[dict[str, Any]]:
         """Sends a tools/list request and returns the list of tool definitions."""
         result = self._send_request("tools/list")
         if "error" in result:
             logger.warning("MCP '%s' tools/list error: %s", self.name, result["error"])
             return []
-        tools = result.get("result", {}).get("tools", [])
-        self._tools = tools
-        return tools
 
-    def call_tool(self, tool_name: str, arguments: dict) -> str:
+        result_payload = result.get("result", {})
+        if not isinstance(result_payload, dict):
+            return []
+
+        tools = result_payload.get("tools", [])
+        if not isinstance(tools, list):
+            return []
+
+        normalized = [tool for tool in tools if isinstance(tool, dict)]
+        self._tools = normalized
+        return normalized
+
+    def call_tool(self, tool_name: str, arguments: dict[str, Any]) -> str:
         """Sends a tools/call request and returns the result string."""
-        result = self._send_request("tools/call", {
-            "name": tool_name,
-            "arguments": arguments,
-        })
+        result = self._send_request(
+            "tools/call",
+            {
+                "name": tool_name,
+                "arguments": arguments,
+            },
+        )
 
         if "error" in result:
             raise RuntimeError(f"MCP tool call error: {result['error']}")
 
         call_result = result.get("result", {})
-
-        # MCP result is in content array format
-        content_items = call_result.get("content", [])
-        if not content_items:
+        if not isinstance(call_result, dict):
             return ""
 
-        parts = []
+        content_items = call_result.get("content", [])
+        if not isinstance(content_items, list) or not content_items:
+            return ""
+
+        parts: list[str] = []
         for item in content_items:
-            if item.get("type") == "text":
-                parts.append(item.get("text", ""))
-            elif item.get("type") == "image":
-                parts.append(f"[image: {item.get('mimeType', 'unknown')}]")
+            if isinstance(item, dict):
+                item_type = item.get("type")
+                if item_type == "text":
+                    parts.append(str(item.get("text", "")))
+                elif item_type == "image":
+                    parts.append(f"[image: {item.get('mimeType', 'unknown')}]")
+                else:
+                    parts.append(str(item))
             else:
                 parts.append(str(item))
-
         return "\n".join(parts)
 
-    def _send_request(self, method: str, params: dict = None) -> dict:
+    def _send_request(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         """Sends a JSON-RPC request and returns the response."""
-        if not self._process or self._process.poll() is not None:
+        process = self._require_process()
+        if process.proc.poll() is not None:
             raise RuntimeError(f"MCP server '{self.name}' is not running")
 
         self._request_id += 1
-        request = {
+        request: dict[str, Any] = {
             "jsonrpc": "2.0",
             "id": self._request_id,
             "method": method,
@@ -157,59 +200,74 @@ class MCPClient:
         self._write_message(request)
         return self._read_response(self._request_id)
 
-    def _write_message(self, message: dict) -> None:
+    def _write_message(self, message: dict[str, Any]) -> None:
         """Sends a JSON message to the server's stdin."""
-        line = json.dumps(message) + "\n"
+        process = self._require_process()
+        line = json.dumps(message, ensure_ascii=False) + "\n"
         try:
-            self._process.stdin.write(line)
-            self._process.stdin.flush()
-        except BrokenPipeError as e:
-            raise RuntimeError(f"MCP server '{self.name}' stdin pipe broken: {e}") from e
+            process.stdin.write(line)
+            process.stdin.flush()
+        except BrokenPipeError as exc:
+            raise RuntimeError(f"MCP server '{self.name}' stdin pipe broken: {exc}") from exc
 
-    def _read_response(self, expected_id: int, timeout: float = 30.0) -> dict:
+    def _read_response(self, expected_id: int, timeout: float = 30.0) -> dict[str, Any]:
         """Reads and returns the JSON-RPC response from the server's stdout."""
         deadline = time.monotonic() + timeout
+        process = self._require_process()
+
         while time.monotonic() < deadline:
             try:
-                line = self._process.stdout.readline()
-            except Exception as e:
-                raise RuntimeError(f"MCP server '{self.name}' read error: {e}") from e
+                line = process.stdout.readline()
+            except Exception as exc:
+                raise RuntimeError(f"MCP server '{self.name}' read error: {exc}") from exc
 
             if not line:
-                # If the process has terminated
                 stderr = ""
-                try:
-                    stderr = self._process.stderr.read(500)
-                except Exception:
-                    pass
-                raise RuntimeError(
-                    f"MCP server '{self.name}' closed stdout unexpectedly. stderr: {stderr}"
-                )
-
-            line = line.strip()
-            if not line:
+                if process.proc.poll() is not None:
+                    try:
+                        stderr = process.stderr.read().strip()
+                    except Exception:
+                        pass
+                    raise RuntimeError(
+                        f"MCP server '{self.name}' terminated unexpectedly"
+                        + (f": {stderr}" if stderr else "")
+                    )
+                time.sleep(0.01)
                 continue
 
             try:
                 msg = json.loads(line)
             except json.JSONDecodeError:
-                # Ignore non-JSON output (e.g., logs) from the server
+                logger.debug("MCP '%s': ignoring invalid JSON line: %r", self.name, line)
                 continue
 
-            # Skip notification messages (no id)
+            if not isinstance(msg, dict):
+                continue
+
             if "id" not in msg:
                 continue
 
-            if msg.get("id") == expected_id:
-                return msg
+            if msg["id"] != expected_id:
+                logger.debug(
+                    "MCP '%s': skipping out-of-order response id=%r (expected %r)",
+                    self.name,
+                    msg.get("id"),
+                    expected_id,
+                )
+                continue
 
-        raise TimeoutError(
-            f"MCP server '{self.name}' did not respond to request {expected_id} within {timeout}s"
-        )
+            return msg
+
+        raise TimeoutError(f"MCP server '{self.name}' request timed out after {timeout}s")
+
+    def _require_process(self) -> _ProcessState:
+        if self._process is None:
+            raise RuntimeError(f"MCP server '{self.name}' is not running")
+        return self._process
 
     @property
     def is_connected(self) -> bool:
-        return self._process is not None and self._process.poll() is None
+        return self._process is not None and self._process.proc.poll() is None
 
     def __repr__(self) -> str:
         status = "connected" if self.is_connected else "disconnected"
@@ -217,22 +275,23 @@ class MCPClient:
 
 
 class MCPToolAdapter(Tool):
-    """Adapting MCP server tools to HermitAgent's Tool interface."""
+    """Adapt an MCP tool definition to HermitAgent's Tool interface."""
 
     DESCRIPTION_LIMIT = 2048
     RESULT_LIMIT = 30000
 
-    def __init__(self, client: MCPClient, tool_def: dict):
+    def __init__(self, client: MCPClient, tool_def: dict[str, Any]):
         self._client = client
-        self._tool_name = tool_def["name"]
+        self._tool_name = str(tool_def["name"])
         self.name = f"mcp_{client.name}_{self._tool_name}"
-        self.description = tool_def.get("description", "")[:self.DESCRIPTION_LIMIT]
-        self._schema = tool_def.get("inputSchema", {})
+        self.description = str(tool_def.get("description", ""))[:self.DESCRIPTION_LIMIT]
+        schema = tool_def.get("inputSchema", {})
+        self._schema = schema if isinstance(schema, dict) else {}
 
-    def input_schema(self) -> dict:
+    def input_schema(self) -> dict[str, Any]:
         return self._schema
 
-    def execute(self, input: dict) -> ToolResult:
+    def execute(self, input: dict[str, Any]) -> ToolResult:
         if not self._client.is_connected:
             return ToolResult(
                 content=f"MCP server '{self._client.name}' is not connected",
@@ -241,8 +300,8 @@ class MCPToolAdapter(Tool):
         try:
             result = self._client.call_tool(self._tool_name, input)
             return ToolResult(content=result[:self.RESULT_LIMIT])
-        except Exception as e:
-            return ToolResult(content=f"MCP tool error ({self.name}): {e}", is_error=True)
+        except Exception as exc:
+            return ToolResult(content=f"MCP tool error ({self.name}): {exc}", is_error=True)
 
     @property
     def is_read_only(self) -> bool:
@@ -258,7 +317,7 @@ class MCPManager:
 
     def __init__(self):
         self.clients: dict[str, MCPClient] = {}
-        self._config: dict = {}
+        self._config: dict[str, Any] = {}
         self._load_config()
 
     def _load_config(self) -> None:
@@ -266,32 +325,39 @@ class MCPManager:
 
         Local settings merge (override) global settings.
         """
-        merged: dict = {"servers": {}}
+        merged: dict[str, Any] = {"servers": {}}
 
         for config_path in MCP_CONFIG_PATHS:
             expanded = os.path.expanduser(config_path)
             if not os.path.exists(expanded):
                 continue
             try:
-                with open(expanded) as f:
-                    data = json.load(f)
+                with open(expanded, encoding="utf-8") as handle:
+                    data = json.load(handle)
+                if not isinstance(data, dict):
+                    continue
                 servers = data.get("servers", {})
-                merged["servers"].update(servers)
-            except Exception as e:
-                logger.warning("Failed to load MCP config %s: %s", expanded, e)
+                if isinstance(servers, dict):
+                    merged["servers"].update(servers)
+            except Exception as exc:
+                logger.warning("Failed to load MCP config %s: %s", expanded, exc)
 
         self._config = merged
 
         for server_name, server_cfg in merged.get("servers", {}).items():
+            if not isinstance(server_name, str) or not isinstance(server_cfg, dict):
+                continue
             command = server_cfg.get("command")
             if not command:
                 logger.warning("MCP server '%s' has no 'command', skipping", server_name)
                 continue
+            args = server_cfg.get("args", [])
+            env = server_cfg.get("env")
             self.clients[server_name] = MCPClient(
                 name=server_name,
-                command=command,
-                args=server_cfg.get("args", []),
-                env=server_cfg.get("env"),
+                command=str(command),
+                args=[str(arg) for arg in args] if isinstance(args, list) else [],
+                env={str(k): str(v) for k, v in env.items()} if isinstance(env, dict) else None,
             )
 
     def connect_all(self) -> list[Tool]:
@@ -304,11 +370,9 @@ class MCPManager:
                 tool_defs = client.list_tools()
                 for tool_def in tool_defs:
                     tools.append(MCPToolAdapter(client, tool_def))
-                logger.info(
-                    "MCP '%s': connected, %d tools loaded", name, len(tool_defs)
-                )
-            except Exception as e:
-                logger.warning("MCP '%s': failed to connect — %s", name, e)
+                logger.info("MCP '%s': connected, %d tools loaded", name, len(tool_defs))
+            except Exception as exc:
+                logger.warning("MCP '%s': failed to connect — %s", name, exc)
 
         return tools
 
@@ -317,19 +381,21 @@ class MCPManager:
         for client in self.clients.values():
             try:
                 client.disconnect()
-            except Exception as e:
-                logger.warning("MCP '%s': error during disconnect — %s", client.name, e)
+            except Exception as exc:
+                logger.warning("MCP '%s': error during disconnect — %s", client.name, exc)
 
-    def status(self) -> list[dict]:
+    def status(self) -> list[dict[str, Any]]:
         """Returns the status information of each server."""
-        result = []
+        result: list[dict[str, Any]] = []
         for name, client in self.clients.items():
-            result.append({
-                "name": name,
-                "command": f"{client.command} {' '.join(client.args)}".strip(),
-                "connected": client.is_connected,
-                "tools": len(client._tools),
-            })
+            result.append(
+                {
+                    "name": name,
+                    "command": f"{client.command} {' '.join(client.args)}".strip(),
+                    "connected": client.is_connected,
+                    "tools": len(client._tools),
+                }
+            )
         return result
 
 
@@ -341,9 +407,9 @@ def ensure_default_config() -> None:
 
     os.makedirs(os.path.dirname(global_config), exist_ok=True)
     try:
-        with open(global_config, "w") as f:
-            json.dump(MCP_CONFIG_TEMPLATE, f, indent=2)
-            f.write("\n")
+        with open(global_config, "w", encoding="utf-8") as handle:
+            json.dump(MCP_CONFIG_TEMPLATE, handle, indent=2)
+            handle.write("\n")
         logger.info("Created default MCP config at %s", global_config)
-    except Exception as e:
-        logger.warning("Could not create default MCP config: %s", e)
+    except Exception as exc:
+        logger.warning("Could not create default MCP config: %s", exc)

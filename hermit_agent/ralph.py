@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import os
-import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from typing import Literal
@@ -264,7 +263,6 @@ class Ralph:
     def verify(self, state: RalphState) -> VerificationResult:
         """Architect verification — check each acceptance criterion.
         Returns VerificationResult with per-criterion results."""
-        from .auto_agents import _filter_readonly_tools
         from .loop import AgentLoop
         from .permissions import PermissionMode
 
@@ -332,7 +330,7 @@ class Ralph:
                 if content.startswith("```"):
                     lines = content.split("\n")
                     content = "\n".join(
-                        l for l in lines if not l.startswith("```")
+                        line for line in lines if not line.startswith("```")
                     ).strip()
                 criteria = json.loads(content)
                 if isinstance(criteria, list) and criteria:

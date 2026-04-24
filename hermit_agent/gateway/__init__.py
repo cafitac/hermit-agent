@@ -225,11 +225,13 @@ templates = Jinja2Templates(
 )
 
 from .routes.tasks import router as tasks_router              # noqa: E402
+from .routes.interactive_sessions import router as interactive_sessions_router  # noqa: E402
 from .routes.dashboard import router as dashboard_router      # noqa: E402
 from .routes.v1 import router as v1_router                    # noqa: E402
 from .routes.anthropic import router as anthropic_router      # noqa: E402
 
 app.include_router(tasks_router)
+app.include_router(interactive_sessions_router)
 app.include_router(dashboard_router)
 app.include_router(v1_router, prefix="/v1")
 app.include_router(anthropic_router, prefix="/anthropic")

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from queue import Queue
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from ..base import Tool, ToolResult
 
@@ -30,17 +30,17 @@ class AskUserQuestionTool(Tool):
 
     def __init__(
         self,
-        question_queue: Optional[Queue] = None,
-        reply_queue: Optional[Queue] = None,
-        notify_fn=None,
-        notify_running_fn=None,
+        question_queue: Optional[Queue[Any]] = None,
+        reply_queue: Optional[Queue[Any]] = None,
+        notify_fn: Callable[[str, list[str]], None] | None = None,
+        notify_running_fn: Callable[[], None] | None = None,
     ) -> None:
         self._q_out = question_queue  # MCP: put questions here
         self._q_in = reply_queue      # MCP: get answers here
         self._notify_fn = notify_fn   # hermit-channel HTTP notification callback
         self._notify_running_fn = notify_running_fn  # terminate retry loop immediately after consuming reply
 
-    def input_schema(self) -> dict:
+    def input_schema(self) -> dict[str, Any]:
         return {
             "type": "object",
             "properties": {
@@ -57,7 +57,7 @@ class AskUserQuestionTool(Tool):
             "required": ["question"],
         }
 
-    def execute(self, input: dict) -> ToolResult:
+    def execute(self, input: dict[str, Any]) -> ToolResult:
         import json as _json
         question = input.get("question", "")
         options = input.get("options", [])
@@ -76,6 +76,8 @@ class AskUserQuestionTool(Tool):
                     self._notify_fn(question, options)
                 except Exception:
                     pass
+            if self._q_in is None:
+                return ToolResult(content="[ask_user_question misconfigured: reply queue missing]", is_error=True)
             reply = self._q_in.get()  # blocks until reply_task is called
             # Running notification right after consuming reply → stops server.ts retry loop immediately
             if self._notify_running_fn:

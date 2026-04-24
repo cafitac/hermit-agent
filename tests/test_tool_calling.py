@@ -87,7 +87,8 @@ def call_ollama(messages, tools=None):
 
 def execute_tool(name, arguments):
     """Actual tool execution (simple implementation for testing)"""
-    import subprocess, os
+    import subprocess
+    import os
 
     if name == "read_file":
         path = arguments.get("path", "")
@@ -132,7 +133,7 @@ def test_simple_chat():
 
     content = result["choices"][0]["message"]["content"]
     print(f"  Response: {content}")
-    print(f"  PASS")
+    print("  PASS")
     return True
 
 
@@ -155,7 +156,7 @@ def test_tool_calling():
     tool_calls = message.get("tool_calls", [])
 
     if not tool_calls:
-        print(f"  FAIL: No tool_calls in response")
+        print("  FAIL: No tool_calls in response")
         print(f"  Content: {message.get('content', '(empty)')[:200]}")
         return False
 
@@ -167,7 +168,7 @@ def test_tool_calling():
 
     print(f"  Tool called: {func_name}")
     print(f"  Arguments: {json.dumps(func_args)}")
-    print(f"  PASS")
+    print("  PASS")
     return True
 
 

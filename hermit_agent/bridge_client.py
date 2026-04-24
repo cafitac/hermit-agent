@@ -36,47 +36,50 @@ class GatewayClient:
         except Exception:
             return False
 
-    def create_task(self, task: str, cwd: str, model: str, max_turns: int, parent_session_id: str | None = None) -> str:
-        """POST /tasks → returns task_id."""
-        return self.create_task_payload(
-            task=task,
-            cwd=cwd,
-            model=model,
-            max_turns=max_turns,
-            parent_session_id=parent_session_id,
-        )["task_id"]
-
-    def create_task_payload(
+    def create_interactive_session_payload(
         self,
-        task: str,
+        *,
         cwd: str,
         model: str,
-        max_turns: int,
         parent_session_id: str | None = None,
+        session_id: str | None = None,
     ) -> dict:
-        """POST /tasks → returns the full response payload."""
-        body: dict = {"task": task, "cwd": cwd, "model": model, "max_turns": max_turns}
+        body: dict = {"cwd": cwd, "model": model}
         if parent_session_id is not None:
             body["parent_session_id"] = parent_session_id
+        if session_id is not None:
+            body["session_id"] = session_id
         r = self._client.post(
-            f"{self.base_url}/tasks",
+            f"{self.base_url}/internal/interactive-sessions",
             json=body,
             headers=self._headers,
         )
         r.raise_for_status()
         return r.json()
 
-    def stream_events(self, task_id: str, shutdown_event: threading.Event) -> Iterator[dict]:
-        """GET /tasks/{id}/stream → yield SSE events as dicts.
+    def send_interactive_message(self, session_id: str, message: str) -> dict:
+        r = self._client.post(
+            f"{self.base_url}/internal/interactive-sessions/{session_id}/messages",
+            json={"message": message},
+            headers=self._headers,
+        )
+        r.raise_for_status()
+        return r.json()
 
-        Terminate via shutdown_event.set() + close_stream().
-        On ReadTimeout, yields an error event then exits.
-        """
+    def get_interactive_session(self, session_id: str) -> dict:
+        r = self._client.get(
+            f"{self.base_url}/internal/interactive-sessions/{session_id}",
+            headers=self._headers,
+        )
+        r.raise_for_status()
+        return r.json()
+
+    def stream_interactive_events(self, session_id: str, shutdown_event: threading.Event) -> Iterator[dict]:
         import httpx
 
         with self._client.stream(
             "GET",
-            f"{self.base_url}/tasks/{task_id}/stream",
+            f"{self.base_url}/internal/interactive-sessions/{session_id}/stream",
             headers=self._headers,
         ) as resp:
             self._current_response = resp
@@ -92,7 +95,6 @@ class GatewayClient:
                             yield json.loads(data_str)
                         except json.JSONDecodeError:
                             pass
-                    # ignore ": ping" lines
             except httpx.ReadTimeout:
                 yield {"type": "error", "message": "SSE connection timeout (no server response)"}
             except Exception:
@@ -112,22 +114,20 @@ class GatewayClient:
             except Exception:
                 pass
 
-    def reply(self, task_id: str, message: str) -> None:
-        """POST /tasks/{id}/reply."""
+    def reply_interactive_session(self, session_id: str, message: str) -> None:
         try:
             self._client.post(
-                f"{self.base_url}/tasks/{task_id}/reply",
+                f"{self.base_url}/internal/interactive-sessions/{session_id}/reply",
                 json={"message": message},
                 headers=self._headers,
-            )
+            ).raise_for_status()
         except Exception as e:
-            logger.warning("reply failed for task %s: %s", task_id, e)
+            logger.warning("interactive reply failed for session %s: %s", session_id, e)
 
-    def cancel(self, task_id: str) -> None:
-        """DELETE /tasks/{id}."""
+    def cancel_interactive_session(self, session_id: str) -> None:
         try:
             self._client.delete(
-                f"{self.base_url}/tasks/{task_id}",
+                f"{self.base_url}/internal/interactive-sessions/{session_id}",
                 headers=self._headers,
             )
         except Exception:

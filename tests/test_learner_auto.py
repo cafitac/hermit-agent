@@ -1,17 +1,14 @@
 """Phase 1 TDD: `learner.py` auto-learned feature test."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from hermit_agent.learner import (
     AUTO_LEARNED_DIR,
-    APPROVED_DIR,
     Learner,
-    _parse_skill_file,
 )
 
 
@@ -66,7 +63,6 @@ def skill_data():
 
 def test_auto_learned_dir_constant_exists():
     """The `AUTO_LEARNED_DIR` constant must exist."""
-    from hermit_agent.learner import AUTO_LEARNED_DIR
     assert AUTO_LEARNED_DIR is not None
     assert "auto-learned" in AUTO_LEARNED_DIR
 

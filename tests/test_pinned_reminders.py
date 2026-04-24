@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 import tempfile
 
@@ -127,7 +126,6 @@ def test_compact_reinjects_pinned_content():
 
         # Directly call reminder reinjection logic after compact
         from hermit_agent.loop import _find_project_config
-        from hermit_agent.context import estimate_messages_tokens
 
         compact_level = agent.context_manager.get_compact_level(agent.messages)
         assert compact_level > 0, "compact should trigger for big messages"

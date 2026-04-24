@@ -1,8 +1,7 @@
 import os
-import pytest
 from unittest.mock import MagicMock
 
-from hermit_agent.session_store import SessionStore, cwd_slug
+from hermit_agent.session_store import cwd_slug
 
 
 def test_cli_agent_session_setup_logger_uses_session_store(tmp_path, monkeypatch):

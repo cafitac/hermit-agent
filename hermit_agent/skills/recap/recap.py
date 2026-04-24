@@ -15,6 +15,7 @@ from ...session_store import SessionStore
 
 _MIN_TURN_COUNT = 3
 _MAX_GATEWAY_LINKS = 5
+_MAX_INTERACTIVE_LINKS = 5
 
 
 def generate_recap(cwd: str, store: Optional[SessionStore] = None) -> str:
@@ -23,8 +24,8 @@ def generate_recap(cwd: str, store: Optional[SessionStore] = None) -> str:
     Picks the most recent session (any mode) for the given cwd whose
     turn_count >= 3. If none qualifies, returns 'No recent session found.'
 
-    For TUI sessions, also lists linked gateway sub-sessions
-    (parent_session_id = TUI session_id) up to _MAX_GATEWAY_LINKS.
+    For TUI sessions, also lists linked interactive sessions and linked
+    gateway sub-sessions (parent_session_id = TUI session_id).
     """
     store = store or SessionStore()
     sessions = store.list_sessions(cwd=cwd, limit=20)
@@ -51,6 +52,17 @@ def generate_recap(cwd: str, store: Optional[SessionStore] = None) -> str:
     ]
 
     if mode == 'tui':
+        interactive_subs = store.list_sessions(
+            mode='interactive', cwd=cwd, limit=_MAX_INTERACTIVE_LINKS, parent_session_id=sess_id,
+        )
+        if interactive_subs:
+            lines.append('')
+            lines.append(f'Linked interactive sessions ({len(interactive_subs)}):')
+            for i in interactive_subs:
+                lines.append(
+                    f"  - interactive {i.get('session_id', '?')}: "
+                    f"status={i.get('status', '?')} turns={i.get('turn_count', 0)}"
+                )
         gateway_subs = store.list_sessions(
             mode='gateway', cwd=cwd, limit=_MAX_GATEWAY_LINKS, parent_session_id=sess_id,
         )
@@ -62,6 +74,11 @@ def generate_recap(cwd: str, store: Optional[SessionStore] = None) -> str:
                     f"  - task {g.get('session_id', '?')}: "
                     f"status={g.get('status', '?')} turns={g.get('turn_count', 0)}"
                 )
+    elif mode == 'interactive':
+        parent = sess.get('parent_session_id')
+        if parent:
+            lines.append('')
+            lines.append(f'Parent TUI session: {parent}')
 
     return '\n'.join(lines)
 

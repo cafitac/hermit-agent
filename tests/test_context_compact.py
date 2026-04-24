@@ -16,7 +16,6 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from hermit_agent import context as ctx_mod
 from hermit_agent.context import (
     COMPACT_PROFILES,
     COMPACT_PROMPT,

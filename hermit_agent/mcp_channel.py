@@ -16,7 +16,6 @@ from mcp.types import JSONRPCMessage, JSONRPCNotification
 from .codex_app_server_bridge import get_attached_codex_app_server_transport
 from .codex_channels_adapter import (
     CodexChannelsWaitSession,
-    build_interaction,
     load_codex_channels_settings,
 )
 from .config import load_settings

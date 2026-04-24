@@ -89,10 +89,10 @@ def _resolve_source_path(explicit: str | None, cwd: str) -> str | None:
     for candidate in DEFAULT_SOURCE_CANDIDATES:
         candidates.append((base / candidate).resolve())
 
-    for candidate in candidates:
-        root = candidate.expanduser().resolve()
-        if (root / "packages" / "cli" / "dist" / "index.js").exists():
-            return str(root)
+    for candidate_path in candidates:
+        root_path = candidate_path.expanduser().resolve()
+        if (root_path / "packages" / "cli" / "dist" / "index.js").exists():
+            return str(root_path)
     return None
 
 
@@ -211,16 +211,17 @@ def build_runtime_install_command(*, settings: CodexChannelsSettings) -> list[st
 
 
 def build_runtime_local_install_command(*, settings: CodexChannelsSettings, source_path: str | None = None) -> list[str]:
-    root = source_path or settings.source_path
-    if not root:
+    root_str = source_path or settings.source_path
+    if not root_str:
         raise RuntimeError("codex-channels source path not found")
+    root_path = Path(root_str)
     return [
         "npm",
         "install",
         "--no-save",
         "--prefix",
         settings.runtime_dir,
-        *[str(Path(root) / workspace) for workspace in LOCAL_WORKSPACES],
+        *[str(root_path / workspace) for workspace in LOCAL_WORKSPACES],
     ]
 
 

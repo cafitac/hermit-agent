@@ -6,8 +6,10 @@ Phase E post-mortem recurrence prevention: immediately detect missing/circular i
 from __future__ import annotations
 
 import os
+import queue
 import sys
 import tempfile
+import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -15,6 +17,28 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 def test_all_tool_classes_importable():
     """Verify that all public symbols are importable from hermit_agent.tools."""
     from hermit_agent.tools import (
+        AskUserQuestionTool,
+        BashTool,
+        EditFileTool,
+        GlobTool,
+        GrepTool,
+        MemoryReadTool,
+        MemoryWriteTool,
+        NotebookEditTool,
+        ReadFileTool,
+        RunSkillTool,
+        RunTestsTool,
+        StateReadTool,
+        StateWriteTool,
+        SubAgentTool,
+        Tool,
+        ToolSearchTool,
+        ToolResult,
+        WriteFileTool,
+        create_default_tools,
+    )
+    # Successful import itself is verified — additionally checks types
+    imported = (
         Tool,
         ToolResult,
         BashTool,
@@ -33,11 +57,8 @@ def test_all_tool_classes_importable():
         AskUserQuestionTool,
         StateReadTool,
         StateWriteTool,
-        create_default_tools,
     )
-    # Successful import itself is verified — additionally checks types
-    assert Tool is not None
-    assert ToolResult is not None
+    assert all(obj is not None for obj in imported)
     assert callable(create_default_tools)
 
 
@@ -80,7 +101,6 @@ def test_glob_tool_basic_execution():
 def test_ask_user_question_tool_accepts_notify_fn():
     """AskUserQuestionTool must accept the notify_fn parameter (prevents TypeError recurrence)."""
     from hermit_agent.tools import AskUserQuestionTool
-    import queue
 
     q_in = queue.Queue()
     q_out = queue.Queue()
@@ -101,7 +121,6 @@ def test_ask_user_question_tool_accepts_notify_fn():
 def test_ask_user_question_tool_calls_notify_fn_on_execute():
     """In MCP mode, notify_fn must be called upon execute."""
     from hermit_agent.tools import AskUserQuestionTool
-    import queue, threading
 
     q_in = queue.Queue()
     q_out = queue.Queue()
@@ -132,10 +151,21 @@ def test_ask_user_question_tool_calls_notify_fn_on_execute():
     assert "Continue?" in notified[0]
 
 
+def test_ask_user_question_tool_errors_if_reply_queue_missing_in_bidirectional_mode():
+    from hermit_agent.tools import AskUserQuestionTool
+
+    q_out = queue.Queue()
+    tool = AskUserQuestionTool(question_queue=q_out, reply_queue=None)
+
+    result = tool.execute({"question": "Continue?", "options": ["Yes", "No"]})
+
+    assert result.is_error
+    assert "reply queue missing" in result.content
+
+
 def test_create_default_tools_with_queues_and_notify_fn():
     """No TypeError when passing question_queue/reply_queue/notify_fn to create_default_tools."""
     from hermit_agent.tools import create_default_tools
-    import queue
 
     q_in = queue.Queue()
     q_out = queue.Queue()

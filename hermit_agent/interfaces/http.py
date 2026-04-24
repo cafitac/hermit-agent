@@ -52,7 +52,8 @@ class HTTPChannel(ChannelInterface):
     ) -> None:
         super().__init__()
         self._task_id = task_id or os.environ.get("HERMIT_TASK_ID", "unknown")
-        self._url = (channel_url or os.environ.get("HERMIT_CHANNEL_URL", _DEFAULT_URL)).rstrip("/")
+        raw_url = channel_url or os.environ.get("HERMIT_CHANNEL_URL") or _DEFAULT_URL
+        self._url = raw_url.rstrip("/")
 
     # ── HTTP helpers ────────────────────────────────────────────────────────────
 

@@ -20,11 +20,10 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from hermit_agent.skills import Skill, SkillRegistry, _parse_skill
+from hermit_agent.skills import SkillRegistry, _parse_skill
 
 
 SKILL_TEMPLATE = """---

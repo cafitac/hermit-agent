@@ -8,7 +8,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from hermit_agent.llm_client import OllamaClient, LLMResponse
+from hermit_agent.llm_client import OllamaClient
 from hermit_agent.loop import AgentLoop
 from hermit_agent.permissions import PermissionMode
 from hermit_agent.tools import create_default_tools

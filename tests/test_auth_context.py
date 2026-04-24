@@ -9,7 +9,6 @@ import pytest
 
 import hermit_agent.gateway.db as db_mod
 from hermit_agent.gateway.auth import AuthContext, get_current_user
-from hermit_agent.gateway.errors import ErrorCode
 
 
 _MIGRATIONS_DIR = os.path.join(

@@ -2,11 +2,9 @@
 
 import os
 import tempfile
-import time
 import uuid
 from unittest.mock import MagicMock
 
-import pytest
 
 from hermit_agent.tools.shell.monitor import MonitorTool, _read_new
 from hermit_agent.tools.shell import bash as bash_module

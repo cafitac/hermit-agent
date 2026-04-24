@@ -79,6 +79,13 @@ DEFAULTS: dict[str, Any] = {
     # providers (z.ai, openai, …) queue instead of failing.
     "ollama_max_loaded": 1,
     "external_max_concurrent": 10,
+    # Local LLM backend auto-detection (v2-ready explicit string).
+    # Values: "mlx" | "llama_cpp" | "ollama" | None
+    "local_backend": None,
+    # Base URL for the active local backend (supersedes ollama_url when set).
+    "local_llm_url": None,
+    # Model name required for non-ollama backends (MLX, llama.cpp).
+    "local_model": None,
 }
 
 # Legacy flat fields accepted on read so pre-migration settings still
@@ -110,6 +117,9 @@ _ENV_MAP = {
     "HERMIT_OLLAMA_MAX_LOADED": "ollama_max_loaded",
     "HERMIT_EXTERNAL_MAX_CONCURRENT": "external_max_concurrent",
 }
+
+_BOOL_KEYS = ("seed_handoff", "auto_wrap")
+_INT_KEYS = ("ollama_max_loaded", "external_max_concurrent", "max_turns")
 
 
 # Model-prefix → platform slug. Duplicates gateway/routing.py rules on
@@ -267,19 +277,17 @@ def load_settings(cwd: str | None = None) -> dict[str, Any]:
             settings[setting_key] = val
 
     # 4. Coerce boolean keys (env vars arrive as strings)
-    _BOOL_KEYS = {"seed_handoff", "auto_wrap"}
     for k in _BOOL_KEYS:
-        val = settings.get(k)
-        if isinstance(val, str):
-            settings[k] = val.lower() not in {"0", "false", "no", "off"}
+        bool_val: Any = settings.get(k)
+        if isinstance(bool_val, str):
+            settings[k] = bool_val.lower() not in {"0", "false", "no", "off"}
 
     # 5. Coerce integer keys (env vars arrive as strings)
-    _INT_KEYS = {"ollama_max_loaded", "external_max_concurrent", "max_turns"}
     for k in _INT_KEYS:
-        val = settings.get(k)
-        if isinstance(val, str):
+        int_val: Any = settings.get(k)
+        if isinstance(int_val, str):
             try:
-                settings[k] = int(val)
+                settings[k] = int(int_val)
             except ValueError:
                 settings[k] = DEFAULTS[k]
 
@@ -287,8 +295,10 @@ def load_settings(cwd: str | None = None) -> dict[str, Any]:
     #    the `providers` dict. Heuristic: if the URL is z.ai, attach to
     #    the "z.ai" block; otherwise drop under "legacy" so the data is
     #    not lost. Existing `providers` entries win.
-    legacy_url = settings.pop("llm_url", "") or ""
-    legacy_key = settings.pop("llm_api_key", "") or ""
+    raw_legacy_url = settings.pop("llm_url", "")
+    raw_legacy_key = settings.pop("llm_api_key", "")
+    legacy_url = str(raw_legacy_url or "")
+    legacy_key = str(raw_legacy_key or "")
     providers = settings.get("providers") or {}
     if not isinstance(providers, dict):
         providers = {}

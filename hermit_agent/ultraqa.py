@@ -315,7 +315,7 @@ class UltraQA:
 
         if not failures:
             # Fallback: last 20 non-empty lines
-            tail = [l for l in lines if l.strip()][-20:]
+            tail = [line for line in lines if line.strip()][-20:]
             failures = ["\n".join(tail[:10])]
 
         return failures[:10]  # cap at 10

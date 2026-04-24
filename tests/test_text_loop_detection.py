@@ -76,7 +76,8 @@ def test_same_text_with_tool_calls_5_times_triggers_text_loop():
 def test_different_text_each_turn_does_not_trigger_text_loop():
     """If the text is different every turn, text_loop is not detected."""
     with tempfile.TemporaryDirectory() as tmp:
-        bash_call = lambda id: ToolCall(id=id, name="bash", arguments={"command": "echo ok"})
+        def bash_call(tool_id: str) -> ToolCall:
+            return ToolCall(id=tool_id, name="bash", arguments={"command": "echo ok"})
         llm = _ScriptedLLM([
             LLMResponse(content="First message", tool_calls=[bash_call("c1")]),
             LLMResponse(content="Second message", tool_calls=[bash_call("c2")]),

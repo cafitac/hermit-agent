@@ -9,13 +9,11 @@ failure = pre-compact only) and the 32k-model seed guard from US-003.
 """
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from unittest.mock import patch
 
 from hermit_agent.context import ContextManager
 from hermit_agent.loop import AgentLoop
-from hermit_agent.tools.base import Tool
 
 
 class _SilentLLM:

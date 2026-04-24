@@ -18,6 +18,10 @@
 │   │   + channel   │   │   use loop)  │   └────────────────┘  │
 │   │   notifier)   │   └──────┬───────┘                       │
 │   └───────┬───────┘          │                               │
+│           │            ┌─────▼────────────────────────┐      │
+│           │            │ InteractiveSessionRuntime    │      │
+│           │            │ (gateway-private TUI chat)   │      │
+│           │            └──────────┬───────────────────┘      │
 │           │            ┌─────▼──────┐                        │
 │           │            │ Tool Layer │                        │
 │           │            │  BashTool  │                        │
@@ -48,6 +52,7 @@
 | `llm_client.py` | LLM client (ollama / z.ai / OpenAI-compatible) |
 | `context.py` | Context compression (compaction) |
 | `gateway/` | FastAPI relay (rate limiting, failover, SSE to TUI) |
+| `gateway/interactive_session_runtime.py` | Gateway-private long-lived interactive session runtime for TUI continuity |
 | `tools/` | Tool implementations (Bash, Read, Write, RunTests, RunSkill, AskUser …) |
 | `tools/interaction/ask_user.py` | User-question tool that triggers the channel `notify_fn` |
 
@@ -85,6 +90,29 @@ Claude Code
   ← {status: "done", result}
 ```
 
+## Data flow — TUI interactive continuity
+
+```
+Hermit TUI (bridge.py)
+  → POST /internal/interactive-sessions
+  → gateway-private InteractiveSessionRuntime
+    → create one AgentLoop for the current TUI session
+    → persist transcript to mode='interactive'/messages.json
+  → POST /internal/interactive-sessions/{session_id}/messages
+    → same AgentLoop receives the next user turn
+    → raw transcript continuity preserved until normal ContextManager compaction
+  → GET /internal/interactive-sessions/{session_id}/stream
+    → private SSE stream for TUI updates
+  ← reply over /internal/interactive-sessions/{session_id}/reply when waiting
+```
+
+Important boundary:
+
+- TUI continuity is a **gateway-private interactive runtime** concern.
+- TUI startup itself does **not** auto-resume prior sessions; recovery is explicit via `/resume`.
+- Public `/tasks` stays task-oriented for MCP and operator flows.
+- recap/handoff is recovery UX only; it is not the primary live transcript source when an interactive session is active.
+
 ## Channel notification flow
 
 ```
@@ -100,6 +128,14 @@ AskUserQuestionTool.execute()
   → Claude Code receives the JSON-RPC frame on stdin
   → rendered inline as <channel source="hermit-channel"> block
 ```
+
+## Ownership summary
+
+- `AgentLoop` and `ContextManager` are the single shared engine and compaction policy.
+- `InteractivePrompt` is the canonical in-memory waiting model.
+- `waiting_prompt_snapshot()` is the serialized/public waiting snapshot.
+- `InteractiveSessionRuntime` owns TUI multi-turn continuity.
+- `/tasks` owns public task lifecycle only and must not grow chat/session continuity semantics.
 
 ## Related documents
 

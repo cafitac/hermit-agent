@@ -36,9 +36,9 @@ from .mcp_gateway import (
 )
 from .mcp_paths import resolve_git_cwd
 from .mcp_results import (
-    HEAD_SIZE,
-    RESULT_CAP,
-    TAIL_SIZE,
+    HEAD_SIZE as HEAD_SIZE,
+    RESULT_CAP as RESULT_CAP,
+    TAIL_SIZE as TAIL_SIZE,
     result_to_text as _result_to_text,
     truncate_result as _truncate_result,
 )
@@ -208,6 +208,8 @@ def _start_sse_bridge(task_id: str) -> _SSEBridge:
     """Start SSE bridge. Returns the bridge instance."""
     if not _GATEWAY_CLIENT:
         _init_gateway_client()
+    if _GATEWAY_CLIENT is None:
+        raise RuntimeError("Gateway client is not initialized")
 
     bridge = _SSEBridge(task_id, _GATEWAY_CLIENT)
     bridge.start()
@@ -258,6 +260,11 @@ def _build_mcp_app(host: str = "0.0.0.0", port: int = 3737):
         return original_create_init(**kw)
 
     mcp_app._mcp_server.create_initialization_options = _create_init_with_channel_caps
+
+    if _GATEWAY_URL is None or _GATEWAY_CLIENT is None:
+        _init_gateway_client()
+    if _GATEWAY_URL is None or _GATEWAY_CLIENT is None:
+        raise RuntimeError("Gateway client is not initialized")
 
     proxy = MCPGatewayProxy(
         gateway_url=_GATEWAY_URL,

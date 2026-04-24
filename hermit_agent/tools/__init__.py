@@ -6,15 +6,6 @@ paths (`from hermit_agent.tools import Tool`, etc.) remain stable — this file 
 
 from __future__ import annotations
 
-import glob
-import os
-import re
-import subprocess
-import threading
-from abc import ABC, abstractmethod  # legacy — individual tools below may still reference these
-from dataclasses import dataclass  # legacy
-from pathlib import Path
-
 from .base import (
     Tool,
     ToolResult,
@@ -41,6 +32,38 @@ from .shell import BashTool, MonitorTool
 from .skill import RunSkillTool, ToolSearchTool, _normalize_phase_key
 from .state import StateReadTool, StateWriteTool
 from .testing import RunTestsTool
+
+__all__ = [
+    "Tool",
+    "ToolResult",
+    "_check_secrets",
+    "_display_path",
+    "_expand_path",
+    "_format_content_preview",
+    "_is_safe_path",
+    "_redirect_to_worktree_path",
+    "EditFileTool",
+    "NotebookEditTool",
+    "ReadFileTool",
+    "WriteFileTool",
+    "_format_edit_diff",
+    "_shorten_path",
+    "SubAgentTool",
+    "AskUserQuestionTool",
+    "MemoryReadTool",
+    "MemoryWriteTool",
+    "GlobTool",
+    "GrepTool",
+    "BashTool",
+    "MonitorTool",
+    "RunSkillTool",
+    "ToolSearchTool",
+    "_normalize_phase_key",
+    "StateReadTool",
+    "StateWriteTool",
+    "RunTestsTool",
+    "create_default_tools",
+]
 
 
 def create_default_tools(cwd: str = ".", llm_client=None, question_queue=None, reply_queue=None, notify_fn=None, notify_running_fn=None) -> list[Tool]:

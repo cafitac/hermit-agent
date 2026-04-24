@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING
 from .agent_session import CLIAgentSession
 from .llm_client import create_llm_client
 from .permissions import PermissionMode
-from .session_store import SessionStore, _atomic_write_json
+from .session_store import SessionStore
 from .tui_render import compact_count_label
 
 if TYPE_CHECKING:
@@ -136,17 +136,12 @@ def run_single(agent: AgentLoop, message: str):
             print(response)
         if agent.messages:
             try:
-                _atomic_write_json(
-                    os.path.join(sd, 'messages.json'),
-                    agent.messages,
+                store.update_transcript_state(
+                    sd,
+                    messages=agent.messages,
+                    turn_count=agent.turn_count,
+                    status='completed',
                 )
-                # Extract preview from first user message
-                preview = ''
-                for msg in agent.messages:
-                    if msg.get('role') == 'user' and isinstance(msg.get('content'), str):
-                        preview = msg['content'][:80]
-                        break
-                store.update_meta(sd, status='completed', turn_count=agent.turn_count, preview=preview)
             except Exception:
                 pass
     except KeyboardInterrupt:
@@ -274,16 +269,12 @@ def _run_message_mode(*, args, message: str) -> None:
                     cwd=args.cwd,
                     model=llm.model,
                 )
-                _atomic_write_json(
-                    os.path.join(sd, 'messages.json'),
-                    session._agent.messages,
+                store.update_transcript_state(
+                    sd,
+                    messages=session._agent.messages,
+                    turn_count=session._agent.turn_count,
+                    status='completed',
                 )
-                preview = ''
-                for msg in session._agent.messages:
-                    if msg.get('role') == 'user' and isinstance(msg.get('content'), str):
-                        preview = msg['content'][:80]
-                        break
-                store.update_meta(sd, status='completed', turn_count=session._agent.turn_count, preview=preview)
             except Exception:
                 pass
     except KeyboardInterrupt:

@@ -2,7 +2,6 @@
 
 import os
 import sys
-import json
 import tempfile
 
 # Add project root to path
@@ -10,19 +9,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from hermit_agent.tools import (
     BashTool, ReadFileTool, WriteFileTool, EditFileTool,
-    GlobTool, GrepTool, NotebookEditTool, ToolSearchTool,
-    _expand_path, _is_safe_path, _check_secrets, ToolResult,
-    create_default_tools,
+    _expand_path, _is_safe_path, _check_secrets, create_default_tools,
 )
 from hermit_agent.permissions import (
     PermissionChecker, PermissionMode, PermissionBehavior,
     classify_bash_safety,
 )
-from hermit_agent.context import ContextManager, estimate_tokens, estimate_messages_tokens
+from hermit_agent.context import ContextManager, estimate_tokens
 from hermit_agent.memory import MemorySystem
 from hermit_agent.skills import SkillRegistry, Skill
-from hermit_agent.session import SessionMeta
-from hermit_agent.interview import ClarityScore, InterviewState, ProjectType
+from hermit_agent.interview import ClarityScore, ProjectType
 
 
 def test_bash_tool_basic():

@@ -9,7 +9,7 @@ import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from hermit_agent.session_logger import SessionLogger, SubAgentLogger
+from hermit_agent.session_logger import SessionLogger
 
 
 def _make_session_dir(tmp: str) -> str:

@@ -11,7 +11,6 @@ fallback: if YAML is missing or corrupt → all guardrails active (regression-sa
 
 from __future__ import annotations
 
-import os
 import threading
 from pathlib import Path
 from typing import Any

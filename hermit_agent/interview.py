@@ -13,7 +13,6 @@ from __future__ import annotations
 import json
 import os
 import re
-import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
@@ -397,7 +396,7 @@ class DeepInterviewer:
             lines.append(f"| Context | {s.context:.2f} | {'Clear' if s.context >= 0.9 else ''} |")
 
         if ambiguity <= state.threshold:
-            lines.append(f"\nClarity threshold met! Ready to proceed.")
+            lines.append("\nClarity threshold met! Ready to proceed.")
         else:
             lines.append(f"\nNext question targets: {weakest}")
 

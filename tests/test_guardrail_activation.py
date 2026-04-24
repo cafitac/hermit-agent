@@ -8,12 +8,10 @@ Verification items:
 - corrupted YAML → retains previous value
 """
 
-import os
 import tempfile
 import threading
 from pathlib import Path
 
-import pytest
 
 from hermit_agent.guardrails.engine import GuardrailEngine, _eval_condition, _eval_activate_when
 

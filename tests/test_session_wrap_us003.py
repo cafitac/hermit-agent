@@ -18,9 +18,8 @@ from __future__ import annotations
 import json
 import os
 import sys
-import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -152,7 +151,7 @@ def test_mark_consumed_creates_file(tmp_path):
     _mark_consumed(tmp_path, "new.md")
     consumed_file = tmp_path / ".consumed"
     assert consumed_file.is_file()
-    lines = [l for l in consumed_file.read_text().splitlines() if l.strip()]
+    lines = [line for line in consumed_file.read_text().splitlines() if line.strip()]
     assert len(lines) == 1
     rec = json.loads(lines[0])
     assert rec["file"] == "new.md"
@@ -164,9 +163,9 @@ def test_mark_consumed_appends(tmp_path):
     _mark_consumed(tmp_path, "first.md")
     _mark_consumed(tmp_path, "second.md")
     consumed_file = tmp_path / ".consumed"
-    lines = [l for l in consumed_file.read_text().splitlines() if l.strip()]
+    lines = [line for line in consumed_file.read_text().splitlines() if line.strip()]
     assert len(lines) == 2
-    names = {json.loads(l)["file"] for l in lines}
+    names = {json.loads(line)["file"] for line in lines}
     assert names == {"first.md", "second.md"}
 
 
@@ -270,8 +269,6 @@ def test_seed_not_injected_on_casual_path(tmp_path, monkeypatch):
     # Override classify to return a casual response (not NEED_TOOLS)
     agent.llm.chat.return_value = LLMResponse(content="Sure, the answer is 42.", tool_calls=[])
 
-
-    captured = {}
 
     def fake_log_outcome():
         pass

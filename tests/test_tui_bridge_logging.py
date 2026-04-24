@@ -1,13 +1,10 @@
-import json
 import os
-import pytest
-from unittest.mock import patch, MagicMock
 
 
 def test_bridge_logs_user_input_and_done_event(tmp_path, monkeypatch):
     monkeypatch.setattr('os.path.expanduser', lambda p: str(tmp_path / p.lstrip('~/'))
                         if p.startswith('~') else os.path.expanduser(p))
-    from hermit_agent.session_store import SessionStore, cwd_slug
+    from hermit_agent.session_store import SessionStore
     from hermit_agent.session_logger import SessionLogger
 
     store = SessionStore()

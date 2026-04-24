@@ -1,10 +1,8 @@
 """profile_review CLI test (Phase 2)."""
 
 import json
-import tempfile
 from pathlib import Path
 
-import pytest
 
 from hermit_agent.profile_review import main, _format_diff
 

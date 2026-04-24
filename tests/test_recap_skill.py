@@ -1,8 +1,4 @@
-import json
-import os
 import time
-import pytest
-from pathlib import Path
 
 
 def _seed_session(store, mode, sid, cwd, turn_count, preview='', parent=None):
@@ -56,7 +52,7 @@ def test_recap_includes_linked_gateway_subsessions(tmp_path):
     from hermit_agent.session_store import SessionStore
     from hermit_agent.skills.recap import generate_recap
     store = SessionStore(root=str(tmp_path / 'logs'), legacy_root=str(tmp_path / 'legacy'))
-    tui_sd = _seed_session(store, 'tui', 'tui-parent', '/x', turn_count=4, preview='tui')
+    _seed_session(store, 'tui', 'tui-parent', '/x', turn_count=4, preview='tui')
     _seed_session(store, 'gateway', 'gw-1', '/x', turn_count=1, parent='tui-parent')
     _seed_session(store, 'gateway', 'gw-2', '/x', turn_count=1, parent='tui-parent')
     _seed_session(store, 'gateway', 'gw-other', '/x', turn_count=1, parent='other-tui')
@@ -65,3 +61,36 @@ def test_recap_includes_linked_gateway_subsessions(tmp_path):
     assert 'gw-1' in out
     assert 'gw-2' in out
     assert 'gw-other' not in out
+
+
+def test_recap_includes_linked_interactive_sessions_for_tui(tmp_path):
+    from hermit_agent.session_store import SessionStore
+    from hermit_agent.skills.recap import generate_recap
+
+    store = SessionStore(root=str(tmp_path / 'logs'), legacy_root=str(tmp_path / 'legacy'))
+    _seed_session(store, 'interactive', 'ix-1', '/x', turn_count=6, preview='interactive one', parent='tui-parent')
+    _seed_session(store, 'interactive', 'ix-2', '/x', turn_count=2, preview='interactive two', parent='tui-parent')
+    _seed_session(store, 'interactive', 'ix-other', '/x', turn_count=9, preview='interactive other', parent='other-tui')
+    time.sleep(1.1)
+    _seed_session(store, 'tui', 'tui-parent', '/x', turn_count=4, preview='tui')
+
+    out = generate_recap('/x', store=store)
+
+    assert 'Linked interactive sessions' in out
+    assert 'ix-1' in out
+    assert 'ix-2' in out
+    assert 'ix-other' not in out
+
+
+def test_recap_interactive_session_shows_parent_tui(tmp_path):
+    from hermit_agent.session_store import SessionStore
+    from hermit_agent.skills.recap import generate_recap
+
+    store = SessionStore(root=str(tmp_path / 'logs'), legacy_root=str(tmp_path / 'legacy'))
+    _seed_session(store, 'tui', 'tui-parent', '/x', turn_count=3, preview='tui')
+    _seed_session(store, 'interactive', 'ix-parented', '/x', turn_count=6, preview='interactive', parent='tui-parent')
+
+    out = generate_recap('/x', store=store)
+
+    assert 'mode: interactive' in out
+    assert 'Parent TUI session: tui-parent' in out

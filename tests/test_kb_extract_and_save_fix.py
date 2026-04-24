@@ -1,5 +1,4 @@
 import inspect
-import pytest
 
 
 def test_loop_does_not_call_nonexistent_extract_and_save():

@@ -4,9 +4,8 @@ Common flow: setup → prepare_prompt → execute → teardown
   - SessionLogger, Learner, skill injection, and post-run stats are shared across all modes.
   - Tool initialization, agent execution strategy, and error/completion notifications are implemented by subclasses.
 
-Implementations (3 types):
+Implementations (2 types):
   MCPAgentSession    — MCP server mode (background thread, channel notify, cancel event)
-  BridgeAgentSession — React+Ink UI mode (JSON messages, auto pytest+learn, KB update)
   CLIAgentSession    — Direct terminal execution mode (synchronous, streaming)
 """
 
@@ -16,10 +15,8 @@ import threading
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Callable
 
-from .bridge_learning import schedule_bridge_post_task_learning
 from .session_logging import attach_session_logger
 from .session_support import infer_context_size as _infer_context_size
-from .session_support import run_pytest as _run_pytest
 
 if TYPE_CHECKING:
     from .llm_client import LLMClientBase
@@ -40,6 +37,9 @@ class AgentSessionBase(ABC):
       _on_success()               — Notification/post-processing on success
       _on_error()                 — Notification/post-processing on error
     """
+
+    _session_mode = "single"
+    _session_kind: str | None = None
 
     def __init__(
         self,
@@ -108,6 +108,8 @@ class AgentSessionBase(ABC):
 
     def _setup_session_logger(self) -> None:
         """Inject SessionLogger into LLM + emitter."""
+        if self._agent is None:
+            return
         try:
             attach_session_logger(
                 llm=self.llm,
@@ -320,66 +322,7 @@ class MCPAgentSession(AgentSessionBase):
 
 
 # ---------------------------------------------------------------------------
-# Type 2: Bridge (React+Ink UI) mode
-# ---------------------------------------------------------------------------
-
-class BridgeAgentSession(AgentSessionBase):
-    """AgentSession for React+Ink UI (bridge.py) mode.
-
-    Features:
-    - Communicates with UI via JSON messages (_send_fn)
-    - After completion: auto pytest + Learner recording + KB update (_auto_pytest_and_learn)
-    - emitter event handler connection
-    """
-
-    _session_mode = 'bridge'
-    _session_kind = 'tui'
-
-    def __init__(
-        self,
-        llm: "LLMClientBase",
-        cwd: str,
-        permission_mode: "PermissionMode",
-        send_fn: Callable,                  # Send JSON messages to UI
-        event_handler_fn: Callable | None = None,
-        max_turns: int = 100,
-        max_context_tokens: int = 32000,
-        streaming: bool = True,
-    ):
-        super().__init__(
-            llm=llm,
-            cwd=cwd,
-            permission_mode=permission_mode,
-            max_turns=max_turns,
-            max_context_tokens=max_context_tokens,
-        )
-        self._send_fn = send_fn
-        self._event_handler_fn = event_handler_fn
-        self._streaming = streaming
-
-    def _setup_tools(self) -> list:
-        from .tools import create_default_tools
-        return create_default_tools(cwd=self.cwd, llm_client=self.llm)
-
-    def _setup_agent(self) -> None:
-        super()._setup_agent()
-        assert self._agent is not None
-        self._agent.streaming = self._streaming
-        if self._event_handler_fn and hasattr(self._agent, "emitter"):
-            self._agent.emitter.set_handler(self._event_handler_fn)
-
-    def _execute(self, prompt: str) -> str | None:
-        assert self._agent is not None
-        return self._agent.run(prompt)
-
-    def _on_success(self, result: str | None) -> None:
-        """After completion: auto pytest + Learner + KB update."""
-        assert self._agent is not None
-        schedule_bridge_post_task_learning(self._agent, session_kind=getattr(self, "_session_kind", None))
-
-
-# ---------------------------------------------------------------------------
-# Type 3: Direct CLI terminal execution mode
+# Type 2: Direct CLI terminal execution mode
 # ---------------------------------------------------------------------------
 
 class CLIAgentSession(AgentSessionBase):
@@ -389,7 +332,7 @@ class CLIAgentSession(AgentSessionBase):
     - Synchronous execution (direct call, blocking)
     - Optional CLIChannel connection (--channel cli flag)
     - streaming: uses AgentLoop streaming mode
-    - Self-learning included (verify_cmd only, no pytest unlike BridgeAgentSession)
+    - Self-learning included (verify_cmd only)
     """
 
     _session_mode = 'single'

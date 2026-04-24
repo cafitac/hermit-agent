@@ -8,7 +8,6 @@ Redirect only in this case; other edits outside the cwd are allowed as-is for CC
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 import sys
 import tempfile

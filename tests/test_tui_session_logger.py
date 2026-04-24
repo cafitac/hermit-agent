@@ -1,6 +1,4 @@
-import os
 import json
-import pytest
 from hermit_agent.session_logger import SessionLogger
 
 

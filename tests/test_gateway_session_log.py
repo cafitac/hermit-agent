@@ -1,7 +1,5 @@
 import json
 import os
-import pytest
-from pathlib import Path
 from unittest.mock import patch
 
 
@@ -19,7 +17,7 @@ def test_gateway_session_log_creates_meta_and_events(tmp_path):
     from hermit_agent.session_store import cwd_slug
     with patch('hermit_agent.session_store.os.path.expanduser', _expanduser_factory(tmp_path)):
         from hermit_agent.gateway.session_log import GatewaySessionLog
-        log = GatewaySessionLog(task_id='t001', cwd='/x/y', model='glm-5.1')
+        GatewaySessionLog(task_id='t001', cwd='/x/y', model='glm-5.1')
         expected = tmp_path / '.hermit' / 'logs' / 'gateway' / cwd_slug('/x/y') / 't001'
         assert (expected / 'meta.json').exists()
         assert (expected / 'events.jsonl').exists()

@@ -1,8 +1,6 @@
 import datetime
 import json
 import os
-import time
-import pytest
 
 
 def _seed(store, mode, sid, cwd, turn_count, updated_at):

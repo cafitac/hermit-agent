@@ -13,18 +13,22 @@ def build_ready_payload(*, model: str, cwd: str, version: str, commands: dict[st
     }
 
 
-def build_gateway_task_request(
+def build_interactive_session_request(
     *,
-    task: str,
     cwd: str,
     model: str,
-    max_turns: int,
     parent_session_id: str,
+    session_id: str | None = None,
 ) -> dict:
-    return {
-        "task": task,
+    payload: dict = {
         "cwd": cwd,
         "model": model,
-        "max_turns": max_turns,
         "parent_session_id": parent_session_id,
     }
+    if session_id is not None:
+        payload["session_id"] = session_id
+    return payload
+
+
+def build_interactive_message_request(*, message: str) -> dict:
+    return {"message": message}

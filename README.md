@@ -75,7 +75,7 @@ Everything else in the repo is there to make that pattern work cleanly:
 - **Model routing by name + auto chain** — explicit names route by provider (`gpt-*-codex` / `gpt-5.4` → Codex, `glm-*` → z.ai, `name:tag` → local ollama); omitted model follows `routing.priority_models`
 - **Permission floor** — `.env`, `*.pem`, `*.key`, `credentials*` blocked across every mode (even YOLO)
 - **Self-learning skills** with model-aware lifecycles (validated-on models, 30-day auto-deprecation, `needs_review` on model swap)
-- **Optional standalone TUI** (React + Ink) for when you want to use Hermit without Claude Code in the loop
+- **Optional standalone TUI** (React + Ink) with gateway-private interactive sessions, so multi-turn chat continuity survives until normal compaction without widening the public MCP task API
 
 ## How is this different from …?
 
@@ -121,49 +121,6 @@ Requirements for the npm-first path:
 
 - Node.js 20+
 - Python 3.11+
-
-### Source checkout
-
-```bash
-git clone https://github.com/cafitac/hermit-agent.git
-cd hermit-agent
-./install.sh
-```
-
-Or, once installed from PyPI / editable mode, use the guided installer entrypoint:
-
-```bash
-pip install cafitac-hermit-agent
-hermit install
-```
-
-PyPI distribution name: `cafitac-hermit-agent`
-Installed CLI commands remain: `hermit`, `hermit-agent`, `hermit-gateway`, `hermit-setup`
-
-`hermit install` is the product-facing setup path: it asks a few yes/no questions, repairs or creates the local gateway API key, ensures the local gateway is running, offers MCP registration in `~/.claude.json`, and can install or refresh the Codex channels path without making the user edit config files manually.
-
-What the installer does automatically:
-
-- Creates a project-local `.venv`, bootstraps `uv` inside it, and runs `uv pip install -e '.[test]'`.
-- Writes a default `~/.hermit/settings.json` (model `glm-5.1`, gateway URL `http://localhost:8765`, etc.).
-- **Prompts `Generate a random gateway API key now?`** If you accept, it applies the schema in `hermit_agent/gateway/migrations/001_initial.sql` to `~/.hermit/gateway.db`, inserts a freshly-generated `hermit-mcp-<random>` key, and patches `gateway_api_key` in your settings file.
-- **Prompts `Pull a local coding model via ollama?`** (skipped automatically if `ollama` is not installed). Accepting pulls `qwen3-coder:30b` (~18 GB).
-- Symlinks the four bundled `-hermit` slash commands into `~/.claude/commands/`.
-- **Prompts `Register Hermit MCP server in ~/.claude.json?`** with three choices: (a) project-specific, (b) user-wide, (c) skip. On accept, merges a `hermit-channel` stdio entry pointing at `./bin/mcp-server.sh` into `~/.claude.json` (backup: `~/.claude.json.backup-<ts>`). Safe on re-runs — an identical entry is detected and left alone. That launcher now auto-starts the local gateway on demand (and skips the start when the gateway is already healthy).
-- **Prompts `Add hermit alias to <rc-file>?`** so you can run `hermit` from any shell. If an existing alias points to an old path (e.g. before the `bin/` move), the installer offers to update it.
-- Prints any "Pending manual steps" at the end — e.g. a reminder to launch Claude Code with `--dangerously-load-development-channels server:hermit-channel`.
-
-Useful flags:
-
-```bash
-./install.sh --no-api-key        # skip the API key prompt (use placeholder)
-./install.sh --no-ollama         # skip the ollama prompt
-./install.sh --skip-venv         # reuse an existing .venv
-./install.sh --no-mcp-register   # skip the ~/.claude.json registration prompt
-./install.sh --no-alias          # skip the shell-rc alias prompt
-```
-
-Every prompt is idempotent: re-running the installer detects the existing API key, MCP entry, alias, and ollama model and reports them unchanged instead of duplicating.
 
 ### Codex async-interaction path (experimental)
 
@@ -272,6 +229,13 @@ Claude interviews you about the ticket, writes the plan, and delegates the imple
 ./bin/hermit.sh "fix the flaky test in tests/test_api.py"   # one-shot CLI
 ./bin/hermit.sh                                              # TUI (needs HERMIT_UI_DIR)
 ```
+
+The standalone TUI now keeps conversation continuity through a gateway-private interactive-session runtime. In practice that means:
+
+- turn 2 reuses the same live Hermit transcript instead of creating a fresh public task
+- direct-answer turns are persisted into the interactive transcript
+- TUI startup begins with a fresh session; use `/resume` explicitly when you want to recover a previous interactive session
+- recap is recovery/reference UX only, not the primary live transcript path
 
 ### Two API endpoints
 

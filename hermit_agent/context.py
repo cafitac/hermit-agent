@@ -290,10 +290,10 @@ def _restore_active_skills(messages: list[dict], max_chars_per_skill: int = 5000
         content = msg.get("content", "")
         if isinstance(content, str) and "Execute the following skill" in content:
             # Attempt to extract skill name
-            for skill in registry.list_skills():
-                if skill.content and skill.content[:50] in content:
-                    if skill.name not in active_skill_names:
-                        active_skill_names.append(skill.name)
+            for listed_skill in registry.list_skills():
+                if listed_skill.content and listed_skill.content[:50] in content:
+                    if listed_skill.name not in active_skill_names:
+                        active_skill_names.append(listed_skill.name)
 
     if not active_skill_names:
         return ""
@@ -301,9 +301,9 @@ def _restore_active_skills(messages: list[dict], max_chars_per_skill: int = 5000
     sections: list[str] = []
     total = 0
     for name in active_skill_names[:5]:  # Up to 5
-        skill = registry.get(name)
-        if skill and skill.content:
-            chunk = skill.content[:max_chars_per_skill]
+        restored_skill = registry.get(name)
+        if restored_skill and restored_skill.content:
+            chunk = restored_skill.content[:max_chars_per_skill]
             if total + len(chunk) > max_total:
                 break
             sections.append(f"[Restored skill: {name}]\n{chunk}")
@@ -378,7 +378,7 @@ class ContextManager:
         if level == 3:
             return self._collapse_compact(messages)
         if level == 4:
-            if self.llm:
+            if self.llm is not None:
                 return self._llm_compact(messages)
             return self._simple_compact(messages)
         return messages
@@ -550,7 +550,11 @@ class ContextManager:
 
             summary_request = [{"role": "user", "content": summary_request_content}]
 
-            response = self.llm.chat(
+            llm = self.llm
+            if llm is None:
+                return self._simple_compact(messages)
+
+            response = llm.chat(
                 messages=summary_request,
                 system="You are a conversation summarizer. Be concise and factual.",
             )

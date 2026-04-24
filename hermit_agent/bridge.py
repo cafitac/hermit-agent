@@ -47,17 +47,27 @@ try:
 except Exception:
     VERSION = "0.0.0"
 
-from .channels_core.event_adapters import bridge_messages_from_sse_event
-from .bridge_commands import build_bridge_commands
-from .bridge_payloads import build_gateway_task_request, build_ready_payload
-from .bridge_runtime import BridgeRuntime
-from .bridge_services import load_auto_recap_text, resolve_display_model, submit_bridge_task
+from .channels_core.event_adapters import bridge_messages_from_sse_event  # noqa: E402
+from .bridge_commands import build_bridge_commands  # noqa: E402
+from .bridge_payloads import (  # noqa: E402
+    build_interactive_message_request,
+    build_interactive_session_request,
+    build_ready_payload,
+)
+from .bridge_runtime import BridgeRuntime  # noqa: E402
+from .bridge_services import (  # noqa: E402
+    ensure_interactive_session,
+    resolve_display_model,
+    sync_tui_session_meta_from_interactive,
+    submit_interactive_turn,
+)
 
 
 def _send(msg: dict) -> None:
     """Send JSON message to UI. Always uses the original stdout."""
-    _real_stdout.write(json.dumps(msg, ensure_ascii=False) + "\n")
-    _real_stdout.flush()
+    stream = _real_stdout or sys.stdout
+    stream.write(json.dumps(msg, ensure_ascii=False) + "\n")
+    stream.flush()
 
 
 def _dispatch_sse_to_tui(event: dict) -> None:
@@ -96,23 +106,10 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
     import uuid as _uuid
     from .session_store import SessionStore
     from .session_logger import SessionLogger as _SessionLogger
+    store = SessionStore()
     session_id = _uuid.uuid4().hex[:12]
-    session_dir = SessionStore().create_session(mode='tui', session_id=session_id, cwd=args.cwd)
+    session_dir = store.create_session(mode='tui', session_id=session_id, cwd=args.cwd)
     session_logger = _SessionLogger(session_dir=session_dir)
-
-    # ── Auto-recap on stale TUI startup ──
-    try:
-        from .skills.recap import should_auto_recap, generate_recap
-        recap_text = load_auto_recap_text(
-            cwd=args.cwd,
-            should_auto_recap=should_auto_recap,
-            generate_recap=generate_recap,
-        )
-        if recap_text:
-            _send({"type": "text", "content": recap_text})
-    except Exception:
-        pass
-
 
     def _stdin_reader() -> None:
         for raw_line in sys.stdin:
@@ -124,9 +121,9 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
             except json.JSONDecodeError:
                 continue
 
-    def _sse_reader(task_id: str) -> None:
-        for event in client.stream_events(task_id, runtime.sse_shutdown):
-            runtime.msg_queue.put({"_source": "sse", **event})
+    def _interactive_sse_reader(session_id: str) -> None:
+        for event in client.stream_interactive_events(session_id, runtime.sse_shutdown):
+            runtime.msg_queue.put({"_source": "interactive_sse", **event})
             if event.get("type") in ("done", "error", "cancelled"):
                 break
 
@@ -140,8 +137,12 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
             continue
 
         # Handle SSE events
-        if msg.get("_source") == "sse":
+        if msg.get("_source") in {"sse", "interactive_sse"}:
             t = msg.get("type")
+            if t in ("waiting", "permission_ask"):
+                runtime.mark_interactive_waiting()
+            elif t in ("reply_ack", "done", "error", "cancelled"):
+                runtime.clear_interactive_waiting()
             if t == "done":
                 # done SSE result field → TUI text event (final response)
                 result_text = (msg.get("result") or "").strip()
@@ -149,12 +150,24 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
                 if result_text:
                     _send({"type": "text", "content": result_text})
                 _send({"type": "stream_end"})
-                runtime.clear_current_task()
+                sync_tui_session_meta_from_interactive(
+                    store=store,
+                    tui_session_dir=session_dir,
+                    interactive_session_id=runtime.current_interactive_session_id,
+                    cwd=args.cwd,
+                    status="completed",
+                )
                 _send({"type": "done"})
             elif t in ("error", "cancelled"):
                 _dispatch_sse_to_tui(msg)
                 session_logger.on_send(msg)
-                runtime.clear_current_task()
+                sync_tui_session_meta_from_interactive(
+                    store=store,
+                    tui_session_dir=session_dir,
+                    interactive_session_id=runtime.current_interactive_session_id,
+                    cwd=args.cwd,
+                    status="completed" if t == "cancelled" else "error",
+                )
                 _send({"type": "done"})
             else:
                 _dispatch_sse_to_tui(msg)
@@ -165,28 +178,36 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
         msg_type = msg.get("type", "")
 
         if msg_type == "quit":
-            if runtime.current_task_id:
-                client.cancel(runtime.current_task_id)
             client.close()
-            try:
-                SessionStore().update_meta(session_dir, status='completed')
-            except Exception:
-                pass
+            sync_tui_session_meta_from_interactive(
+                store=store,
+                tui_session_dir=session_dir,
+                interactive_session_id=runtime.current_interactive_session_id,
+                cwd=args.cwd,
+                status='completed',
+            )
             _send({"type": "done"})
             break
 
         elif msg_type == "interrupt":
-            if runtime.current_task_id:
+            if runtime.current_interactive_session_id:
                 runtime.sse_shutdown.set()
                 client.close_stream()
-                client.cancel(runtime.current_task_id)
-                runtime.clear_current_task()
+                client.cancel_interactive_session(runtime.current_interactive_session_id)
+                runtime.clear_interactive_waiting()
+                sync_tui_session_meta_from_interactive(
+                    store=store,
+                    tui_session_dir=session_dir,
+                    interactive_session_id=runtime.current_interactive_session_id,
+                    cwd=args.cwd,
+                    status='completed',
+                )
             _send({"type": "done"})
 
         elif msg_type == "permission_response":
-            if runtime.current_task_id:
+            if runtime.current_interactive_session_id and runtime.interactive_waiting:
                 choice = msg.get("choice", "no")
-                client.reply(runtime.current_task_id, choice)
+                client.reply_interactive_session(runtime.current_interactive_session_id, choice)
 
         elif msg_type == "permission_mode":
             # In gateway mode, permission_mode changes cannot be forwarded via reply
@@ -202,44 +223,52 @@ def _run_gateway_mode(args: argparse.Namespace) -> None:
             session_logger.on_user_input(text)  # capture user message even if gateway fails
 
             # user_input in waiting state → processed as reply
-            if runtime.current_task_id:
-                client.reply(runtime.current_task_id, text)
+            if runtime.current_interactive_session_id and runtime.interactive_waiting:
+                client.reply_interactive_session(runtime.current_interactive_session_id, text)
                 continue
 
-            # Create task (including slash commands — handled by gateway)
             try:
-                data = submit_bridge_task(
+                session_data = ensure_interactive_session(
                     client=client,
-                    task=text,
                     cwd=args.cwd,
                     model=args.model,
-                    max_turns=args.max_turns,
                     parent_session_id=session_id,
-                    build_gateway_task_request=build_gateway_task_request,
+                    session_id=runtime.current_interactive_session_id,
+                    build_interactive_session_request=build_interactive_session_request,
                 )
             except Exception as e:
-                _send({"type": "error", "message": f"Task creation failed: {e}"})
+                _send({"type": "error", "message": f"Interactive session init failed: {e}"})
                 _send({"type": "done"})
                 continue
 
-            # Immediately processed commands (e.g., slash commands)
-            if data.get("status") == "done" and data.get("task_id") == "instant":
-                result = (data.get("result") or "").strip()
-                if result:
-                    _send({"type": "text", "content": result})
+            runtime.current_interactive_session_id = session_data["session_id"]
+            sync_tui_session_meta_from_interactive(
+                store=store,
+                tui_session_dir=session_dir,
+                interactive_session_id=runtime.current_interactive_session_id,
+                cwd=args.cwd,
+                status='active',
+            )
+            try:
+                submit_interactive_turn(
+                    client=client,
+                    session_id=runtime.current_interactive_session_id,
+                    message=text,
+                    build_interactive_message_request=build_interactive_message_request,
+                )
+            except Exception as e:
+                _send({"type": "error", "message": f"Interactive turn failed: {e}"})
                 _send({"type": "done"})
                 continue
 
-            task_id = data["task_id"]
-            runtime.current_task_id = task_id
-            # Create a new Event for each task. Reasons for not reusing the previous Event:
-            # Sharing the same Event while the previous reader is shutting down causes a false early-exit.
-            # The previous reader naturally exits upon receiving done/error/cancelled,
-            # and the GC cleans up the previous Event.
             runtime.reset_sse_shutdown()
-
-            sse_thread = threading.Thread(target=_sse_reader, args=(task_id,), daemon=True)
+            sse_thread = threading.Thread(
+                target=_interactive_sse_reader,
+                args=(runtime.current_interactive_session_id,),
+                daemon=True,
+            )
             sse_thread.start()
+            continue
 
 
 def main() -> None:

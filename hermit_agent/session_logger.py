@@ -16,7 +16,6 @@ import json
 import os
 import threading
 import time
-import uuid
 
 
 def _now_iso() -> str:

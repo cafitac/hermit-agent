@@ -1,7 +1,6 @@
 """Verify that SubAgentTool._make_llm inherits base_url from the parent LLM client."""
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from hermit_agent.tools.agent.subagent import SubAgentTool
 
@@ -60,7 +59,7 @@ class TestSubagentInheritsBaseUrl:
                 "hermit_agent.llm_client.create_llm_client",
                 side_effect=fake_create_llm_client,
             ):
-                child_llm = tool._make_llm("some-model")
+                tool._make_llm("some-model")
 
         assert captured_kwargs["base_url"] == parent_base_url
 

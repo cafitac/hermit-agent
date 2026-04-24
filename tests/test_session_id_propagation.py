@@ -1,5 +1,4 @@
 import inspect
-import pytest
 
 
 def test_task_request_accepts_parent_session_id():

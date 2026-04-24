@@ -41,14 +41,37 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
-def _atomic_write_json(path: str, data: dict) -> None:
+def _atomic_write_json(path: str, data: Any) -> None:
     """Write JSON to *path* atomically via tmp+rename."""
-    tmp = path + '.tmp'
-    with open(tmp, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-        f.flush()
-        os.fsync(f.fileno())
-    os.rename(tmp, path)
+    import uuid as _uuid
+    tmp = f"{path}.{_uuid.uuid4().hex}.tmp"
+    try:
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        os.rename(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def derive_preview(messages: list[dict], max_chars: int = 80) -> str:
+    """Extract a short preview from the first user message."""
+    for msg in messages:
+        if msg.get("role") == "user" and isinstance(msg.get("content"), str):
+            content = msg["content"]
+            content = re.sub(
+                r"^(?:<(?:context|session-handoff|learned_feedback)>\n.*?\n</(?:context|session-handoff|learned_feedback)>\n\n)+",
+                "",
+                content,
+                flags=re.DOTALL,
+            )
+            return content[:max_chars]
+    return ""
 
 
 def _parse_updated_at(meta: dict) -> float:
@@ -57,9 +80,11 @@ def _parse_updated_at(meta: dict) -> float:
     if isinstance(val, (int, float)):
         return float(val)
     # ISO8601 string
+    if not isinstance(val, str):
+        return 0.0
     try:
         return datetime.strptime(val, '%Y-%m-%dT%H:%M:%SZ').timestamp()
-    except (ValueError, TypeError):
+    except ValueError:
         return 0.0
 
 
@@ -110,6 +135,30 @@ class SessionStore:
         meta['updated_at'] = _utc_now_iso()
         _atomic_write_json(os.path.join(session_dir, 'meta.json'), meta)
 
+    def write_messages(self, session_dir: str, messages: list[dict]) -> str:
+        """Persist canonical transcript payload to messages.json."""
+        path = os.path.join(session_dir, "messages.json")
+        _atomic_write_json(path, messages)
+        return path
+
+    def update_transcript_state(
+        self,
+        session_dir: str,
+        *,
+        messages: list[dict],
+        turn_count: int,
+        status: str | None = None,
+    ) -> None:
+        """Persist transcript and keep meta preview/turn-count in sync."""
+        self.write_messages(session_dir, messages)
+        meta_fields: dict[str, Any] = {
+            "turn_count": turn_count,
+            "preview": derive_preview(messages),
+        }
+        if status is not None:
+            meta_fields["status"] = status
+        self.update_meta(session_dir, **meta_fields)
+
     def get_meta(self, session_dir: str) -> dict:
         """Read and return the meta.json for a session."""
         meta_path = os.path.join(session_dir, 'meta.json')
@@ -117,6 +166,15 @@ class SessionStore:
             raise FileNotFoundError(f'meta.json not found in {session_dir}')
         with open(meta_path, 'r', encoding='utf-8') as f:
             return json.load(f)
+
+    def find_session_dir(
+        self,
+        session_id: str,
+        mode: Optional[str] = None,
+        cwd: Optional[str] = None,
+    ) -> Optional[str]:
+        """Return the new-layout session directory when present."""
+        return self._find_new_session(session_id, mode, cwd)
 
     def load_session(
         self,

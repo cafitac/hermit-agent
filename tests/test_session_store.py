@@ -1,8 +1,7 @@
 import json
 import os
 import time
-import pytest
-from hermit_agent.session_store import SessionStore, cwd_slug, read_jsonl
+from hermit_agent.session_store import SessionStore, cwd_slug, derive_preview, read_jsonl
 
 
 def test_cwd_slug_basic():
@@ -143,3 +142,38 @@ def test_jsonl_reader_skips_corrupt_last_line(tmp_path):
     p = tmp_path / 'events.jsonl'
     p.write_text('{"ok":1}\n{"ok":2}\n{"truncated"')
     assert read_jsonl(str(p)) == [{'ok': 1}, {'ok': 2}]
+
+
+def test_write_messages_and_update_transcript_state_persist_preview_and_turn_count(tmp_path):
+    store = SessionStore(root=str(tmp_path / 'logs'))
+    sd = store.create_session(mode='interactive', session_id='i1', cwd='/x', model='m1')
+    messages = [
+        {'role': 'user', 'content': 'hello world'},
+        {'role': 'assistant', 'content': 'hi'},
+    ]
+
+    path = store.write_messages(sd, messages)
+    assert json.loads(open(path, encoding='utf-8').read()) == messages
+
+    store.update_transcript_state(sd, messages=messages, turn_count=3, status='waiting')
+    meta = store.get_meta(sd)
+    assert meta['status'] == 'waiting'
+    assert meta['turn_count'] == 3
+    assert meta['preview'] == 'hello world'
+
+
+def test_find_session_dir_and_derive_preview(tmp_path):
+    store = SessionStore(root=str(tmp_path / 'logs'))
+    sd = store.create_session(mode='interactive', session_id='sess-preview', cwd='/x/y')
+
+    assert store.find_session_dir('sess-preview', mode='interactive', cwd='/x/y') == sd
+    assert derive_preview([{'role': 'assistant', 'content': 'skip'}, {'role': 'user', 'content': 'pick me'}]) == 'pick me'
+
+
+def test_derive_preview_strips_leading_context_blocks():
+    content = (
+        "<context>\nctx\n</context>\n\n"
+        "<session-handoff>\nprev\n</session-handoff>\n\n"
+        "actual user message"
+    )
+    assert derive_preview([{"role": "user", "content": content}]) == "actual user message"

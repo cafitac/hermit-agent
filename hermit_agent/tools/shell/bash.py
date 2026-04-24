@@ -2,16 +2,15 @@
 
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 import tempfile
-import threading
 import uuid
+from typing import Any
 
-from ..base import Tool, ToolResult, _is_safe_path
+from ..base import Tool, ToolResult
 
-_background_registry: dict[str, dict] = {}
+_background_registry: dict[str, dict[str, Any]] = {}
 # {process_id: {"proc": Popen, "stdout_path": str, "stderr_path": str, "command": str}}
 
 
@@ -143,14 +142,14 @@ class BashTool(Tool):
             process_id = str(uuid.uuid4())[:8]
             stdout_f = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{process_id}.stdout", mode="w")
             stderr_f = tempfile.NamedTemporaryFile(delete=False, suffix=f"_{process_id}.stderr", mode="w")
-            proc = subprocess.Popen(
+            background_proc: subprocess.Popen[Any] = subprocess.Popen(
                 command, shell=True, executable="/bin/bash",
                 stdout=stdout_f, stderr=stderr_f,
             )
             stdout_f.close()
             stderr_f.close()
             _background_registry[process_id] = {
-                "proc": proc,
+                "proc": background_proc,
                 "stdout_path": stdout_f.name,
                 "stderr_path": stderr_f.name,
                 "command": command,
@@ -163,7 +162,7 @@ class BashTool(Tool):
         abort_event = getattr(agent, "abort_event", None) if agent else None
 
         try:
-            proc = subprocess.Popen(
+            proc: subprocess.Popen[str] = subprocess.Popen(
                 command,
                 shell=True,
                 executable="/bin/bash",

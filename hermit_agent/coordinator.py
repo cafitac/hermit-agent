@@ -8,16 +8,15 @@ Three modes:
 
 from __future__ import annotations
 
-import json
-import os
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 
 from .llm_client import LLMClientBase
 from .permissions import PermissionMode
+from .tools.base import Tool, ToolResult
 
 
 class AgentStatus(Enum):
@@ -69,7 +68,7 @@ def classify_task_complexity(task: dict) -> str:
     return "medium"
 
 
-COMPLEXITY_CONFIG = {
+COMPLEXITY_CONFIG: dict[str, dict[str, float | int]] = {
     "simple": {"max_turns": 10, "temperature": 0.0},
     "medium": {"max_turns": 20, "temperature": 0.0},
     "complex": {"max_turns": 40, "temperature": 0.1},
@@ -114,7 +113,7 @@ def run_parallel_agents(
             )
             complexity = classify_task_complexity({"prompt": task.prompt})
             config = COMPLEXITY_CONFIG[complexity]
-            agent.MAX_TURNS = config["max_turns"]
+            agent.MAX_TURNS = int(config["max_turns"])
             agent.streaming = True
             if emitter:
                 agent.emitter = emitter
@@ -206,7 +205,7 @@ def run_pipeline_agents(
 
 # ─── Coordinator tool (used by AgentLoop) ─────────────
 
-class CoordinatorTool:
+class CoordinatorTool(Tool):
     """Multi-agent coordination tool.
 
     Simplified from Claude Code's TeamCreateTool + AgentTool pattern.
@@ -267,9 +266,7 @@ class CoordinatorTool:
             return "At least one task is required"
         return None
 
-    def execute(self, input: dict):
-        from .tools import ToolResult
-
+    def execute(self, input: dict) -> ToolResult:
         mode = input.get("mode", "parallel")
         tasks = input.get("tasks", [])
 

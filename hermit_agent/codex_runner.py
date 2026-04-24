@@ -9,7 +9,7 @@ import sys
 import threading
 from collections import defaultdict
 from queue import Empty
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from .codex_interaction_contract import build_tool_user_input_result
 from .codex_channels_adapter import CodexChannelsWaitSession, load_codex_channels_settings
@@ -609,7 +609,9 @@ def _wait_for_reply(
     state.waiting_kind = prompt.prompt_kind
     state.waiting_prompt = waiting_prompt_snapshot(prompt)
     state.question_queue.put(waiting_prompt_snapshot(prompt))
-    event_type = "permission_ask" if prompt.prompt_kind == "permission_ask" else "waiting"
+    event_type: Literal["permission_ask", "waiting"] = (
+        "permission_ask" if prompt.prompt_kind == "permission_ask" else "waiting"
+    )
     sse.publish_threadsafe(
         task_id,
         SSEEvent(

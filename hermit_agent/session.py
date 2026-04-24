@@ -8,9 +8,7 @@ from __future__ import annotations
 import json
 import os
 import time
-from dataclasses import asdict, dataclass, field
-from pathlib import Path
-from typing import Optional
+from dataclasses import asdict, dataclass
 
 from .session_store import SessionStore
 
@@ -27,6 +25,7 @@ class SessionMeta:
     updated_at: float
     turn_count: int
     preview: str  # preview of the first user message
+    recap: str = ""  # LLM-generated session summary (saved async on completion)
 
 
 @dataclass
@@ -65,7 +64,6 @@ def save_session(
         preview=preview,
     )
 
-    session = SavedSession(meta=meta, messages=messages, system_prompt=system_prompt)
     filepath = os.path.join(SESSION_DIR, f"{session_id}.json")
 
     with open(filepath, "w") as f:
@@ -136,6 +134,7 @@ def list_sessions(limit: int = 10) -> list[SessionMeta]:
             updated_at=updated_at,
             turn_count=raw_meta.get('turn_count', 0),
             preview=raw_meta.get('preview', ''),
+            recap=raw_meta.get('recap', ''),
         ))
     return sessions
 
