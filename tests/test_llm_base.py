@@ -100,7 +100,6 @@ def _fake_chat_response(content=None, tool_calls=None, usage=None):
 
 
 def test_parse_tool_calls_from_openai_response():
-    """chat() correctly parses tool_call arguments from JSON string."""
     client = _make_client()
     fake_resp = _fake_chat_response(
         tool_calls=[{
@@ -125,7 +124,6 @@ def test_parse_tool_calls_from_openai_response():
 
 
 def test_parse_response_without_tool_calls():
-    """chat() handles a plain text response with no tool_calls."""
     client = _make_client()
     fake_resp = _fake_chat_response(content="Hello world")
     with patch("hermit_agent.llm.base.httpx.Client") as mock_client_cls:
@@ -141,7 +139,6 @@ def test_parse_response_without_tool_calls():
 
 
 def test_tool_call_with_invalid_json_arguments_returns_empty_dict():
-    """chat() handles malformed JSON in tool_call arguments gracefully."""
     client = _make_client()
     fake_resp = _fake_chat_response(
         tool_calls=[{

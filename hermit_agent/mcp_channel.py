@@ -198,27 +198,22 @@ def _fire_channel_notification_sync(content: str, meta: dict) -> None:
 
 
 def _remember_task_context(task_id: str, cwd: str) -> None:
-    """Shim — delegates to TaskContextManager.register()."""
     _task_context_manager.register(task_id, cwd)
 
 
 def _forget_task_context(task_id: str) -> None:
-    """Shim — delegates to TaskContextManager.unregister()."""
     _task_context_manager.unregister(task_id)
 
 
 def _task_cwd(task_id: str) -> str:
-    """Shim — delegates to TaskContextManager.cwd_for()."""
     return _task_context_manager.cwd_for(task_id)
 
 
 def _notify_visible_prompt(*, task_id: str, question: str, options: list[str], prompt_kind: str) -> None:
-    """Shim — delegates to VisiblePromptDeduplicator.notify()."""
     _visible_prompt_deduplicator.notify(task_id=task_id, question=question, options=options, prompt_kind=prompt_kind)
 
 
 def _clear_visible_prompt_notification(task_id: str) -> None:
-    """Shim — delegates to VisiblePromptDeduplicator.clear()."""
     _visible_prompt_deduplicator.clear(task_id)
 
 

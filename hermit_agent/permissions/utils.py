@@ -90,7 +90,6 @@ def classify_bash_safety(command: str) -> str:
     """
     stripped = command.strip()
 
-    # Split compound commands
     subcommands = re.split(r'&&|\|\||;', stripped)
     if len(subcommands) > 1:
         results = [_classify_single(s.strip()) for s in subcommands if s.strip()]
