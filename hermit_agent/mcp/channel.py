@@ -88,10 +88,32 @@ _current_session = None  # type: ignore[assignment]
 _current_loop = None     # type: ignore[assignment]
 _session_lock = threading.Lock()
 _pending_channel_notifications: list[tuple[str, dict]] = []
-_task_contexts: dict[str, TaskContext] = {}
-_task_contexts_lock = threading.Lock()
-_visible_prompt_notifications: dict[str, str] = {}
-_visible_prompt_notifications_lock = threading.Lock()
+
+_task_context_manager = TaskContextManager()
+
+
+def _do_notify_prompt(*, task_id: str, question: str, options: list[str], prompt_kind: str) -> None:
+    presented = present_interaction(question=question, options=options, prompt_kind=prompt_kind)
+    title = presented.title
+    body = f"{presented.body}\n{presented.options_line}"[:240]
+    try:
+        if os.uname().sysname == "Darwin":
+            subprocess.run(
+                [
+                    "osascript",
+                    "-e",
+                    f'display notification "{body.replace(chr(34), chr(39))}" with title "{title.replace(chr(34), chr(39))}"',
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+    except Exception:
+        return
+
+
+_visible_prompt_deduplicator = VisiblePromptDeduplicator(on_new=_do_notify_prompt)
 
 
 async def _send_channel_notification(session, content: str, meta: dict) -> None:
@@ -182,53 +204,23 @@ def _current_cwd() -> str:
 
 
 def _remember_task_context(task_id: str, cwd: str) -> None:
-    with _task_contexts_lock:
-        _task_contexts[task_id] = TaskContext(cwd=cwd)
+    _task_context_manager.register(task_id, cwd)
 
 
 def _forget_task_context(task_id: str) -> None:
-    with _task_contexts_lock:
-        _task_contexts.pop(task_id, None)
+    _task_context_manager.unregister(task_id)
 
 
 def _task_cwd(task_id: str) -> str:
-    with _task_contexts_lock:
-        ctx = _task_contexts.get(task_id)
-    return ctx.cwd if ctx is not None else _current_cwd()
+    return _task_context_manager.cwd_for(task_id) or _current_cwd()
 
 
 def _notify_visible_prompt(*, task_id: str, question: str, options: list[str], prompt_kind: str) -> None:
-    normalized_question = question.strip()
-    normalized_options = [option.strip() for option in options if option.strip()]
-    fingerprint = f"{prompt_kind}|{normalized_question}|{'|'.join(normalized_options)}"
-    with _visible_prompt_notifications_lock:
-        if _visible_prompt_notifications.get(task_id) == fingerprint:
-            return
-        _visible_prompt_notifications[task_id] = fingerprint
-
-    presented = present_interaction(question=normalized_question, options=normalized_options, prompt_kind=prompt_kind)
-    title = presented.title
-    body = f"{presented.body}\n{presented.options_line}"[:240]
-    try:
-        if os.uname().sysname == "Darwin":
-            subprocess.run(
-                [
-                    "osascript",
-                    "-e",
-                    f'display notification "{body.replace(chr(34), chr(39))}" with title "{title.replace(chr(34), chr(39))}"',
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-    except Exception:
-        return
+    _visible_prompt_deduplicator.notify(task_id=task_id, question=question, options=options, prompt_kind=prompt_kind)
 
 
 def _clear_visible_prompt_notification(task_id: str) -> None:
-    with _visible_prompt_notifications_lock:
-        _visible_prompt_notifications.pop(task_id, None)
+    _visible_prompt_deduplicator.clear(task_id)
 
 
 def _gateway_reply(task_id: str, message: str) -> bool:
