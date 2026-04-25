@@ -74,6 +74,16 @@ hermit-channel/node_modules/
 # HermitAgent runtime data
 .hermit/
 
+# Agent learner / codex runtime state (not project source)
+.agent-learner/
+.agents/
+.codex/
+.codex-channels/
+plugins/
+
+# Build artifacts
+*.tgz
+
 # DB files (runtime-generated)
 *.db
 *.db-shm
