@@ -151,6 +151,18 @@ def test_bash_safety_classifier():
     assert classify_bash_safety("curl https://example.com") == "unknown"
 
 
+def test_bash_safety_classifier_home_expanded():
+    import os
+    home = os.path.expanduser("~")
+    # Absolute paths to hook scripts should be safe
+    assert classify_bash_safety(f"python3 {home}/.claude/hooks/auto_session_learning.py") == "safe"
+    assert classify_bash_safety(f"python3 {home}/.hermit/hooks/some_hook.py") == "safe"
+    assert classify_bash_safety(f"bash {home}/.claude/hooks/run.sh") == "safe"
+    # agent-learner commands should be safe
+    assert classify_bash_safety("agent-learner core session-end --project .") == "safe"
+    assert classify_bash_safety("agent-learner install-claude") == "safe"
+
+
 def test_context_token_estimate():
     assert estimate_tokens("hello world") > 0
     assert estimate_tokens("") == 0
