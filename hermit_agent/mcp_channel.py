@@ -44,14 +44,74 @@ def _log(line: str) -> None:
         pass
 
 
+class TaskContextManager:
+    """Thread-safe task ID → cwd registry."""
+
+    def __init__(self) -> None:
+        self._contexts: dict[str, str] = {}
+        self._lock = threading.Lock()
+
+    def register(self, task_id: str, cwd: str) -> None:
+        with self._lock:
+            self._contexts[task_id] = cwd
+
+    def unregister(self, task_id: str) -> None:
+        with self._lock:
+            self._contexts.pop(task_id, None)
+
+    def cwd_for(self, task_id: str) -> str:
+        with self._lock:
+            cwd = self._contexts.get(task_id)
+        return cwd if cwd is not None else os.getcwd()
+
+
+class VisiblePromptDeduplicator:
+    """Deduplicates macOS system notifications for interactive prompts."""
+
+    def __init__(self) -> None:
+        self._seen: dict[str, str] = {}
+        self._lock = threading.Lock()
+
+    def notify(self, *, task_id: str, question: str, options: list[str], prompt_kind: str) -> None:
+        normalized_question = question.strip()
+        normalized_options = [o.strip() for o in options if o.strip()]
+        fingerprint = f"{prompt_kind}|{normalized_question}|{'|'.join(normalized_options)}"
+        with self._lock:
+            if self._seen.get(task_id) == fingerprint:
+                return
+            self._seen[task_id] = fingerprint
+
+        presented = present_interaction(question=normalized_question, options=normalized_options, prompt_kind=prompt_kind)
+        title = presented.title
+        body = f"{presented.body}\n{presented.options_line}"[:240]
+        try:
+            if os.uname().sysname == "Darwin":
+                subprocess.run(
+                    [
+                        "osascript",
+                        "-e",
+                        f'display notification "{body.replace(chr(34), chr(39))}" with title "{title.replace(chr(34), chr(39))}"',
+                    ],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                )
+        except Exception:
+            return
+
+    def clear(self, task_id: str) -> None:
+        with self._lock:
+            self._seen.pop(task_id, None)
+
+
+_task_context_manager = TaskContextManager()
+_visible_prompt_deduplicator = VisiblePromptDeduplicator()
+
 _current_session = None  # type: ignore[assignment]
 _current_loop = None     # type: ignore[assignment]
 _session_lock = threading.Lock()
 _pending_channel_notifications: list[tuple[str, dict]] = []
-_task_contexts: dict[str, dict[str, str]] = {}
-_task_contexts_lock = threading.Lock()
-_visible_prompt_notifications: dict[str, str] = {}
-_visible_prompt_notifications_lock = threading.Lock()
 
 
 async def _send_channel_notification(session, content: str, meta: dict) -> None:
@@ -137,58 +197,29 @@ def _fire_channel_notification_sync(content: str, meta: dict) -> None:
         _log(f"[channel] send failed: {e}")
 
 
-def _current_cwd() -> str:
-    return os.getcwd()
-
-
 def _remember_task_context(task_id: str, cwd: str) -> None:
-    with _task_contexts_lock:
-        _task_contexts[task_id] = {"cwd": cwd}
+    """Shim — delegates to TaskContextManager.register()."""
+    _task_context_manager.register(task_id, cwd)
 
 
 def _forget_task_context(task_id: str) -> None:
-    with _task_contexts_lock:
-        _task_contexts.pop(task_id, None)
+    """Shim — delegates to TaskContextManager.unregister()."""
+    _task_context_manager.unregister(task_id)
 
 
 def _task_cwd(task_id: str) -> str:
-    with _task_contexts_lock:
-        context = _task_contexts.get(task_id, {})
-    return context.get("cwd", _current_cwd())
+    """Shim — delegates to TaskContextManager.cwd_for()."""
+    return _task_context_manager.cwd_for(task_id)
 
 
 def _notify_visible_prompt(*, task_id: str, question: str, options: list[str], prompt_kind: str) -> None:
-    normalized_question = question.strip()
-    normalized_options = [option.strip() for option in options if option.strip()]
-    fingerprint = f"{prompt_kind}|{normalized_question}|{'|'.join(normalized_options)}"
-    with _visible_prompt_notifications_lock:
-        if _visible_prompt_notifications.get(task_id) == fingerprint:
-            return
-        _visible_prompt_notifications[task_id] = fingerprint
-
-    presented = present_interaction(question=normalized_question, options=normalized_options, prompt_kind=prompt_kind)
-    title = presented.title
-    body = f"{presented.body}\n{presented.options_line}"[:240]
-    try:
-        if os.uname().sysname == "Darwin":
-            subprocess.run(
-                [
-                    "osascript",
-                    "-e",
-                    f'display notification "{body.replace(chr(34), chr(39))}" with title "{title.replace(chr(34), chr(39))}"',
-                ],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-    except Exception:
-        return
+    """Shim — delegates to VisiblePromptDeduplicator.notify()."""
+    _visible_prompt_deduplicator.notify(task_id=task_id, question=question, options=options, prompt_kind=prompt_kind)
 
 
 def _clear_visible_prompt_notification(task_id: str) -> None:
-    with _visible_prompt_notifications_lock:
-        _visible_prompt_notifications.pop(task_id, None)
+    """Shim — delegates to VisiblePromptDeduplicator.clear()."""
+    _visible_prompt_deduplicator.clear(task_id)
 
 
 def _gateway_reply(task_id: str, message: str) -> bool:

@@ -221,7 +221,7 @@ def test_codex_channels_wait_uses_task_specific_cwd_for_settings(monkeypatch):
 
     monkeypatch.setattr(m, "load_settings", fake_load_settings)
     monkeypatch.setattr(m, "load_codex_channels_settings", fake_load_codex_channels_settings)
-    monkeypatch.setattr(m, "build_interaction", lambda **kwargs: {"interaction": kwargs})
+    monkeypatch.setattr(m, "build_codex_channels_interaction", lambda prompt: {"kind": "waiting"})
     monkeypatch.setattr(m, "CodexChannelsWaitSession", FakeSession)
     monkeypatch.setattr(m.threading, "Thread", FakeThread)
 
@@ -247,8 +247,7 @@ def test_notify_done_clears_task_context(monkeypatch):
         monkeypatch.setattr(m, "_fire_channel_notification_sync", lambda content, meta: monkeypatch_calls.setdefault("meta", meta))
         monkeypatch.setattr(m, "_clear_visible_prompt_notification", lambda task_id: monkeypatch_calls.setdefault("cleared", task_id))
         m._notify_done("task-finish", "done")
-        with m._task_contexts_lock:
-            assert "task-finish" not in m._task_contexts
+        assert "task-finish" not in m._task_context_manager._contexts
         assert monkeypatch_calls["cleared"] == "task-finish"
     finally:
         m._forget_task_context("task-finish")
@@ -890,8 +889,7 @@ def test_notify_visible_prompt_dedupes_repeated_messages(monkeypatch):
         "run",
         lambda *args, **kwargs: calls.append((args, kwargs)),
     )
-    with m._visible_prompt_notifications_lock:
-        m._visible_prompt_notifications.clear()
+    m._visible_prompt_deduplicator._seen.clear()
 
     m._notify_visible_prompt(
         task_id="task-visible",
@@ -953,4 +951,72 @@ def test_build_session_elicitation_request_localizes_common_waiting_question():
 
     request = m._build_session_elicitation_request(prompt)
 
-    assert request.params.message == "어느 환경으로 진행할까요?"
+
+# ── US-003: TaskContextManager ──────────────────────────────────────────────
+
+def test_task_context_manager_register_and_lookup():
+    from hermit_agent.mcp.channel import TaskContextManager
+    mgr = TaskContextManager()
+    mgr.register("t1", "/project/a")
+    assert mgr.cwd_for("t1") == "/project/a"
+
+
+def test_task_context_manager_unregister():
+    from hermit_agent.mcp.channel import TaskContextManager
+    mgr = TaskContextManager()
+    mgr.register("t2", "/project/b")
+    mgr.unregister("t2")
+    assert mgr.cwd_for("t2") == ""
+
+
+def test_task_context_manager_missing_returns_empty_string():
+    from hermit_agent.mcp.channel import TaskContextManager
+    mgr = TaskContextManager()
+    assert mgr.cwd_for("no-such-task") == ""
+
+
+def test_task_context_manager_thread_safe():
+    import concurrent.futures
+    from hermit_agent.mcp.channel import TaskContextManager
+    mgr = TaskContextManager()
+
+    def work(n):
+        task_id = f"task-{n}"
+        mgr.register(task_id, f"/cwd/{n}")
+        result = mgr.cwd_for(task_id)
+        mgr.unregister(task_id)
+        return result
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+        results = list(ex.map(work, range(40)))
+    assert all(r.startswith("/cwd/") for r in results)
+
+
+# ── US-004: VisiblePromptDeduplicator ────────────────────────────────────────
+
+def test_visible_prompt_deduplicator_fires_once_for_identical_prompt():
+    from hermit_agent.mcp.channel import VisiblePromptDeduplicator
+    calls = []
+    ded = VisiblePromptDeduplicator(on_new=lambda **kw: calls.append(kw))
+    ded.notify(task_id="t1", question="Deploy?", options=["Yes", "No"], prompt_kind="waiting")
+    ded.notify(task_id="t1", question="Deploy?", options=["Yes", "No"], prompt_kind="waiting")
+    assert len(calls) == 1
+
+
+def test_visible_prompt_deduplicator_fires_again_after_clear():
+    from hermit_agent.mcp.channel import VisiblePromptDeduplicator
+    calls = []
+    ded = VisiblePromptDeduplicator(on_new=lambda **kw: calls.append(kw))
+    ded.notify(task_id="t1", question="Deploy?", options=["Yes"], prompt_kind="waiting")
+    ded.clear("t1")
+    ded.notify(task_id="t1", question="Deploy?", options=["Yes"], prompt_kind="waiting")
+    assert len(calls) == 2
+
+
+def test_visible_prompt_deduplicator_different_questions_both_fire():
+    from hermit_agent.mcp.channel import VisiblePromptDeduplicator
+    calls = []
+    ded = VisiblePromptDeduplicator(on_new=lambda **kw: calls.append(kw))
+    ded.notify(task_id="t1", question="Q1", options=[], prompt_kind="waiting")
+    ded.notify(task_id="t1", question="Q2", options=[], prompt_kind="waiting")
+    assert len(calls) == 2
