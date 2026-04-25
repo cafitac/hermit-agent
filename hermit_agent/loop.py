@@ -23,147 +23,14 @@ from .memory import MemorySystem
 from .permissions import PermissionChecker, PermissionMode
 from .tools import Tool, ToolResult
 from .version import VERSION
-
-
-def _current_date() -> str:
-    """Current date/time, injected into the system prompt so the LLM knows when it is."""
-    from datetime import datetime
-
-    now = datetime.now()
-    return now.strftime("%Y-%m-%d %A %H:%M")
-
-
-def _find_project_config(cwd: str, depth: str = "deep") -> str:
-    """Search for HERMIT.md project config file. Follows Claude Code's CLAUDE.md pattern.
-
-    Progressive Disclosure:
-    - `depth="deep"` (default): global (`~/.hermit/HERMIT.md`) + walk-up from cwd to root.
-    - `depth="shallow"`: ignores global and parents — only HERMIT.md/.hermit_agent.md at the cwd level.
-    """
-    if depth not in ("deep", "shallow"):
-        raise ValueError(f"invalid depth {depth!r}; expected 'deep' or 'shallow'")
-
-    contents = []
-
-    if depth == "deep":
-        global_config = os.path.expanduser("~/.hermit/HERMIT.md")
-        if os.path.exists(global_config):
-            try:
-                with open(global_config) as f:
-                    contents.append(f"# Global Config (~/.hermit/HERMIT.md)\n{f.read()}")
-            except Exception:
-                pass
-
-    search_dir = os.path.abspath(cwd)
-    visited: set[str] = set()
-    while search_dir and search_dir not in visited:
-        visited.add(search_dir)
-        for name in ("HERMIT.md", ".hermit_agent.md"):
-            config_path = os.path.join(search_dir, name)
-            if os.path.exists(config_path):
-                try:
-                    with open(config_path) as f:
-                        contents.append(f"# Project Config ({config_path})\n{f.read()}")
-                except Exception:
-                    pass
-        if depth == "shallow":
-            break
-        parent = os.path.dirname(search_dir)
-        if parent == search_dir:
-            break
-        search_dir = parent
-
-    return "\n\n".join(contents)
-
-
-def _find_rules(cwd: str, depth: str = "deep") -> str:
-    """`.hermit/rules/*.md` loader — merges global + project rule files.
-
-    - deep: `~/.hermit/rules/*.md` + `{cwd}/.hermit/rules/*.md`
-    - shallow: project only (`{cwd}/.hermit/rules/*.md`)
-    """
-    if depth not in ("deep", "shallow"):
-        raise ValueError(f"invalid depth {depth!r}; expected 'deep' or 'shallow'")
-
-    chunks: list[str] = []
-
-    def _load_dir(rules_dir: str, label: str) -> None:
-        if not os.path.isdir(rules_dir):
-            return
-        for name in sorted(os.listdir(rules_dir)):
-            if not name.endswith(".md"):
-                continue
-            path = os.path.join(rules_dir, name)
-            try:
-                with open(path) as f:
-                    chunks.append(f"# Rule ({label}: {name})\n{f.read()}")
-            except Exception:
-                continue
-
-    if depth == "deep":
-        _load_dir(os.path.expanduser("~/.hermit/rules"), "global")
-
-    _load_dir(os.path.join(cwd, ".hermit", "rules"), "project")
-    return "\n\n".join(chunks)
-
-
-def _task_state_path(cwd: str) -> str:
-    return os.path.join(cwd, ".hermit", "task_state.md")
-
-
-def _read_task_state(cwd: str) -> str:
-    """Read the current task state file. SDD pattern — used for re-injection after compaction."""
-    path = _task_state_path(cwd)
-    try:
-        if os.path.exists(path):
-            with open(path) as f:
-                return f.read()
-    except Exception:
-        pass
-    return ""
-
-
-def _write_task_state(cwd: str, skill_name: str, args: str, skill_content: str) -> None:
-    """Initialize task state file at skill start. SDD pattern."""
-    from datetime import datetime
-
-    path = _task_state_path(cwd)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-
-    # Extract checklist items from the skill (`- [ ]` pattern)
-    checklist_lines = [
-        line
-        for line in skill_content.splitlines()
-        if line.strip().startswith("- [ ]") or line.strip().startswith("* [ ]")
-    ]
-    checklist_section = (
-        "\n".join(checklist_lines) if checklist_lines else "(auto-extraction from skill failed — update manually as you go)"
-    )
-
-    content = f"""# Task State (SDD)
-> This file is auto-generated so task state can be restored after context compaction.
-> Update the progress fields yourself as you work.
-
-## Active Skill
-`/{skill_name}` {args}
-
-## Start Time
-{datetime.now().strftime("%Y-%m-%d %H:%M")}
-
-## Progress Checklist
-{checklist_section}
-
-## Current Progress
-(Record completed steps and next actions here as you work)
-
-## Issues Found
-(Bugs, failing tests, unresolved problems, etc.)
-"""
-    try:
-        with open(path, "w") as f:
-            f.write(content)
-    except Exception:
-        pass
+from .loop_context import (
+    _current_date,
+    _find_project_config,
+    _find_rules,
+    _task_state_path,
+    _read_task_state,
+    _write_task_state,
+)
 
 
 # Static system prompt — never change so ollama's KV cache can be reused.
@@ -578,7 +445,7 @@ class AgentLoop:
         # (Preserves existing execute signature by passing via instance attribute.)
         for tool in self._all_tools.values():
             try:
-                tool._agent = self  # type: ignore[attr-defined]
+                tool._agent = self
             except Exception:
                 pass
 
@@ -908,7 +775,10 @@ class AgentLoop:
             )
             if result.returncode != 0:
                 return
-            data = json.loads(result.stdout)
+            try:
+                data = json.loads(result.stdout)
+            except json.JSONDecodeError:
+                return
             title = data.get("title", "")
             body = data.get("body", "")
             content = f"=== PR #{pr_num} original description ===\nTitle: {title}\n\n{body}"

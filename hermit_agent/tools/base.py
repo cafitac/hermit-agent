@@ -10,6 +10,7 @@ import os
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Any
 
 
 # ─── Result structures ─────────────────────────
@@ -148,6 +149,7 @@ class Tool(ABC):
 
     name: str
     description: str
+    _agent: Any = None  # set by AgentLoop; Any avoids circular import with loop.py
 
     @abstractmethod
     def input_schema(self) -> dict:
