@@ -60,9 +60,12 @@ jobs:
       - name: Bump to next patch version from registry
         run: |
           PUBLISHED=$(npm view @cafitac/hermit-agent version 2>/dev/null || echo "0.0.0")
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$PUBLISHED"
+          LOCAL=$(node -p "require('./hermit-ui/package.json').version")
+          # Use whichever is higher as the base so pre-bumped local versions don't conflict
+          BASE=$(printf '%s\n%s\n' "$PUBLISHED" "$LOCAL" | sort -V | tail -1)
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
           NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))"
-          echo "Publishing version $NEXT (previous: $PUBLISHED)"
+          echo "Publishing version $NEXT (registry: $PUBLISHED, local: $LOCAL)"
           echo "NEXT=$NEXT" >> "$GITHUB_ENV"
           # Bump npm package.json (hermit-ui)
           npm version "$NEXT" --no-git-tag-version --prefix hermit-ui
