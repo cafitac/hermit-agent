@@ -1128,9 +1128,8 @@ function HermitAgentUI() {
     if (CONFIG.model) pyArgs.push('--model', CONFIG.model);
     if (CONFIG.yolo) pyArgs.push('--yolo');
 
-    // Inherit parent env. The launcher (hermit.sh) is responsible for exporting
-    // PYTHONPATH pointing to the HermitAgent source tree and the chosen venv's
-    // site-packages, so this file does not hardcode any filesystem paths.
+    // Inherit parent env. PYTHONPATH and venv paths are set by the hermit
+    // launcher (hermit-ui/bin/hermit.js) before spawning this process.
     const env: Record<string, string> = {
       ...process.env as Record<string, string>,
     };

@@ -2,15 +2,18 @@
 // Thin launcher — lets npm bin resolve to this file while dist/app.js
 // has no shebang (it is compiled output from tsc).
 import { spawn } from 'child_process';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { homedir } from 'os';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const appJs = join(__dirname, '..', 'dist', 'app.js');
 
 const rawArgs = process.argv.slice(2);
 const command = rawArgs[0] ?? '';
+
+// --- Meta commands (no Python or TUI needed) ---
 
 if (command === 'version' || rawArgs.includes('--version') || rawArgs.includes('-v')) {
   const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
@@ -59,10 +62,36 @@ Startup flags:
   process.exit(0);
 }
 
+function findPythonBin() {
+  if (process.env.HERMIT_PYTHON) return process.env.HERMIT_PYTHON;
+  const home = homedir();
+  const candidates = [
+    join(home, '.hermit', 'npm-runtime', 'venv', 'bin', 'hermit'),
+    join(home, '.hermit', 'npm-runtime', 'venv', 'Scripts', 'hermit.exe'),
+  ];
+  for (const c of candidates) {
+    if (existsSync(c)) return c;
+  }
+  return null;
+}
+
+function spawnAndExit(cmd, args, opts = {}) {
+  const child = spawn(cmd, args, { stdio: 'inherit', ...opts });
+  child.on('exit', code => process.exit(code ?? 0));
+}
+
 if (command === 'update' || command === 'self-update') {
-  const child = spawn('npm', ['install', '-g', '@cafitac/hermit-agent@latest'], { stdio: 'inherit', shell: process.platform === 'win32' });
-  child.on('exit', code => process.exit(code ?? 0));
+  spawnAndExit('npm', ['install', '-g', '@cafitac/hermit-agent@latest'], { shell: process.platform === 'win32' });
+} else if (command && !command.startsWith('-')) {
+  // Non-flag first argument: subcommand or single message → Python backend
+  const pythonBin = findPythonBin();
+  if (pythonBin) {
+    spawnAndExit(pythonBin, rawArgs);
+  } else {
+    console.error('[hermit] Python runtime not found. Run: hermit install');
+    process.exit(1);
+  }
 } else {
-  const child = spawn(process.execPath, [appJs, ...rawArgs], { stdio: 'inherit' });
-  child.on('exit', code => process.exit(code ?? 0));
+  // No args (or only flags) → interactive TUI
+  spawnAndExit(process.execPath, [appJs, ...rawArgs]);
 }
