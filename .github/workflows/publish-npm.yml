@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 jobs:
@@ -90,3 +90,12 @@ jobs:
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
           skip-existing: true
+
+      - name: Write back version and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml hermit-ui/package.json
+          git diff --staged --quiet || git commit -m "chore: release v${NEXT} [skip ci]"
+          git tag "v${NEXT}" || echo "Tag v${NEXT} already exists, skipping"
+          git push origin HEAD:main --tags
