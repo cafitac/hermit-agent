@@ -84,6 +84,18 @@ def test_main_dispatches_install(monkeypatch, capsys):
     assert "Hermit install is ready." in capsys.readouterr().out
 
 
+def test_main_dispatches_mcp_server(monkeypatch):
+    from hermit_agent import __main__ as main_mod
+
+    seen = []
+    monkeypatch.setattr(main_mod.sys, "argv", ["hermit-agent", "mcp-server", "--http", "3737"])
+    monkeypatch.setattr("hermit_agent.mcp_launcher.main", lambda: seen.append(list(main_mod.sys.argv)))
+
+    main_mod.main()
+
+    assert seen == [["hermit-agent", "--http", "3737"]]
+
+
 def test_main_dispatches_pending(monkeypatch, capsys):
     from hermit_agent import __main__ as main_mod
 

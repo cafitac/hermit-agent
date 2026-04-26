@@ -4,6 +4,7 @@ Usage:
   hermit_agent                            # React+Ink UI (default)
   hermit_agent "message"                  # Single message mode
   hermit_agent "message" --channel cli    # CLI channel (stdin/stdout, Standalone mode)
+  hermit_agent mcp-server                 # MCP stdio server via the stable Hermit CLI surface
   hermit_agent --model qwen3:14b         # Specify model
   hermit_agent install                    # Guided setup/install flow (Claude + Codex)
   hermit_agent --yolo                    # Run without permission checks
@@ -437,6 +438,13 @@ def main():
             skip_codex=install_args.skip_codex,
         )
         print(format_install_summary(summary))
+        return
+
+    if len(sys.argv) > 1 and sys.argv[1] == "mcp-server":
+        from .mcp_launcher import main as run_mcp_server
+
+        sys.argv = [sys.argv[0], *sys.argv[2:]]
+        run_mcp_server()
         return
 
     if len(sys.argv) > 1 and sys.argv[1] == "pending":

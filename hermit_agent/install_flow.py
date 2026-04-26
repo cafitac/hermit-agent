@@ -114,17 +114,12 @@ def ensure_gateway_api_key(*, settings_path: Path) -> tuple[bool, str]:
 
 
 def resolve_hermit_mcp_stdio_entry(*, cwd: str) -> dict[str, object]:
-    home = Path.home()
-    candidates = (
-        home / ".hermit" / "npm-runtime" / "venv" / "bin" / "hermit-mcp-server",
-        home / ".hermit" / "npm-runtime" / "venv" / "Scripts" / "hermit-mcp-server.exe",
-        Path(cwd) / ".venv" / "bin" / "hermit-mcp-server",
-        Path(cwd) / ".venv" / "Scripts" / "hermit-mcp-server.exe",
-    )
-    for candidate in candidates:
-        if candidate.exists():
-            return {"type": "stdio", "command": str(candidate)}
-    return {"type": "stdio", "command": str(Path(cwd) / "bin" / "mcp-server.sh")}
+    del cwd
+    return {
+        "type": "stdio",
+        "command": "hermit",
+        "args": ["mcp-server"],
+    }
 
 
 def inspect_claude_mcp_registration(*, command_path: Path | None = None, claude_json_path: Path | None = None, entry: dict[str, object] | None = None) -> str:

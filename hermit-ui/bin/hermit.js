@@ -32,6 +32,7 @@ Usage:
 
 Commands:
   install                       Guided setup / install flow (Claude + Codex)
+  mcp-server                    Start the Hermit MCP server over stdio
   doctor                        Diagnose and repair common setup issues
   status                        Show agent / gateway status
   config local-backend          Detect or set local LLM backend (mlx, llama.cpp, ollama)

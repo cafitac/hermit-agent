@@ -71,7 +71,7 @@ def test_register_claude_mcp_writes_user_wide_stdio_entry(tmp_path):
 
 def test_register_claude_mcp_accepts_prebuilt_entry(tmp_path):
     claude_json = tmp_path / ".claude.json"
-    entry = {"type": "stdio", "command": "/tmp/hermit/npm-runtime/venv/bin/hermit-mcp-server"}
+    entry = {"type": "stdio", "command": "hermit", "args": ["mcp-server"]}
 
     status, path, backup = register_claude_mcp(entry=entry, claude_json_path=claude_json)
 
@@ -110,15 +110,10 @@ def test_inspect_claude_mcp_registration_reports_missing_and_registered(tmp_path
     assert inspect_claude_mcp_registration(command_path=command, claude_json_path=claude_json) == "registered"
 
 
-def test_resolve_hermit_mcp_stdio_entry_prefers_npm_runtime(monkeypatch, tmp_path):
-    launcher = tmp_path / ".hermit" / "npm-runtime" / "venv" / "bin" / "hermit-mcp-server"
-    launcher.parent.mkdir(parents=True)
-    launcher.write_text("", encoding="utf-8")
-    monkeypatch.setattr("hermit_agent.install_flow.Path.home", lambda: tmp_path)
-
+def test_resolve_hermit_mcp_stdio_entry_uses_stable_hermit_command():
     entry = resolve_hermit_mcp_stdio_entry(cwd="/tmp/demo")
 
-    assert entry == {"type": "stdio", "command": str(launcher)}
+    assert entry == {"type": "stdio", "command": "hermit", "args": ["mcp-server"]}
 
 
 def test_ensure_codex_mcp_registered_replaces_mismatched_entry(tmp_path, monkeypatch):
@@ -132,7 +127,7 @@ def test_ensure_codex_mcp_registered_replaces_mismatched_entry(tmp_path, monkeyp
 
     monkeypatch.setattr(
         "hermit_agent.install_flow.resolve_hermit_mcp_stdio_entry",
-        lambda *, cwd: {"type": "stdio", "command": "/tmp/hermit/npm-runtime/venv/bin/hermit-mcp-server"},
+        lambda *, cwd: {"type": "stdio", "command": "hermit", "args": ["mcp-server"]},
     )
 
     def fake_run(args, **kwargs):
@@ -163,7 +158,7 @@ def test_ensure_codex_mcp_registered_replaces_mismatched_entry(tmp_path, monkeyp
     assert calls == [
         ["codex", "mcp", "get", "hermit-channel", "--json"],
         ["codex", "mcp", "remove", "hermit-channel"],
-        ["codex", "mcp", "add", "hermit-channel", "--", "/tmp/hermit/npm-runtime/venv/bin/hermit-mcp-server"],
+        ["codex", "mcp", "add", "hermit-channel", "--", "hermit", "mcp-server"],
     ]
 
 
