@@ -2,7 +2,7 @@
 // Thin launcher — lets npm bin resolve to this file while dist/app.js
 // has no shebang (it is compiled output from tsc).
 import { spawn, spawnSync } from 'child_process';
-import { existsSync, readFileSync, readSync, writeSync } from 'fs';
+import { existsSync, openSync, closeSync, readFileSync, readSync, writeSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { homedir } from 'os';
@@ -79,12 +79,30 @@ function shouldPromptForUpdate(commandName) {
 function promptYesNo(question, defaultYes = true) {
   if (!isInteractivePromptAllowed()) return false;
   const suffix = defaultYes ? ' [Y/n] ' : ' [y/N] ';
-  writeSync(process.stdout.fd, `${question}${suffix}`);
-  const buffer = Buffer.alloc(1024);
-  const bytesRead = readSync(process.stdin.fd, buffer, 0, buffer.length, null);
-  const answer = buffer.toString('utf8', 0, Math.max(0, bytesRead)).trim().toLowerCase();
-  if (!answer) return defaultYes;
-  return answer === 'y' || answer === 'yes';
+  const prompt = `${question}${suffix}`;
+  let inputFd = null;
+  try {
+    inputFd = openSync('/dev/tty', 'r');
+  } catch {
+    inputFd = null;
+  }
+
+  try {
+    writeSync(process.stdout.fd, prompt);
+    const buffer = Buffer.alloc(1024);
+    const bytesRead = readSync(inputFd ?? process.stdin.fd, buffer, 0, buffer.length, null);
+    const answer = buffer.toString('utf8', 0, Math.max(0, bytesRead)).trim().toLowerCase();
+    if (!answer) return defaultYes;
+    return answer === 'y' || answer === 'yes';
+  } catch (error) {
+    if (error && (error.code === 'EAGAIN' || error.code === 'EWOULDBLOCK')) {
+      writeSync(process.stdout.fd, '\n');
+      return defaultYes;
+    }
+    throw error;
+  } finally {
+    if (inputFd !== null) closeSync(inputFd);
+  }
 }
 
 function readLatestPublishedVersion() {
