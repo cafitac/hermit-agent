@@ -234,7 +234,7 @@ def run_setup(*, yes: bool = False) -> None:
 
         # Register Gateway API key in DB
         from .gateway.db import create_api_key
-        asyncio.run(create_api_key(settings["gateway_api_key"], "admin"))
+        asyncio.run(create_api_key(settings["gateway_api_key"], "admin", grant_all_platforms=True))
         print("Gateway API key registered")
     except Exception as e:
         print(f"DB init skipped (auto-created on Gateway start): {e}")

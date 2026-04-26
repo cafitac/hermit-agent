@@ -130,13 +130,20 @@ async def list_api_keys() -> list[dict]:
         return [dict(r) for r in await cursor.fetchall()]
 
 
-async def create_api_key(api_key: str, user: str) -> None:
-    """Generate an API key."""
+async def create_api_key(api_key: str, user: str, *, grant_all_platforms: bool = False) -> None:
+    """Generate an API key. Pass grant_all_platforms=True to authorize all known platforms."""
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "INSERT INTO api_keys (api_key, user) VALUES (?, ?)",
             (api_key, user),
         )
+        if grant_all_platforms:
+            rows = await db.execute_fetchall("SELECT slug FROM platforms")
+            for (slug,) in rows:
+                await db.execute(
+                    "INSERT OR IGNORE INTO api_key_platform (api_key, platform_slug) VALUES (?, ?)",
+                    (api_key, slug),
+                )
         await db.commit()
 
 

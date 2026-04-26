@@ -107,7 +107,7 @@ def ensure_gateway_api_key(*, settings_path: Path) -> tuple[bool, str]:
         await init_db()
         existing = await lookup_api_key(api_key)
         if existing is None:
-            await create_api_key(api_key, "local")
+            await create_api_key(api_key, "local", grant_all_platforms=True)
 
     asyncio.run(_sync())
     return created, api_key

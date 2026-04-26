@@ -102,7 +102,7 @@ async def api_list_keys(auth: AuthContext = Depends(get_current_user)):
 
 @router.post("/api/keys")
 async def api_create_key(req: ApiKeyRequest, auth: AuthContext = Depends(get_current_user)):
-    await create_api_key(req.api_key, req.user)
+    await create_api_key(req.api_key, req.user, grant_all_platforms=True)
     return {"status": "ok", "user": req.user}
 
 

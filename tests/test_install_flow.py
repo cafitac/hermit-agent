@@ -179,7 +179,7 @@ def test_ensure_gateway_api_key_creates_and_persists_key(tmp_path, monkeypatch):
     async def fake_lookup_api_key(token: str) -> str | None:
         return None
 
-    async def fake_create_api_key(api_key: str, user: str) -> None:
+    async def fake_create_api_key(api_key: str, user: str, *, grant_all_platforms: bool = False) -> None:
         calls.append((api_key, user))
 
     monkeypatch.setattr("hermit_agent.gateway.db.init_db", fake_init_db)
