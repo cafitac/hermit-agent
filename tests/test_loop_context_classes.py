@@ -107,3 +107,49 @@ def test_module_shim_read_task_state_delegates(tmp_path):
     _write_task_state(str(tmp_path), "test-skill", "arg1", "- [ ] Step 1")
     result = _read_task_state(str(tmp_path))
     assert "test-skill" in result
+
+
+# ─── US-002 continued: DynamicContextBuilder ────────────────────────────────
+
+
+def test_dynamic_context_builder_includes_date_and_cwd(tmp_path):
+    """DynamicContextBuilder.build() includes current date and cwd."""
+    from hermit_agent.loop_context import DynamicContextBuilder
+
+    builder = DynamicContextBuilder(cwd=str(tmp_path))
+    result = builder.build()
+    assert "Date:" in result
+    assert str(tmp_path) in result
+
+
+def test_dynamic_context_builder_includes_project_meta(tmp_path):
+    """DynamicContextBuilder.build() includes pyproject.toml project name."""
+    from hermit_agent.loop_context import DynamicContextBuilder
+
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nname = \"my-test-project\"\ndescription = \"A test.\"\n",
+        encoding="utf-8",
+    )
+    builder = DynamicContextBuilder(cwd=str(tmp_path))
+    result = builder.build()
+    assert "my-test-project" in result
+
+
+def test_dynamic_context_builder_includes_top_level_layout(tmp_path):
+    """DynamicContextBuilder.build() includes top-level directory entries."""
+    from hermit_agent.loop_context import DynamicContextBuilder
+
+    (tmp_path / "src").mkdir()
+    (tmp_path / "README.md").write_text("# Hello", encoding="utf-8")
+    builder = DynamicContextBuilder(cwd=str(tmp_path))
+    result = builder.build()
+    assert "src/" in result
+
+
+def test_dynamic_context_builder_shim_delegates(tmp_path):
+    """_build_dynamic_context() shim returns identical output to builder."""
+    from hermit_agent.loop_context import DynamicContextBuilder, _build_dynamic_context
+
+    result_direct = DynamicContextBuilder(cwd=str(tmp_path)).build()
+    result_shim = _build_dynamic_context(str(tmp_path))
+    assert result_direct == result_shim

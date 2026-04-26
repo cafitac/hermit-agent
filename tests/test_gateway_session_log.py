@@ -15,7 +15,7 @@ def _expanduser_factory(tmp_path):
 
 def test_gateway_session_log_creates_meta_and_events(tmp_path):
     from hermit_agent.session_store import cwd_slug
-    with patch('hermit_agent.session_store.os.path.expanduser', _expanduser_factory(tmp_path)):
+    with patch('hermit_agent.session.store.os.path.expanduser', _expanduser_factory(tmp_path)):
         from hermit_agent.gateway.session_log import GatewaySessionLog
         GatewaySessionLog(task_id='t001', cwd='/x/y', model='glm-5.1')
         expected = tmp_path / '.hermit' / 'logs' / 'gateway' / cwd_slug('/x/y') / 't001'
@@ -33,7 +33,7 @@ def test_gateway_session_log_creates_meta_and_events(tmp_path):
 
 
 def test_gateway_session_log_with_parent_session_id(tmp_path):
-    with patch('hermit_agent.session_store.os.path.expanduser', _expanduser_factory(tmp_path)):
+    with patch('hermit_agent.session.store.os.path.expanduser', _expanduser_factory(tmp_path)):
         from hermit_agent.gateway.session_log import GatewaySessionLog
         from hermit_agent.session_store import SessionStore
         log = GatewaySessionLog(task_id='t002', cwd='/x', model='m', parent_session_id='tui-abc')
@@ -43,7 +43,7 @@ def test_gateway_session_log_with_parent_session_id(tmp_path):
 
 
 def test_gateway_session_log_completed_status(tmp_path):
-    with patch('hermit_agent.session_store.os.path.expanduser', _expanduser_factory(tmp_path)):
+    with patch('hermit_agent.session.store.os.path.expanduser', _expanduser_factory(tmp_path)):
         from hermit_agent.gateway.session_log import GatewaySessionLog
         from hermit_agent.session_store import SessionStore
         log = GatewaySessionLog(task_id='t003', cwd='/x', model='m')
@@ -56,7 +56,7 @@ def test_gateway_session_log_completed_status(tmp_path):
 
 
 def test_gateway_session_log_crashed_status(tmp_path):
-    with patch('hermit_agent.session_store.os.path.expanduser', _expanduser_factory(tmp_path)):
+    with patch('hermit_agent.session.store.os.path.expanduser', _expanduser_factory(tmp_path)):
         from hermit_agent.gateway.session_log import GatewaySessionLog
         from hermit_agent.session_store import SessionStore
         log = GatewaySessionLog(task_id='t004', cwd='/x', model='m')
@@ -66,7 +66,7 @@ def test_gateway_session_log_crashed_status(tmp_path):
 
 
 def test_gateway_session_log_arbitrary_events(tmp_path):
-    with patch('hermit_agent.session_store.os.path.expanduser', _expanduser_factory(tmp_path)):
+    with patch('hermit_agent.session.store.os.path.expanduser', _expanduser_factory(tmp_path)):
         from hermit_agent.gateway.session_log import GatewaySessionLog
         log = GatewaySessionLog(task_id='t005', cwd='/x', model='m')
         log.write_event({'type': 'tool_use', 'tool_name': 'bash'})

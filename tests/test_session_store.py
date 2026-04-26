@@ -177,3 +177,20 @@ def test_derive_preview_strips_leading_context_blocks():
         "actual user message"
     )
     assert derive_preview([{"role": "user", "content": content}]) == "actual user message"
+
+
+# ─── US-003 shim contract ─────────────────────────────────────────────────────
+
+
+def test_session_store_is_same_class_as_session_store_module():
+    """session_store.SessionStore must be the exact same class as session.store.SessionStore."""
+    from hermit_agent.session_store import SessionStore as ShimClass
+    from hermit_agent.session.store import SessionStore as RealClass
+    assert ShimClass is RealClass
+
+
+def test_session_store_prune_mode_bucket_accessible(tmp_path):
+    """SessionStore from shim must expose _prune_mode_bucket (session/store.py new method)."""
+    from hermit_agent.session_store import SessionStore
+    store = SessionStore(root=str(tmp_path / "logs"))
+    assert hasattr(store, "_prune_mode_bucket"), "_prune_mode_bucket must be accessible via shim"

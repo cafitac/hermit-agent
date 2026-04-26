@@ -377,86 +377,86 @@ def _top_level_layout(cwd: str, max_entries: int = 30) -> str | None:
     return "  ".join(kept)
 
 
+class DynamicContextBuilder:
+    """Encapsulates dynamic context building for a working directory."""
+
+    def __init__(self, cwd: str) -> None:
+        self._cwd = cwd
+
+    def build(self) -> str:
+        """Build dynamic context string injected into the first user message."""
+        cwd = self._cwd
+        parts: list[str] = []
+
+        parts.append(f"Date: {_current_date()} | CWD: {cwd} | OS: {sys.platform}")
+
+        meta = _project_meta(cwd)
+        if meta:
+            parts.append(meta)
+
+        for readme_name in ("README.md", "README.rst", "README.txt", "README"):
+            readme_path = os.path.join(cwd, readme_name)
+            if os.path.isfile(readme_path):
+                snippet = _read_file_snippet(readme_path, max_bytes=2000)
+                if snippet:
+                    parts.append(f"README ({readme_name}):\n{snippet}")
+                break
+
+        layout = _top_level_layout(cwd)
+        if layout:
+            parts.append(f"Top-level entries: {layout}")
+
+        git_status = ""
+        try:
+            branch = subprocess.run(
+                ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                check=False,
+                capture_output=True,
+                text=True,
+                cwd=cwd,
+                timeout=5,
+            )
+            if branch.returncode == 0:
+                git_status = f"Branch: {branch.stdout.strip()}"
+                status = subprocess.run(
+                    ["git", "status", "--short"],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    cwd=cwd,
+                    timeout=5,
+                )
+                if status.stdout.strip():
+                    git_status += f"\n{status.stdout.strip()}"
+                log = subprocess.run(
+                    ["git", "log", "--oneline", "-3"],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    cwd=cwd,
+                    timeout=5,
+                )
+                if log.returncode == 0 and log.stdout.strip():
+                    git_status += f"\nRecent commits:\n{log.stdout.strip()}"
+        except Exception:
+            pass
+
+        if git_status:
+            parts.append(f"Git: {git_status}")
+
+        project_config = _find_project_config(cwd)
+        if project_config:
+            parts.append(project_config)
+
+        rules = _find_rules(cwd)
+        if rules:
+            parts.append(rules)
+
+        return "\n\n".join(parts)
+
+
 def _build_dynamic_context(cwd: str) -> str:
-    """Dynamic context — injected into the first user message as a system-reminder.
-
-    Claude Code pattern: inject project identity into the first-turn system message
-    so the model can resolve deictic phrases like "this project".
-    Injected items: date/cwd/os, git, project meta, README, top-level layout, HERMIT.md.
-    """
-    parts = []
-
-    parts.append(f"Date: {_current_date()} | CWD: {cwd} | OS: {sys.platform}")
-
-    # Project meta (pyproject.toml, package.json, Cargo.toml, go.mod)
-    meta = _project_meta(cwd)
-    if meta:
-        parts.append(meta)
-
-    # README opening — the core of the project identity blurb
-    for readme_name in ("README.md", "README.rst", "README.txt", "README"):
-        readme_path = os.path.join(cwd, readme_name)
-        if os.path.isfile(readme_path):
-            snippet = _read_file_snippet(readme_path, max_bytes=2000)
-            if snippet:
-                parts.append(f"README ({readme_name}):\n{snippet}")
-            break
-
-    # Top-level directory layout
-    layout = _top_level_layout(cwd)
-    if layout:
-        parts.append(f"Top-level entries: {layout}")
-
-    # Git status
-    git_status = ""
-    try:
-        branch = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
-            check=False,
-            capture_output=True,
-            text=True,
-            cwd=cwd,
-            timeout=5,
-        )
-        if branch.returncode == 0:
-            git_status = f"Branch: {branch.stdout.strip()}"
-            status = subprocess.run(
-                ["git", "status", "--short"],
-                check=False,
-                capture_output=True,
-                text=True,
-                cwd=cwd,
-                timeout=5,
-            )
-            if status.stdout.strip():
-                git_status += f"\n{status.stdout.strip()}"
-            # Last 3 commits — recent project activity
-            log = subprocess.run(
-                ["git", "log", "--oneline", "-3"],
-                check=False,
-                capture_output=True,
-                text=True,
-                cwd=cwd,
-                timeout=5,
-            )
-            if log.returncode == 0 and log.stdout.strip():
-                git_status += f"\nRecent commits:\n{log.stdout.strip()}"
-    except Exception:
-        pass
-
-    if git_status:
-        parts.append(f"Git: {git_status}")
-
-    # HERMIT.md project config
-    project_config = _find_project_config(cwd)
-    if project_config:
-        parts.append(project_config)
-
-    # .hermit/rules/*.md — rule files kept separate from HERMIT.md
-    rules = _find_rules(cwd)
-    if rules:
-        parts.append(rules)
-
-    return "\n\n".join(parts)
+    """Shim — delegates to DynamicContextBuilder(cwd).build()."""
+    return DynamicContextBuilder(cwd).build()
 
 

@@ -124,6 +124,26 @@ class GatewayClient:
         except Exception as e:
             logger.warning("interactive reply failed for session %s: %s", session_id, e)
 
+    def create_task(
+        self,
+        *,
+        task: str,
+        cwd: str = "",
+        model: str = "",
+        max_turns: int = 200,
+        parent_session_id: str | None = None,
+    ) -> dict:
+        body: dict = {"task": task, "cwd": cwd, "model": model, "max_turns": max_turns}
+        if parent_session_id is not None:
+            body["parent_session_id"] = parent_session_id
+        r = self._client.post(
+            f"{self.base_url}/tasks",
+            json=body,
+            headers=self._headers,
+        )
+        r.raise_for_status()
+        return r.json()
+
     def cancel_interactive_session(self, session_id: str) -> None:
         try:
             self._client.delete(

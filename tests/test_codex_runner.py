@@ -161,6 +161,8 @@ def test_run_single_model_routes_interview_like_codex_task_to_mcp_session(monkey
 
     calls = {}
     state = GatewayTaskState(task_id="interview-task")
+    # interview path blocks on _wait_for_gateway_reply(state.reply_queue) — pre-stage an answer
+    state.reply_queue.put("staging")
 
     class DummySSE:
         def publish_threadsafe(self, task_id, event):
@@ -310,6 +312,8 @@ def test_run_single_model_honors_explicit_interview_execution_hint(monkeypatch):
 
     calls = {}
     state = GatewayTaskState(task_id="interview-hint-task")
+    # interview path blocks on _wait_for_gateway_reply(state.reply_queue) — pre-stage an answer
+    state.reply_queue.put("staging")
 
     class DummyLLM:
         def __init__(self, *, base_url, model, api_key):
