@@ -106,4 +106,8 @@ jobs:
           git add pyproject.toml hermit-ui/package.json
           git diff --staged --quiet || git commit -m "chore: release v${NEXT} [skip ci]"
           git tag "v${NEXT}" || echo "Tag v${NEXT} already exists, skipping"
-          git push origin HEAD:main --tags
+          git push origin HEAD:main --tags || {
+            echo "::warning::Write-back push blocked by branch protection."
+            echo "::warning::To fix: add 'github-actions[bot]' as bypass actor in repo ruleset settings."
+            echo "::warning::npm + PyPI publish already succeeded — skipping write-back."
+          }
