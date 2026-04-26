@@ -213,6 +213,9 @@ def _make_agent(tmp_path, max_context_tokens=32000, seed_handoff=True):
     agent.token_totals = {"prompt_tokens": 0, "completion_tokens": 0}
     agent._pinned_reminders = []
 
+    from hermit_agent.context_injector import ContextInjector
+    agent._injector = ContextInjector(agent=agent)
+
     return agent
 
 

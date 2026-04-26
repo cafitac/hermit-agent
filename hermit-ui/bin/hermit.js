@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Thin launcher — lets npm bin resolve to this file while dist/app.js
 // has no shebang (it is compiled output from tsc).
-import { spawn } from 'child_process';
+import { spawn, spawnSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -86,10 +86,56 @@ function spawnAndExit(cmd, args, opts = {}) {
   child.on('exit', code => process.exit(code ?? 0));
 }
 
+function bootstrapRuntime() {
+  const home = homedir();
+  const venvDir = join(home, '.hermit', 'npm-runtime', 'venv');
+  const venvPython = join(venvDir, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python3');
+
+  if (existsSync(venvPython)) return; // already set up
+
+  console.log('[hermit] First run: setting up Python runtime...');
+
+  // Find a suitable system Python 3
+  const candidates = process.platform === 'win32'
+    ? ['python', 'python3']
+    : ['python3', 'python'];
+  let sysPython = null;
+  for (const name of candidates) {
+    const r = spawnSync(name, ['--version'], { encoding: 'utf8' });
+    if (r.status === 0 && /Python 3/.test(r.stdout + r.stderr)) {
+      sysPython = name;
+      break;
+    }
+  }
+  if (!sysPython) {
+    console.error('[hermit] Python 3 not found. Please install Python 3.9+ and re-run.');
+    process.exit(1);
+  }
+
+  // Create venv
+  console.log('[hermit] Creating venv at ~/.hermit/npm-runtime/venv ...');
+  const mkVenv = spawnSync(sysPython, ['-m', 'venv', venvDir], { stdio: 'inherit' });
+  if (mkVenv.status !== 0) {
+    console.error('[hermit] Failed to create venv.');
+    process.exit(1);
+  }
+
+  // Install hermit Python package
+  const pip = join(venvDir, process.platform === 'win32' ? 'Scripts/pip' : 'bin/pip');
+  console.log('[hermit] Installing cafitac-hermit-agent...');
+  const install = spawnSync(pip, ['install', '--quiet', 'cafitac-hermit-agent'], { stdio: 'inherit' });
+  if (install.status !== 0) {
+    console.error('[hermit] Failed to install cafitac-hermit-agent.');
+    process.exit(1);
+  }
+  console.log('[hermit] Runtime ready.\n');
+}
+
 if (command === 'update' || command === 'self-update') {
   spawnAndExit('npm', ['install', '-g', '@cafitac/hermit-agent@latest'], { shell: process.platform === 'win32' });
 } else if (command && !command.startsWith('-')) {
   // Non-flag first argument: subcommand or single message → Python backend
+  bootstrapRuntime();
   const pythonBin = findPythonBin();
   if (pythonBin) {
     spawnAndExit(pythonBin, rawArgs);
@@ -99,6 +145,7 @@ if (command === 'update' || command === 'self-update') {
   }
 } else {
   // No args (or only flags) → interactive TUI
+  bootstrapRuntime();
   // Set HERMIT_PYTHON so the TUI uses the managed venv, not the system Python.
   const venvPython = findVenvPython();
   const tuiEnv = venvPython ? { ...process.env, HERMIT_PYTHON: venvPython } : process.env;

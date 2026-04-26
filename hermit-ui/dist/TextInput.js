@@ -1,14 +1,14 @@
 import { jsx as _jsx } from "react/jsx-runtime";
 /**
- * TextInput
+ * TextInput — grapheme-aware, wrap-aware terminal text input.
  *
- * Maintains a small, self-contained cursor model that is:
- * - grapheme-aware
- * - width-aware
- * - wrap-aware
+ * Architecture: WrapModel is a pure (immutable-after-construction) class that
+ * owns the single wrap algorithm. Both cursor positioning and visual rendering
+ * derive from the same WrapModel instance, so they can never drift out of sync.
  *
- * This deliberately keeps the input primitive simple and predictable instead of
- * trying to mimic every detail of Claude Code's private TUI.
+ * Previously the cursor was computed from a sliced substring while rendering
+ * used Ink's global textWrap setting — two separate algorithms that could
+ * silently diverge and misplace the cursor on wrapped lines.
  */
 import { useCallback, useRef, useState } from 'react';
 import Text from './ink/components/Text.js';
@@ -16,154 +16,209 @@ import Box from './ink/components/Box.js';
 import useInput from './ink/hooks/use-input.js';
 import { useDeclaredCursor } from './ink/hooks/use-declared-cursor.js';
 import { stringWidth } from './ink/stringWidth.js';
-const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+// ─── Grapheme primitives ───────────────────────────────────────────────────
+const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 function toGraphemes(text) {
-    return Array.from(graphemeSegmenter.segment(text), ({ segment }) => segment);
+    return Array.from(segmenter.segment(text), s => s.segment);
 }
-function graphemeLength(text) {
-    return toGraphemes(text).length;
-}
-function graphemeSlice(text, start, end) {
-    return toGraphemes(text).slice(start, end).join('');
-}
-function buildWrappedPositions(text, wrapWidth) {
-    const graphemes = toGraphemes(text);
-    const positions = [{ offset: 0, line: 0, column: 0 }];
-    const finiteWrap = Number.isFinite(wrapWidth) && wrapWidth > 0;
-    let line = 0;
-    let column = 0;
-    for (let index = 0; index < graphemes.length; index += 1) {
-        const grapheme = graphemes[index];
-        if (grapheme === '\n') {
-            line += 1;
-            column = 0;
-            positions.push({ offset: index + 1, line, column });
-            continue;
-        }
-        const width = stringWidth(grapheme);
-        if (finiteWrap && column > 0 && column + width > wrapWidth) {
-            line += 1;
-            column = 0;
-        }
-        column += width;
-        positions.push({ offset: index + 1, line, column });
-        if (finiteWrap && column >= wrapWidth) {
-            line += 1;
-            column = 0;
-        }
+/**
+ * Pure wrap model — immutable after construction.
+ *
+ * _positions[i] = cursor state after placing grapheme i-1.
+ * _positions[0] = initial state (before any grapheme).
+ *
+ * Both cursorAt() and displayLines use the same _positions array, so visual
+ * rows and cursor rows are guaranteed identical without any synchronisation.
+ */
+class WrapModel {
+    text;
+    wrapWidth;
+    _graphemes;
+    _positions;
+    constructor(text, wrapWidth) {
+        this.text = text;
+        this.wrapWidth = wrapWidth;
+        this._graphemes = toGraphemes(text);
+        this._positions = this._build();
     }
-    return positions;
+    _build() {
+        const positions = [{ offset: 0, line: 0, column: 0 }];
+        const finite = Number.isFinite(this.wrapWidth) && this.wrapWidth > 0;
+        let line = 0;
+        let column = 0;
+        for (let i = 0; i < this._graphemes.length; i++) {
+            const g = this._graphemes[i];
+            if (g === '\n') {
+                line += 1;
+                column = 0;
+                positions.push({ offset: i + 1, line, column });
+                continue;
+            }
+            const w = stringWidth(g);
+            if (finite && column > 0 && column + w > this.wrapWidth) {
+                line += 1;
+                column = 0;
+            }
+            column += w;
+            positions.push({ offset: i + 1, line, column });
+            if (finite && column >= this.wrapWidth) {
+                line += 1;
+                column = 0;
+            }
+        }
+        return positions;
+    }
+    /** Cursor position after the grapheme at grapheme-offset `offset`. */
+    cursorAt(offset) {
+        const clamped = Math.max(0, Math.min(offset, this._positions.length - 1));
+        const p = this._positions[clamped];
+        return { line: p.line, column: p.column };
+    }
+    /** Total visual line count. */
+    get lineCount() {
+        return (this._positions[this._positions.length - 1]?.line ?? 0) + 1;
+    }
+    /**
+     * Text split into visual rows. Row i maps directly to cursor relativeY=i.
+     * '\n' chars are separators — excluded from row content so they don't
+     * inject a literal newline inside the rendered Text node.
+     */
+    get displayLines() {
+        if (this._graphemes.length === 0)
+            return [''];
+        const rowBuckets = new Map();
+        for (let i = 0; i < this._graphemes.length; i++) {
+            const g = this._graphemes[i];
+            if (g === '\n')
+                continue;
+            const row = this._positions[i + 1].line;
+            let bucket = rowBuckets.get(row);
+            if (!bucket)
+                rowBuckets.set(row, (bucket = []));
+            bucket.push(g);
+        }
+        return Array.from({ length: this.lineCount }, (_, i) => (rowBuckets.get(i) ?? []).join(''));
+    }
+    /**
+     * Move cursor up or down one visual line, preserving column.
+     * Returns the original offset if movement would leave the text bounds.
+     */
+    moveCursorVertically(offset, delta) {
+        const clamped = Math.max(0, Math.min(offset, this._positions.length - 1));
+        const current = this._positions[clamped];
+        const targetLine = current.line + delta;
+        if (targetLine < 0)
+            return offset;
+        // Walk positions on targetLine; keep the last one whose column ≤ current
+        // column so the cursor tracks the original horizontal position.
+        let selected;
+        for (const p of this._positions) {
+            if (p.line < targetLine)
+                continue;
+            if (p.line > targetLine)
+                break;
+            if (p.column <= current.column)
+                selected = p;
+        }
+        return selected?.offset ?? offset;
+    }
 }
+// ─── Public surface (used by uiModel.ts, SmartInput) ──────────────────────
 export function getCursorPositionForWrappedText(text, wrapWidth) {
-    const positions = buildWrappedPositions(text, wrapWidth);
-    const last = positions[positions.length - 1];
-    return last ? { line: last.line, column: last.column } : { line: 0, column: 0 };
+    // Create a model for the full text; cursor at end = position after last grapheme.
+    const model = new WrapModel(text, wrapWidth);
+    return model.cursorAt(Number.POSITIVE_INFINITY);
 }
 export function getWrappedLineCount(text, wrapWidth) {
-    return getCursorPositionForWrappedText(text, wrapWidth).line + 1;
-}
-function moveCursorVertically(text, offset, wrapWidth, delta) {
-    const positions = buildWrappedPositions(text, wrapWidth);
-    const current = positions[Math.max(0, Math.min(offset, positions.length - 1))];
-    if (!current)
-        return offset;
-    const targetLine = current.line + delta;
-    if (targetLine < 0)
-        return offset;
-    const candidates = positions.filter(position => position.line === targetLine);
-    if (candidates.length === 0)
-        return offset;
-    let selected = candidates[0];
-    for (const candidate of candidates) {
-        if (candidate.column <= current.column) {
-            selected = candidate;
-            continue;
-        }
-        break;
-    }
-    return selected.offset;
+    return new WrapModel(text, wrapWidth).lineCount;
 }
 function TextInput({ value, placeholder = '', focus = true, onChange, onSubmit, wrapWidth, }) {
     const [, setTick] = useState(0);
+    // Mutable refs hold the authoritative value and cursor offset so the
+    // useInput callback never closes over stale state. onChange/onSubmit are
+    // also ref-tracked to keep the useCallback dep array stable (only wrapWidth
+    // changes should re-create the handler).
     const valueRef = useRef(value);
-    const offsetRef = useRef(graphemeLength(value));
+    const offsetRef = useRef(toGraphemes(value).length);
     const onChangeRef = useRef(onChange);
     const onSubmitRef = useRef(onSubmit);
     onChangeRef.current = onChange;
     onSubmitRef.current = onSubmit;
+    // Sync external value (e.g. history navigation from parent); move cursor to end.
     if (value !== valueRef.current) {
         valueRef.current = value;
-        offsetRef.current = graphemeLength(value);
+        offsetRef.current = toGraphemes(value).length;
     }
     const effectiveWrapWidth = wrapWidth ?? Number.POSITIVE_INFINITY;
-    const beforeCursor = graphemeSlice(valueRef.current, 0, offsetRef.current);
-    const cursorPosition = getCursorPositionForWrappedText(beforeCursor, effectiveWrapWidth);
+    // One model per render — positions computed once, shared by cursorAt and displayLines.
+    const model = new WrapModel(valueRef.current, effectiveWrapWidth);
+    const cursorPos = model.cursorAt(offsetRef.current);
     const setNodeRef = useDeclaredCursor({
-        line: cursorPosition.line,
-        column: cursorPosition.column,
+        line: cursorPos.line,
+        column: cursorPos.column,
         active: focus,
     });
     useInput(useCallback((input, key) => {
+        // Pass-through: let parent handle scroll, exit, and tab-completion.
         if (key.pageUp || key.pageDown ||
             key.wheelUp || key.wheelDown ||
             (key.ctrl && (input === 'c' || input === 'd')) ||
             input === '\x03' || input === '\x04' ||
-            key.tab || (key.shift && key.tab)) {
+            key.tab || (key.shift && key.tab))
             return;
-        }
-        const currentValue = valueRef.current;
-        const currentOffset = offsetRef.current;
-        let nextValue = currentValue;
-        let nextOffset = currentOffset;
+        const graphemes = toGraphemes(valueRef.current);
+        let nextGraphemes = graphemes;
+        let nextOffset = offsetRef.current;
         if ((key.shift && key.return) || (key.meta && key.return)) {
-            nextValue = graphemeSlice(currentValue, 0, currentOffset) + '\n' + graphemeSlice(currentValue, currentOffset);
-            nextOffset = currentOffset + 1;
+            nextGraphemes = [...graphemes.slice(0, nextOffset), '\n', ...graphemes.slice(nextOffset)];
+            nextOffset += 1;
         }
         else if (key.return) {
-            onSubmitRef.current?.(currentValue);
+            onSubmitRef.current?.(valueRef.current);
             return;
         }
         else if (key.leftArrow) {
-            nextOffset = Math.max(0, currentOffset - 1);
+            nextOffset = Math.max(0, nextOffset - 1);
         }
         else if (key.rightArrow) {
-            nextOffset = Math.min(graphemeLength(currentValue), currentOffset + 1);
+            nextOffset = Math.min(graphemes.length, nextOffset + 1);
         }
-        else if (key.upArrow) {
-            nextOffset = moveCursorVertically(currentValue, currentOffset, effectiveWrapWidth, -1);
-        }
-        else if (key.downArrow) {
-            nextOffset = moveCursorVertically(currentValue, currentOffset, effectiveWrapWidth, 1);
+        else if (key.upArrow || key.downArrow) {
+            // Re-create model with current value (valueRef may have changed since render).
+            nextOffset = new WrapModel(valueRef.current, effectiveWrapWidth)
+                .moveCursorVertically(nextOffset, key.upArrow ? -1 : 1);
         }
         else if (key.home) {
             nextOffset = 0;
         }
         else if (key.end) {
-            nextOffset = graphemeLength(currentValue);
+            nextOffset = graphemes.length;
         }
         else if (key.backspace || key.delete) {
-            if (currentOffset > 0) {
-                nextValue = graphemeSlice(currentValue, 0, currentOffset - 1) + graphemeSlice(currentValue, currentOffset);
-                nextOffset = currentOffset - 1;
+            if (nextOffset > 0) {
+                nextGraphemes = [...graphemes.slice(0, nextOffset - 1), ...graphemes.slice(nextOffset)];
+                nextOffset -= 1;
             }
         }
         else if (input) {
-            nextValue = graphemeSlice(currentValue, 0, currentOffset) + input + graphemeSlice(currentValue, currentOffset);
-            nextOffset = currentOffset + graphemeLength(input);
+            const inputGraphemes = toGraphemes(input);
+            nextGraphemes = [...graphemes.slice(0, nextOffset), ...inputGraphemes, ...graphemes.slice(nextOffset)];
+            nextOffset += inputGraphemes.length;
         }
-        const maxOffset = graphemeLength(nextValue);
-        nextOffset = Math.max(0, Math.min(nextOffset, maxOffset));
+        nextOffset = Math.max(0, Math.min(nextOffset, nextGraphemes.length));
+        const nextValue = nextGraphemes.join('');
         valueRef.current = nextValue;
         offsetRef.current = nextOffset;
-        setTick(value => value + 1);
-        if (nextValue !== currentValue) {
+        setTick(t => t + 1);
+        if (nextValue !== graphemes.join(''))
             onChangeRef.current(nextValue);
-        }
     }, [effectiveWrapWidth]), { isActive: focus });
-    const displayValue = valueRef.current;
-    if (graphemeLength(displayValue) === 0 && placeholder) {
+    if (!valueRef.current && placeholder) {
         return (_jsx(Box, { ref: setNodeRef, children: _jsx(Text, { dim: true, children: placeholder }) }));
     }
-    return (_jsx(Box, { ref: setNodeRef, children: _jsx(Text, { children: displayValue }) }));
+    // Each display line renders as a separate Text row in a column Box.
+    // Row i maps to cursor relativeY=i — derived from the same model.displayLines
+    // as model.cursorAt(), so visual rows and cursor rows are always identical.
+    return (_jsx(Box, { ref: setNodeRef, flexDirection: "column", children: model.displayLines.map((line, i) => (_jsx(Text, { children: line }, i))) }));
 }
 export default TextInput;

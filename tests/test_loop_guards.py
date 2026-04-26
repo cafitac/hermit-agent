@@ -87,7 +87,7 @@ def test_third_consecutive_edit_same_file_is_blocked():
         agent._execute_tool("read_file", {"path": path})
         # Loop guard state initialization: since the test verifies "consecutive edits after read"
         # Remove the effect of the just-performed read (guard catches repetitions "without read after edit").
-        agent._read_paths_since_last_edit.clear()
+        agent._guards._read_paths_since_last_edit.clear()
 
         # 1st edit
         r1 = agent._execute_tool(
@@ -105,7 +105,7 @@ def test_third_consecutive_edit_same_file_is_blocked():
 
         # G48: Loop guard triggers only on speculative edits after test failure
         # (Planned edits of multiple sections without test failure should be allowed)
-        agent._consecutive_test_failures = 1
+        agent._guards.consecutive_test_failures = 1
 
         # 3rd edit — should be blocked by loop guard
         r3 = agent._execute_tool(
@@ -128,7 +128,7 @@ def test_read_file_resets_edit_streak():
 
         # EditFileTool preconditions met
         agent._execute_tool("read_file", {"path": path})
-        agent._read_paths_since_last_edit.clear()
+        agent._guards._read_paths_since_last_edit.clear()
 
         r1 = agent._execute_tool("edit_file", {"path": path, "old_string": "line_a", "new_string": "line_A"})
         assert not r1.is_error
@@ -176,7 +176,7 @@ def test_consecutive_test_failures_trigger_read_hint():
         agent._track_loop_state("run_tests", {}, ToolResult(content="FAIL", is_error=True))
         agent._track_loop_state("run_tests", {}, ToolResult(content="FAIL", is_error=True))
 
-        assert agent._consecutive_test_failures >= 2
+        assert agent._guards.consecutive_test_failures >= 2
 
         # Call hint injection method
         before = len(agent.messages)
@@ -199,4 +199,55 @@ def test_successful_test_resets_failure_counter():
         agent = _make_agent(tmp)
         agent._track_loop_state("run_tests", {}, ToolResult(content="FAIL", is_error=True))
         agent._track_loop_state("run_tests", {}, ToolResult(content="PASS", is_error=False))
-        assert agent._consecutive_test_failures == 0
+        assert agent._guards.consecutive_test_failures == 0
+
+
+# ─── LoopGuards unit tests ────────────────────────────────────────────────────
+
+
+def _make_guards(tmp_path_str: str):
+    from hermit_agent.loop_guards import LoopGuards
+    return LoopGuards(cwd=tmp_path_str)
+
+
+def _tool_result(*, is_error: bool = False, content: str = "ok"):
+    from hermit_agent.tools import ToolResult
+    return ToolResult(content=content, is_error=is_error)
+
+
+def test_loop_guards_check_edit_loop_ignores_non_edit():
+    with tempfile.TemporaryDirectory() as tmp:
+        guards = _make_guards(tmp)
+        assert guards.check_edit_loop("bash", {"command": "ls"}) is None
+        assert guards.check_edit_loop("read_file", {"path": "foo.py"}) is None
+
+
+def test_loop_guards_blocks_third_edit_after_test_failure():
+    with tempfile.TemporaryDirectory() as tmp:
+        guards = _make_guards(tmp)
+        path = os.path.join(tmp, "foo.py")
+        guards.track("run_tests", {}, _tool_result(is_error=True))
+        guards.track("edit_file", {"path": path}, _tool_result())
+        guards.track("edit_file", {"path": path}, _tool_result())
+        result = guards.check_edit_loop("edit_file", {"path": path})
+        assert result is not None and result.is_error and "Loop guard" in result.content
+
+
+def test_loop_guards_no_block_without_test_failure():
+    with tempfile.TemporaryDirectory() as tmp:
+        guards = _make_guards(tmp)
+        path = os.path.join(tmp, "foo.py")
+        guards.track("edit_file", {"path": path}, _tool_result())
+        guards.track("edit_file", {"path": path}, _tool_result())
+        assert guards.check_edit_loop("edit_file", {"path": path}) is None
+
+
+def test_loop_guards_track_test_pass_resets_failures():
+    with tempfile.TemporaryDirectory() as tmp:
+        guards = _make_guards(tmp)
+        guards.track("run_tests", {}, _tool_result(is_error=True))
+        guards.track("run_tests", {}, _tool_result(is_error=True))
+        assert guards.consecutive_test_failures == 2
+        guards.track("run_tests", {}, _tool_result(is_error=False))
+        assert guards.consecutive_test_failures == 0
+        assert guards.total_test_passes == 1

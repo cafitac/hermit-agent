@@ -16,83 +16,19 @@ import json
 import threading
 import time as _time
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Generator, Literal
+from typing import Generator
 
 import httpx
 
-
-@dataclass
-class ToolCall:
-    id: str
-    name: str
-    arguments: dict
-
-
-@dataclass
-class LLMResponse:
-    content: str | None = None
-    tool_calls: list[ToolCall] = field(default_factory=list)
-    usage: dict | None = None  # {"prompt_tokens": N, "completion_tokens": N}
-
-    @property
-    def has_tool_calls(self) -> bool:
-        return len(self.tool_calls) > 0
-
-
-@dataclass
-class StreamChunk:
-    """Streaming chunk."""
-    type: Literal["text", "reasoning", "tool_call_start", "tool_call_done", "done", "usage"]
-    text: str = ""
-    tool_call: ToolCall | None = None
-    usage: dict | None = None  # only populated in type="usage" chunks
-
-
-class LLMCallTimeout(TimeoutError):
-    """LLM call exceeds CALL_TIMEOUT or user cancels (§32 G30-C)."""
-
-
-_FLAT_RETRY_DELAY = 2.0
-_OVERLOAD_RETRY_DELAY = 5.0
-
-
-def _with_retry(func, max_retries: int = 3, base_delay: float = _FLAT_RETRY_DELAY):
-    """Flat-delay based retry.
-
-    Exponential backoff was too long relative to external API rate-limit recovery and looked like a hang.
-    If a Retry-After header is present, its value takes priority.
-    """
-    last_error: Exception | None = None
-    for attempt in range(max_retries + 1):
-        try:
-            return func()
-        except LLMCallTimeout:
-            # §32 G30-C: cancellation/timeout propagates immediately without retry.
-            raise
-        except httpx.HTTPStatusError as e:
-            last_error = e
-            if attempt >= max_retries:
-                break
-            code = e.response.status_code
-            if code == 429:
-                retry_after = e.response.headers.get("Retry-After")
-                delay = float(retry_after) if retry_after else base_delay
-            elif code == 529:
-                delay = _OVERLOAD_RETRY_DELAY
-            else:
-                delay = base_delay
-            print(f"\033[33m[Retry {attempt + 1}/{max_retries}: HTTP {code}. Waiting {delay:.1f}s]\033[0m")
-            _time.sleep(delay)
-        except Exception as e:
-            last_error = e
-            if attempt >= max_retries:
-                break
-            print(f"\033[33m[Retry {attempt + 1}/{max_retries}: {e}. Waiting {base_delay:.1f}s]\033[0m")
-            _time.sleep(base_delay)
-
-    raise last_error  # type: ignore
-
+from .llm_types import (  # noqa: F401 — re-exported for hermit_agent.llm_client consumers
+    LLMCallTimeout,
+    LLMResponse,
+    StreamChunk,
+    ToolCall,
+    _FLAT_RETRY_DELAY,
+    _OVERLOAD_RETRY_DELAY,
+    _with_retry,
+)
 
 # ---------------------------------------------------------------------------
 # Base
@@ -424,138 +360,11 @@ class LLMClientBase(ABC):
         )
 
 
-# ---------------------------------------------------------------------------
-# Concrete implementations
-# ---------------------------------------------------------------------------
-
-class LocalLLMClient(LLMClientBase):
-    """Local LLM client for any local backend (MLX, llama.cpp, Ollama).
-
-    All local backends expose an OpenAI-compatible /v1 endpoint, so this
-    single class handles them all via URL-based dispatch.
-    """
-
-    MODEL_ROUTING = {
-        "quality": "qwen3-coder:30b",
-        "speed": "qwen3-coder:30b",
-        "fast": "qwen3-coder:30b",
-    }
-
-    def __init__(
-        self,
-        base_url: str = "http://localhost:11434/v1",
-        model: str = "qwen3-coder:30b",
-        api_key: str | None = None,
-    ):
-        super().__init__(base_url, model, api_key)
-
-    def _provider_extra_params(self, stream: bool) -> dict:
-        return {}
-
-
-class OllamaClient(LocalLLMClient):
-    """Thin subclass adding qwen3 reasoning_effort support for Ollama.
-
-    Use LocalLLMClient for non-ollama local backends (MLX, llama.cpp).
-    """
-
-    def _provider_extra_params(self, stream: bool) -> dict:
-        """reasoning_effort: qwen3 thinking mode control parameter."""
-        if not self.reasoning:
-            return {"reasoning_effort": "none"}
-        return {}
-
-
-class OpenAICompatClient(LLMClientBase):
-    """Standard OpenAI-compatible external API client.
-
-    Used for z.ai/GLM, OpenAI, and other external services.
-    Does not send non-standard parameters (e.g., reasoning_effort).
-"""
-
-    MODEL_ROUTING = {
-        "quality": "gpt-4o",
-        "speed": "gpt-4o-mini",
-        "fast": "gpt-4o-mini",
-    }
-
-    def __init__(
-        self,
-        base_url: str,
-        model: str,
-        api_key: str | None = None,
-    ):
-        super().__init__(base_url, model, api_key)
-
-    def _provider_extra_params(self, stream: bool) -> dict:
-        return {}
-
-
-class ZAIClient(OpenAICompatClient):
-    """z.ai/GLM API client.
-
-    Environment variables:
-      Z_AI_API_KEY   or   HERMIT_API_KEY
-      HERMIT_MODEL  (default: glm-5.1)
-"""
-
-    DEFAULT_BASE_URL = "https://api.z.ai/api/coding/paas/v4"
-
-    MODEL_ROUTING = {
-        "quality": "glm-5.1",   # Code generation, review, complex reasoning
-        "speed": "glm-4.7",     # Tasks requiring fast responses
-        "fast": "glm-4.7",
-    }
-
-    def __init__(
-        self,
-        model: str = "glm-5.1",
-        api_key: str | None = None,
-        base_url: str | None = None,
-    ):
-        import os
-        resolved_key = api_key or os.environ.get("Z_AI_API_KEY") or os.environ.get("HERMIT_API_KEY")
-        super().__init__(
-            base_url=base_url or self.DEFAULT_BASE_URL,
-            model=model,
-            api_key=resolved_key,
-        )
-
-
-# ---------------------------------------------------------------------------
-# Factory
-# ---------------------------------------------------------------------------
-
-_LOCAL_HOSTS = ("localhost", "127.0.0.1", "0.0.0.0", "::1")
-
-
-def create_llm_client(
-    base_url: str = "http://localhost:11434/v1",
-    model: str | None = None,
-    api_key: str | None = None,
-    local_backend: str | None = None,
-) -> LLMClientBase:
-    """Auto-detects the provider from base_url and returns the appropriate client.
-
-    For local hosts, uses OllamaClient (qwen3 reasoning_effort) only when
-    local_backend is "ollama".  All other local backends get LocalLLMClient.
-    """
-    url = base_url.lower()
-
-    if "z.ai" in url:
-        return ZAIClient(base_url=base_url, model=model or "glm-5.1", api_key=api_key)
-
-    if any(h in url for h in _LOCAL_HOSTS):
-        # Ollama gets the subclass with reasoning_effort support
-        if local_backend == "ollama":
-            return OllamaClient(base_url=base_url, model=model or "qwen3-coder:30b", api_key=api_key)
-        # MLX, llama.cpp, or unspecified → generic local client
-        return LocalLLMClient(base_url=base_url, model=model or "qwen3-coder:30b", api_key=api_key)
-
-    # Unknown external server → handled as standard OpenAI-compat
-    return OpenAICompatClient(base_url=base_url, model=model or "gpt-4o", api_key=api_key)
-
-
-# ---------------------------------------------------------------------------
-# Backward compatibility alias (deprecated) — removed
-# ---------------------------------------------------------------------------
+# Re-export concrete providers for backward compat
+from .llm_providers import (  # noqa: F401
+    LocalLLMClient,
+    OllamaClient,
+    OpenAICompatClient,
+    ZAIClient,
+    create_llm_client,
+)
