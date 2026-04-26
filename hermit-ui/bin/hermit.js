@@ -60,17 +60,25 @@ Startup flags:
   process.exit(0);
 }
 
-function findPythonBin() {
-  if (process.env.HERMIT_PYTHON) return process.env.HERMIT_PYTHON;
+function findInVenv(...names) {
   const home = homedir();
-  const candidates = [
-    join(home, '.hermit', 'npm-runtime', 'venv', 'bin', 'hermit'),
-    join(home, '.hermit', 'npm-runtime', 'venv', 'Scripts', 'hermit.exe'),
-  ];
-  for (const c of candidates) {
-    if (existsSync(c)) return c;
+  const venvBin = join(home, '.hermit', 'npm-runtime', 'venv', 'bin');
+  const venvScripts = join(home, '.hermit', 'npm-runtime', 'venv', 'Scripts');
+  for (const name of names) {
+    for (const dir of [venvBin, venvScripts]) {
+      const p = join(dir, name);
+      if (existsSync(p)) return p;
+    }
   }
   return null;
+}
+
+function findPythonBin() {
+  return process.env.HERMIT_PYTHON || findInVenv('hermit', 'hermit.exe');
+}
+
+function findVenvPython() {
+  return process.env.HERMIT_PYTHON || findInVenv('python', 'python3', 'python.exe');
 }
 
 function spawnAndExit(cmd, args, opts = {}) {
@@ -91,5 +99,8 @@ if (command === 'update' || command === 'self-update') {
   }
 } else {
   // No args (or only flags) → interactive TUI
-  spawnAndExit(process.execPath, [appJs, ...rawArgs]);
+  // Set HERMIT_PYTHON so the TUI uses the managed venv, not the system Python.
+  const venvPython = findVenvPython();
+  const tuiEnv = venvPython ? { ...process.env, HERMIT_PYTHON: venvPython } : process.env;
+  spawnAndExit(process.execPath, [appJs, ...rawArgs], { env: tuiEnv });
 }
