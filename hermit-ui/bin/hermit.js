@@ -14,6 +14,10 @@ const rawArgs = process.argv.slice(2);
 const command = rawArgs[0] ?? '';
 const packageName = '@cafitac/hermit-agent';
 
+function runtimeHome() {
+  return process.env.HERMIT_HOME || homedir();
+}
+
 function readCurrentPackageVersion() {
   const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
   return String(pkg.version ?? '').trim();
@@ -40,6 +44,24 @@ function readInstalledGlobalVersion() {
     return null;
   }
   return null;
+}
+
+function readManagedRuntimeVersion(venvPython) {
+  if (!existsSync(venvPython)) return null;
+  const result = spawnSync(
+    venvPython,
+    [
+      '-c',
+      'import importlib.metadata as m; print(m.version("cafitac-hermit-agent"))',
+    ],
+    {
+      encoding: 'utf8',
+      shell: process.platform === 'win32',
+    },
+  );
+  if (result.status !== 0) return null;
+  const version = String(result.stdout ?? '').trim();
+  return version || null;
 }
 
 function isInteractivePromptAllowed() {
@@ -131,6 +153,7 @@ function runSelfUpdate() {
   }
 
   const afterVersion = readInstalledGlobalVersion();
+  syncManagedRuntime(afterVersion || beforeVersion);
   if (!afterVersion) {
     console.log(`[hermit] Update complete. Current installed version: v${beforeVersion}`);
     process.exit(0);
@@ -192,7 +215,7 @@ Startup flags:
 }
 
 function findInVenv(...names) {
-  const home = homedir();
+  const home = runtimeHome();
   const venvBin = join(home, '.hermit', 'npm-runtime', 'venv', 'bin');
   const venvScripts = join(home, '.hermit', 'npm-runtime', 'venv', 'Scripts');
   for (const name of names) {
@@ -212,17 +235,43 @@ function findVenvPython() {
   return process.env.HERMIT_PYTHON || findInVenv('python', 'python3', 'python.exe');
 }
 
+function syncManagedRuntime(expectedVersion) {
+  if (process.env.HERMIT_SKIP_MANAGED_RUNTIME_SYNC === '1') return;
+  const venvPython = findVenvPython();
+  if (!venvPython || !existsSync(venvPython) || !expectedVersion) return;
+
+  const managedVersion = readManagedRuntimeVersion(venvPython);
+  if (managedVersion === expectedVersion) return;
+
+  const pip = join(dirname(venvPython), process.platform === 'win32' ? 'pip.exe' : 'pip');
+  if (!existsSync(pip)) return;
+
+  console.log(`[hermit] Syncing managed runtime to v${expectedVersion}...`);
+  const install = spawnSync(
+    pip,
+    ['install', '--quiet', '--upgrade', `cafitac-hermit-agent==${expectedVersion}`],
+    { stdio: 'inherit' },
+  );
+  if (install.status !== 0) {
+    console.error(`[hermit] Failed to sync managed runtime to v${expectedVersion}.`);
+    process.exit(install.status ?? 1);
+  }
+}
+
 function spawnAndExit(cmd, args, opts = {}) {
   const child = spawn(cmd, args, { stdio: 'inherit', ...opts });
   child.on('exit', code => process.exit(code ?? 0));
 }
 
 function bootstrapRuntime() {
-  const home = homedir();
+  const home = runtimeHome();
   const venvDir = join(home, '.hermit', 'npm-runtime', 'venv');
   const venvPython = join(venvDir, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python3');
 
-  if (existsSync(venvPython)) return; // already set up
+  if (existsSync(venvPython)) {
+    syncManagedRuntime(readCurrentPackageVersion());
+    return; // already set up
+  }
 
   console.log('[hermit] First run: setting up Python runtime...');
 

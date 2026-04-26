@@ -7,6 +7,7 @@
 - Added interactive startup update prompts for user-facing `hermit` commands so newer npm releases can be installed before continuing.
 - Added install-time model preference selection so users can choose whether plain `hermit` follows auto-routing or stays pinned to a fixed model.
 - Clarified the difference between `model` and `routing.priority_models`, and made plain `hermit` honor the routing priority chain when `model` is set to `__auto__`.
+- Made the npm launcher sync the managed Python runtime to the same published Hermit version so new install/setup behavior is not hidden behind a stale backend package.
 
 ## v0.3.10
 
