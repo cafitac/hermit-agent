@@ -12,18 +12,75 @@ const appJs = join(__dirname, '..', 'dist', 'app.js');
 
 const rawArgs = process.argv.slice(2);
 const command = rawArgs[0] ?? '';
+const packageName = '@cafitac/hermit-agent';
+
+function readCurrentPackageVersion() {
+  const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
+  return String(pkg.version ?? '').trim();
+}
+
+function readInstalledGlobalVersion() {
+  const result = spawnSync(
+    'npm',
+    ['list', '-g', packageName, '--json', '--depth=0'],
+    {
+      encoding: 'utf8',
+      shell: process.platform === 'win32',
+    },
+  );
+
+  const stdout = String(result.stdout ?? '').trim();
+  if (!stdout) return null;
+
+  try {
+    const payload = JSON.parse(stdout);
+    const version = payload?.dependencies?.[packageName]?.version;
+    if (typeof version === 'string' && version.trim()) return version.trim();
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function runSelfUpdate() {
+  const beforeVersion = readCurrentPackageVersion();
+  const install = spawnSync(
+    'npm',
+    ['install', '-g', `${packageName}@latest`],
+    {
+      stdio: 'inherit',
+      shell: process.platform === 'win32',
+    },
+  );
+
+  if (install.status !== 0) {
+    process.exit(install.status ?? 1);
+  }
+
+  const afterVersion = readInstalledGlobalVersion();
+  if (!afterVersion) {
+    console.log(`[hermit] Update complete. Current installed version: v${beforeVersion}`);
+    process.exit(0);
+  }
+
+  if (afterVersion === beforeVersion) {
+    console.log(`[hermit] Already using the latest version (v${afterVersion}).`);
+    process.exit(0);
+  }
+
+  console.log(`[hermit] Updated from v${beforeVersion} to v${afterVersion}.`);
+  process.exit(0);
+}
 
 // --- Meta commands (no Python or TUI needed) ---
 
 if (command === 'version' || rawArgs.includes('--version') || rawArgs.includes('-v')) {
-  const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
-  console.log(pkg.version);
+  console.log(readCurrentPackageVersion());
   process.exit(0);
 }
 
 if (command === 'help' || rawArgs.includes('--help') || rawArgs.includes('-h')) {
-  const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8'));
-  console.log(`hermit v${pkg.version} — Local LLM Coding Agent
+  console.log(`hermit v${readCurrentPackageVersion()} — Local LLM Coding Agent
 
 Usage:
   hermit                        Interactive TUI (default)
@@ -133,7 +190,7 @@ function bootstrapRuntime() {
 }
 
 if (command === 'update' || command === 'self-update') {
-  spawnAndExit('npm', ['install', '-g', '@cafitac/hermit-agent@latest'], { shell: process.platform === 'win32' });
+  runSelfUpdate();
 } else if (command && !command.startsWith('-')) {
   // Non-flag first argument: subcommand or single message → Python backend
   bootstrapRuntime();
