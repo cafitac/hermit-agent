@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import threading
 import time
+import urllib.error
+import urllib.request
 from collections.abc import Callable
 from typing import Any
 
@@ -51,8 +53,22 @@ class CodexChannelsInteractiveSink:
         self.sessions: dict[str, Any] = {}
         self.lock = threading.Lock()
 
+    def is_available(self, *, settings: Any) -> bool:
+        """Check if the codex-channels server is reachable."""
+        if not getattr(settings, "enabled", False):
+            return False
+        try:
+            url = f"http://{settings.host}:{settings.port}/health"
+            with urllib.request.urlopen(url, timeout=2) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+
     def notify(self, prompt: InteractivePrompt) -> None:
         settings = self._settings_loader(prompt)
+        if not self.is_available(settings=settings):
+            return  # silently degrade — no codex-channels server
+
         session = maybe_start_codex_channels_wait_session(
             prompt,
             settings=settings,
