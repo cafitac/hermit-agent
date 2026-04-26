@@ -1470,9 +1470,9 @@ function HermitAgentUI() {
             placeholder={isRunning && !backgrounded ? 'Agent working... (ESC to interrupt, Ctrl+B to background)' : ''}
             commands={commands}
           />
-          {ctrlCPending
-            ? <Text dim color="ansi:yellow">{'  Press Ctrl+C (or Ctrl+D) again to exit'}</Text>
-            : <Text dim>{'  Ctrl+L clear · Ctrl+R search · Ctrl+B bg · Ctrl+O history · ESC interrupt · Ctrl+C/D exit'}</Text>}
+          {ctrlCPending && (
+            <Text dim color="ansi:yellow">{'  Press Ctrl+C (or Ctrl+D) again to exit'}</Text>
+          )}
         </Box>
       )}
 

@@ -1,9 +1,18 @@
 {
-  "name": "hermit-ui",
-  "version": "1.0.0",
+  "name": "@cafitac/hermit-agent",
+  "version": "0.3.12",
+  "description": "HermitAgent TUI — React+Ink terminal UI for the hermit-agent executor",
   "type": "module",
+  "files": [
+    "bin",
+    "dist"
+  ],
+  "bin": {
+    "hermit": "./bin/hermit.js"
+  },
   "scripts": {
     "build": "tsc",
+    "prepublishOnly": "tsc",
     "start": "node dist/app.js",
     "dev": "tsc && node dist/app.js"
   },

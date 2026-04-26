@@ -989,9 +989,7 @@ function HermitAgentUI() {
                                             if (v.trim())
                                                 setInput(v.trim());
                                             setHistorySearch('');
-                                        }, wrapWidth: Math.max(10, columns - 20) })] })] })) : (_jsxs(Box, { paddingX: 1, flexDirection: "column", onPaste: (e) => setInput(prev => prev + e.data), children: [_jsx(SmartInput, { value: input, onChange: setInput, onSubmit: handleSubmit, placeholder: isRunning && !backgrounded ? 'Agent working... (ESC to interrupt, Ctrl+B to background)' : '', commands: commands }), ctrlCPending
-                                ? _jsx(Text, { dim: true, color: "ansi:yellow", children: '  Press Ctrl+C (or Ctrl+D) again to exit' })
-                                : _jsx(Text, { dim: true, children: '  Ctrl+L clear · Ctrl+R search · Ctrl+B bg · Ctrl+O history · ESC interrupt · Ctrl+C/D exit' })] })), _jsx(Box, { children: _jsx(Text, { dim: true, children: '─'.repeat(columns) }) }), _jsx(StatusBar, { status: status, backgrounded: backgrounded, toolCount: toolCountRef.current })] })] }));
+                                        }, wrapWidth: Math.max(10, columns - 20) })] })] })) : (_jsxs(Box, { paddingX: 1, flexDirection: "column", onPaste: (e) => setInput(prev => prev + e.data), children: [_jsx(SmartInput, { value: input, onChange: setInput, onSubmit: handleSubmit, placeholder: isRunning && !backgrounded ? 'Agent working... (ESC to interrupt, Ctrl+B to background)' : '', commands: commands }), ctrlCPending && (_jsx(Text, { dim: true, color: "ansi:yellow", children: '  Press Ctrl+C (or Ctrl+D) again to exit' }))] })), _jsx(Box, { children: _jsx(Text, { dim: true, children: '─'.repeat(columns) }) }), _jsx(StatusBar, { status: status, backgrounded: backgrounded, toolCount: toolCountRef.current })] })] }));
 }
 // Korean IME stdin 전처리 — DEL + 커밋 문자가 별도 청크로 올 때 합침.
 // DEL(\x7f)이 단독으로 오면 잠시 대기, 다음 데이터와 합쳐서 처리.

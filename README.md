@@ -2,20 +2,7 @@
 
 [![Python tests](https://github.com/cafitac/hermit-agent/actions/workflows/python-tests.yml/badge.svg)](https://github.com/cafitac/hermit-agent/actions/workflows/python-tests.yml)
 
-> **Run Claude Code or Codex 50–80% cheaper: Hermit is an MCP executor with Codex-first fallback routing (codex → z.ai → local) while your orchestrator stays in charge.**
-
-HermitAgent plugs into Claude Code or Codex as an MCP sub-agent. The orchestrator keeps doing what it does best — planning, interviewing, code review — and delegates the high-token grunt work (file edits, test runs, commit/push, refactors) to a low-cost executor (Codex, local ollama, or flat-rate z.ai).
-
-## Highlights
-
-- **Dual orchestrator support**: Hermit works as an MCP sub-agent for both Claude Code and Codex. Either one stays the planner; Hermit does the execution.
-- **Codex-first routing**: `gpt-5.4` at `medium` reasoning is the default executor lane when available.
-- **Auto model routing when `model` is omitted**: configurable via `routing.priority_models` in `settings.json` — providers not configured or installed are skipped automatically (default chain: `gpt-5.4 medium → glm → local ollama`).
-- **Explicit model requests are strict**: if you ask for a specific model and it is unavailable, Hermit returns a clear error instead of silently switching providers.
-- **npm-first install (clone-free)**: `npm install -g @cafitac/hermit-agent && hermit setup-codex` (or `hermit setup-claude`) — no repo checkout needed.
-- **Self-update**: `hermit self-update` pulls the latest published version.
-- **Standalone MCP launcher**: `hermit-mcp-server` auto-starts the gateway, so both Claude Code and Codex can bring up the full stack from the MCP entrypoint alone.
-- **Model guardrail profiles**: per-model safety profiles under `hermit_agent/profiles/defaults/`, with user overrides via `~/.hermit/profiles/`.
+> Run Claude Code or Codex cheaper — Hermit is an MCP executor that handles the high-token mechanical work while your orchestrator stays in charge.
 
 ```
 ┌──────────────┐
@@ -29,245 +16,71 @@ HermitAgent plugs into Claude Code or Codex as an MCP sub-agent. The orchestrato
 └──────────────┘
 ```
 
-## Why
-
-Claude Code and Codex are great, but a `/feature-develop` session easily burns 100k+ orchestrator tokens on mechanical work — reading files, running `pytest`, formatting diffs, writing conventional-commit messages — that any competent code model can do. HermitAgent exposes three MCP tools (`run_task`, `reply_task`, `check_task`) so the orchestrator (Claude Code or Codex) can delegate whole skills to a cheaper model while the user stays in the familiar UI.
-
-## The pattern
-
-![demo](assets/demo.gif)
-
-## How much it actually saves
-
-**Measured numbers live under [`benchmarks/results/`](benchmarks/results/)** — each file is one independent run pair.
-
-We deliberately don't publish a single marketing percentage here. Savings depend on the task, the repo, and the executor you choose; a headline number without that context is noise. If you want a reproducible datapoint:
-
-1. `cp -r benchmarks/todo-api/starter /tmp/cc-run && cp -r benchmarks/todo-api/starter /tmp/cc-hermit-run`
-2. Run `/feature-develop <task>` in one, `/feature-develop-hermit <task>` in the other (task spec: [`benchmarks/todo-api/TASK.md`](benchmarks/todo-api/TASK.md)).
-3. Feed the two Claude Code session logs into [`scripts/measure-savings.sh`](scripts/measure-savings.sh) — it prints a markdown table you can paste into `benchmarks/results/`.
-
-Full protocol: [`docs/measure-savings.md`](docs/measure-savings.md). Executor cost is treated as \$0 (ollama = free, z.ai / GLM = flat-rate); what we compare is Claude-side tokens and USD.
-
-## What it gives you
-
-The product is the **pattern**, not any specific skill:
-
-> The orchestrator (Claude Code or Codex) does reasoning, judgment, and quality gates.
-> A cheap local / flat-rate executor does the grunt work.
-> They talk to each other over MCP, so the switch is one word in a slash command.
-
-The repo ships this pattern as four **example** skills under `.claude/commands/` so you can see it in action and fork them into whatever workflow you already have:
-
-- `/feature-develop-hermit` — Claude interviews, Hermit implements and tests
-- `/code-apply-hermit` — Claude reads the PR review, Hermit applies every line
-- `/code-polish-hermit` — Claude picks what to polish, Hermit runs the lint/test loop
-- `/code-push-hermit` — Claude writes the PR description, Hermit does the commit/push
-
-These are **reference implementations**, tuned for the author's own workflow (GitHub PR-centric). The goal is for Claude to stay on the "small Claude tokens, big quality impact" work — interviews, review, final verification — and for everything high-volume / mechanical (Read × N, Edit × N, Bash/pytest loops, commit message writing) to land on Hermit. Write your own `-hermit` variant for the skills you actually live in; the [docs/hermit-variants.md](docs/hermit-variants.md) "add your own" recipe is a few steps.
-
-Everything else in the repo is there to make that pattern work cleanly:
-
-- **MCP server** (`run_task` / `reply_task` / `check_task`) with bidirectional conversation — Hermit can ask Claude mid-task
-- **Skill compatibility** — same `SKILL.md` format and YAML frontmatter as Claude Code; skills under `~/.claude/skills/` are shared read-only
-- **Progressive-disclosure rule system** — foundational rules stay auto-injected, contextual rules are on-demand skills (cuts session prefix from ~12k to ~3k tokens)
-- **Gateway** (FastAPI + SSE) in front of the executor LLM — 429 fail-fast + failover, cache hints, dashboard at `:8765`
-- **Model routing by name + auto chain** — explicit names route by provider (`gpt-*-codex` / `gpt-5.4` → Codex, `glm-*` → z.ai, `name:tag` → local ollama); omitted model follows `routing.priority_models`
-- **Permission floor** — `.env`, `*.pem`, `*.key`, `credentials*` blocked across every mode (even YOLO)
-- **Self-learning skills** with model-aware lifecycles (validated-on models, 30-day auto-deprecation, `needs_review` on model swap)
-- **Optional standalone TUI** (React + Ink) with gateway-private interactive sessions, so multi-turn chat continuity survives until normal compaction without widening the public MCP task API
-
-## How is this different from …?
-
-| Project | Pattern | Trade-off |
-|---|---|---|
-| **claude-code-router** | Redirects all CC traffic to another provider | You lose Claude quality; the "Claude Code" session is really the local model |
-| **LiteLLM** | Generic multi-provider proxy | Not coding-specific, no understanding of CC workflow |
-| **OpenHands / aider** | Standalone agent, replaces Claude Code | Full migration away from CC; big UX change |
-| **Anthropic Agent SDK** | Official sub-agent framework | DIY: you still write the executor, the local-model wiring, the MCP glue |
-| **HermitAgent** | Claude or Codex **stays** the orchestrator; Hermit is the executor | Narrower scope, but drop-in: `/foo` → `/foo-hermit` |
-
-If you don't use Claude Code or Codex, you don't need HermitAgent. If you do, and the monthly bill or the rate limits are a problem, this is what it is for.
-
-### Where the project is heading
-
-The bundled skills still give the orchestrator the full interview phase before delegating. The direction this project is moving in is the opposite: **the orchestrator does only the final verification pass** — the executor does the interview, the plan, the implementation, the tests, the commit — and the orchestrator is only woken up at the end to reject, accept, or ask for a narrow revision. The less the orchestrator does, the more of the bill disappears. The existing `-hermit` skills are the conservative checkpoint on that spectrum; your own variants can push further.
+Claude Code or Codex stays the orchestrator — planning, interviewing, code review. Hermit takes the rest: file edits, test runs, commits, refactors, on a cheap local or flat-rate model via MCP. The switch is one word in a slash command: `/foo` → `/foo-hermit`.
 
 ## Install
 
-### npm-first (clone-free)
-
 ```bash
 npm install -g @cafitac/hermit-agent
-hermit setup-codex
+hermit setup-claude    # Claude Code
+# or
+hermit setup-codex     # Codex
 ```
 
-Or, if you only want the Claude-facing setup path first:
+Requires Node.js 20+ and Python 3.11+. The npm package bootstraps a managed Python runtime under `~/.hermit/` on first run — no repo checkout needed.
+
+To upgrade: `hermit self-update`
+
+## Quick start
 
 ```bash
-npm install -g @cafitac/hermit-agent
-hermit setup-claude
+hermit-mcp-server   # starts the gateway + MCP stdio server
 ```
 
-The npm package is a thin launcher. On first run it bootstraps a managed Python runtime under `~/.hermit/npm-runtime`, installs `cafitac-hermit-agent` from PyPI, and then forwards to the normal Hermit CLI. That means you can start from npm alone without cloning the repo first, while Hermit's Python runtime remains the real implementation.
+Then in Claude Code:
 
-When the npm-installed launcher detects a newer published version, `hermit` now prints a compact update hint on stderr. To upgrade the wrapper directly, run:
+```
+/feature-develop-hermit <task>
+```
 
+Claude interviews, writes the plan, and delegates implementation to Hermit over MCP. Executor tokens never hit your orchestrator bill.
+
+## Reference skills
+
+Four example skills ship under `.claude/commands/`. Fork these into your own workflow:
+
+| Command | Claude does | Hermit does |
+|---|---|---|
+| `/feature-develop-hermit` | interview + plan | implement + test |
+| `/code-apply-hermit` | read PR review | apply every change |
+| `/code-polish-hermit` | pick what to polish | lint/test loop |
+| `/code-push-hermit` | write PR description | commit + push |
+
+See [docs/hermit-variants.md](docs/hermit-variants.md) to add your own.
+
+## Executor LLM
+
+**ollama (local, free):**
 ```bash
-hermit self-update
+brew install ollama && ollama pull qwen3-coder:30b
 ```
 
-Requirements for the npm-first path:
-
-- Node.js 20+
-- Python 3.11+
-
-### Codex async-interaction path (experimental)
-
-If you want Codex approval requests and free-text waits to flow through Hermit without manual polling, run:
-
-```bash
-hermit-agent setup-codex
-```
-
-That command:
-- keeps **Hermit** as the public Codex-facing surface
-- prepares Hermit's local async approval / reply path for Codex
-- writes the needed project-local Hermit settings
-- bootstraps the Codex discovery assets Hermit needs
-- registers the local Codex marketplace root automatically
-- prefers Codex app-server visible prompts when the host exposes that surface
-- removes Hermit's legacy Codex UserPromptSubmit reply hook if it was installed earlier
-- runs a compact local smoke check before reporting success
-
-From an operator point of view, the important check is still:
-
-```bash
-codex mcp list
-codex mcp get hermit-channel
-```
-
-If `hermit-channel` is present, Codex is pointed at Hermit correctly. The rest of the async reply transport is an internal Hermit implementation detail.
-
-The preferred path is package-first. If Hermit's default packaged Codex support is unavailable, it can still fall back to a built sibling checkout via `HERMIT_CODEX_CHANNELS_SOURCE_PATH` (or `../codex-channels`).
-
-The default path is user-scope and local-first so Codex can discover the bridge across workspaces; remote backends stay optional and out of the critical path.
-
-### Claude-focused setup path
-
-If you want the Claude-facing install path without also provisioning the Codex async runtime, run:
-
-```bash
-hermit setup-claude
-```
-
-This uses the same install flow, but skips the Codex runtime/bootstrap work and focuses on the gateway, API key, and Claude MCP registration path.
-
-To reverse everything: `./uninstall.sh` walks back through the same steps with per-item prompts (`--yes` accepts all; `--keep-data` leaves `~/.hermit/` alone). Ollama models are never deleted — remove manually with `ollama rm <model>`.
-
-The `hermit` launcher transparently starts the gateway daemon if it isn't already running (`HERMIT_AUTO_GATEWAY=0` opts out), so you never need to remember to run `./bin/gateway.sh --daemon` first. The MCP launcher (`./bin/mcp-server.sh`) now does the same check-and-start flow, which makes both Claude Code and Codex able to bring up the full Hermit stack from the MCP entrypoint alone.
-
-### Pick an executor LLM
-
-**ollama (local, $0)** — either accept the installer prompt, or:
-
-```bash
-brew install ollama
-ollama pull qwen3-coder:30b
-```
-
-**z.ai Coding Plan (flat-rate subscription)** — add your z.ai key to `~/.hermit/settings.json`:
-
+**z.ai (flat-rate subscription)** — add to `~/.hermit/settings.json`:
 ```json
 {
-  "gateway_url": "http://localhost:8765",
-  "gateway_api_key": "hermit-mcp-…",
-  "model": "glm-5.1",
   "providers": {
     "z.ai": {
       "base_url": "https://api.z.ai/api/coding/paas/v4",
-      "api_key": "<your z.ai key>",
+      "api_key": "<your key>",
       "anthropic_base_url": "https://api.z.ai/api/anthropic"
     }
   }
 }
 ```
 
-Two keys, two layers: `gateway_api_key` authenticates clients against the local Hermit gateway, and `providers[<slug>].api_key` is the gateway's own credential for talking to the upstream platform. Add a new provider by dropping another block into `providers` — e.g. `providers["anthropic"]` with a base_url + api_key.
+## Configuration
 
-### Skipped the API key prompt?
-
-Either re-run `./install.sh` (it detects a placeholder and re-prompts), or mint one manually — see [docs/cc-setup.md § 2](docs/cc-setup.md). Hermit will refuse to run until `gateway_api_key` is a real value, not `CHANGE_ME_AFTER_FIRST_RUN`.
-
-### Wire it into Claude Code
-
-If you accepted the installer's MCP registration prompt, the `hermit-channel` stdio entry is already in `~/.claude.json` — the remaining piece is launching Claude Code with `--dangerously-load-development-channels server:hermit-channel` so the channel capability is enabled. A shell alias works well:
-
-```bash
-alias cc='claude --dangerously-load-development-channels server:hermit-channel'
-```
-
-If you skipped the registration prompt (or want to adjust the scope later), see [docs/cc-setup.md § 3](docs/cc-setup.md) for the exact `~/.claude.json` block.
-
-## Quick start — CC + Hermit (the recommended shape)
-
-```bash
-./bin/mcp-server.sh               # auto-starts the gateway if needed, then serves MCP stdio
-```
-
-Then in Claude Code:
-
-```
-/feature-develop-hermit <ticket-or-short-task>
-```
-
-Claude interviews you about the ticket, writes the plan, and delegates the implementation to Hermit over MCP. You watch Hermit's progress in the session; the executor tokens never hit your orchestrator bill.
-
-### Standalone (no Claude Code)
-
-```bash
-./bin/hermit.sh "fix the flaky test in tests/test_api.py"   # one-shot CLI
-./bin/hermit.sh                                              # TUI (needs HERMIT_UI_DIR)
-```
-
-The standalone TUI now keeps conversation continuity through a gateway-private interactive-session runtime. In practice that means:
-
-- turn 2 reuses the same live Hermit transcript instead of creating a fresh public task
-- direct-answer turns are persisted into the interactive transcript
-- TUI startup begins with a fresh session; use `/resume` explicitly when you want to recover a previous interactive session
-- recap is recovery/reference UX only, not the primary live transcript path
-
-### Two API endpoints
-
-The gateway exposes the same upstream providers behind two wire-format-specific paths. Model routing (`name:tag` → local ollama, `glm-*` → z.ai, extensible) is identical between them.
-
-- **`/v1/chat/completions` — OpenAI-native** (primary sharing surface)
-  Used by the `hermit` CLI, anything speaking the OpenAI SDK, and ngrok-exposed friends. Tier-gated via per-key platform ACL.
-  ```python
-  from openai import OpenAI
-  client = OpenAI(base_url="https://<ngrok>.ngrok.app/v1", api_key="<friend-key>")
-  ```
-
-- **`/anthropic/v1/messages` — Anthropic-native** *(alternative, not recommended as the Claude Code path)*
-  Enables pointing Claude Code at the gateway via `ANTHROPIC_BASE_URL=http://localhost:8765/anthropic` + `ANTHROPIC_AUTH_TOKEN=<gateway-key>`. z.ai is passthrough; ollama goes through a text-only Anthropic↔OpenAI translator (tool_use returns 400 in v1).
-  **Use only if you understand the tradeoff.** This bypasses HermitAgent entirely — Claude Code drives and your CC-side tools/permissions are all that apply. The recommended integration remains `CC → MCP (hermit-channel) → HermitAgent`, which `install.sh` already sets up.
-
-**Platform ACL (operator vs friend):**
-```
-Operator key (install.sh --generate-api-key, the default)
-  → platforms: local, z.ai, anthropic, codex   (full access)
-
-Friend key (install.sh --generate-friend-key)
-  → platforms: local                            (local ollama only; 403 for glm-*)
-```
-
-A key with zero rows in `api_key_platform` is denied everything (default-deny).
-
-### Configuration
-
-Priority: CLI flag > env var > `<cwd>/.hermit/settings.json` > `~/.hermit/settings.json` > defaults.
-
-If `model` is omitted in a task request, Hermit follows `routing.priority_models` from `settings.json`. The default chain is **`gpt-5.4` (`medium`) -> z.ai -> local ollama`**, but any provider that is not configured or installed in the current environment is skipped automatically.
+`~/.hermit/settings.json` (created by `hermit setup-*`):
 
 ```json
 {
@@ -280,133 +93,28 @@ If `model` is omitted in a task request, Hermit follows `routing.priority_models
       {"model": "glm-5.1"},
       {"model": "qwen3-coder:30b"}
     ]
-  },
-  "response_language": "auto",
-  "compact_instructions": "",
-  "ollama_max_loaded": 1,
-  "external_max_concurrent": 10
-}
-```
-
-Common templates:
-
-`Codex-first`
-
-```json
-{
-  "routing": {
-    "priority_models": [
-      {"model": "gpt-5.4", "reasoning_effort": "medium"},
-      {"model": "glm-5.1"},
-      {"model": "qwen3-coder:30b"}
-    ]
   }
 }
 ```
 
-`z.ai-first`
+Providers not configured or installed are skipped automatically. Explicit model names are strict — a missing provider returns a clear error instead of silently falling back.
 
-```json
-{
-  "routing": {
-    "priority_models": [
-      {"model": "glm-5.1"},
-      {"model": "gpt-5.4", "reasoning_effort": "medium"},
-      {"model": "qwen3-coder:30b"}
-    ]
-  }
-}
+## Architecture
+
+- **AgentLoop** — LLM turn → tool call → result → compact on context fill
+- **Gateway** — FastAPI relay in front of the executor (routing, 429 failover, dashboard at `:8765`)
+- **MCP server** — `run_task` / `reply_task` / `check_task` / `cancel_task`
+- **TUI** — optional React+Ink terminal UI for standalone interactive sessions (`hermit`)
+
+## Tests
+
+```bash
+.venv/bin/pytest tests/
 ```
-
-`local-only`
-
-```json
-{
-  "routing": {
-    "priority_models": [
-      {"model": "qwen3-coder:30b"}
-    ]
-  }
-}
-```
-
-`ollama_max_loaded` is how many distinct models the gateway lets ollama hold in memory simultaneously — if a request targets a not-yet-loaded model while the budget is already full, the gateway returns **503** with `Retry-After` instead of letting ollama swap itself into an OOM. `external_max_concurrent` caps in-flight requests to external providers (z.ai, OpenAI, …); excess requests queue rather than fail. This is the replacement for the old `ollama-proxy` — the gateway itself is safe to expose (e.g. via ngrok).
-
-**Field semantics after the proxy refactor:**
-- `gateway_url` / `gateway_api_key` — **client-facing**. What the `hermit` CLI (and any other client) sends to authenticate against the local gateway.
-- `providers[<slug>]` — **gateway-internal, upstream**. Per-platform block the gateway uses to reach z.ai / Anthropic / OpenAI / etc. on your behalf. Clients never see these. Adding a new provider is one JSON block — the adapter layer picks it up by slug.
-
-## Architecture (short version)
-
-- **AgentLoop** — LLM turn, tool call, result, compact when context fills
-- **Gateway** — FastAPI layer in front of the executor. Classifier, routing, failover, web dashboard
-- **MCP server** — exposes `run_task` / `reply_task` / `check_task` / `cancel_task` for Claude Code
-- **Channel notifications** — `notifications/claude/channel` frames emitted inline by the Python MCP server; Claude Code renders them as `<channel source="hermit-channel">` blocks
-- **Skills** — markdown with YAML frontmatter, hot-loaded at session start, compatible with `~/.claude/skills/`
-
-## Layout
-
-```
-hermit_agent/                # agent, loop, tools, gateway, MCP, skills
-.claude/                     # this repo's own Claude Code config
-scripts/harness/             # harness tooling (cc-learner.py, etc.)
-tests/                       # pytest suite
-docs/                        # user/operator docs and architecture notes
-bin/                         # launchers for hermit / gateway / MCP
-claw-code-main/             # reference mirror / sibling workspace (not part of HermitAgent package)
-hermes-agent/               # sibling project with its own workflows and release surface
-react/                      # standalone frontend package experiments / support surface
-```
-
-### CI map
-
-- **Root `.github/workflows/python-tests.yml`** — validates the `hermit_agent` Python package on Python 3.11–3.13.
-- **`hermes-agent/.github/workflows/*`** — sibling project CI; not the root package gate.
-- **`claw-code-main/rust/.github/workflows/*`** — nested Rust workspace CI; separate responsibility.
-
-If you touch root `hermit_agent/`, `bin/`, docs, or `tests/`, the root workflow is the primary CI contract.
 
 ## Status
 
-Early, working, single-author. MIT. No release cadence. No roadmap promises. Clone, read the code, open an issue if something is broken.
-
-## Running tests
-
-```bash
-.venv/bin/pytest tests/    # conftest.py auto-excludes ollama-dependent tests
-```
-
-## Boundaries
-
-- Hermit does not modify `~/.claude/` — it only reads `~/.claude/skills/` for cross-tool skill reuse
-
-## Model guardrail profiles
-
-Hermit ships model profiles under `hermit_agent/profiles/defaults/` for the
-main built-in lanes:
-
-- `qwen3-coder:30b`
-- `gpt-5.4`
-- `gpt-5.3`
-- `glm-5.1`
-- `unknown` fallback
-
-These profiles drive guardrail activation defaults through
-`hermit_agent.guardrails.engine.GuardrailEngine`. If you want to tune a
-specific model locally without forking the repo, place an override file at:
-
-```text
-~/.hermit/profiles/<model-slug>.yaml
-```
-
-Examples:
-
-- `~/.hermit/profiles/gpt-5.4.yaml`
-- `~/.hermit/profiles/glm-5.1.yaml`
-
-User profiles override the built-in defaults when the model id matches.
-- Hermit does not require Claude Code or Codex; it just shines brightest as their sub-agent
-- Nothing phones home. Everything runs locally or through the LLM endpoint you configure
+Early, working, MIT. No release cadence guarantees.
 
 ## License
 
@@ -414,9 +122,7 @@ MIT — see [LICENSE](LICENSE).
 
 ## See also
 
-- **[docs/cc-setup.md](docs/cc-setup.md)** — registering Hermit as a Claude Code MCP sub-agent
-- **[docs/hermit-variants.md](docs/hermit-variants.md)** — the `-hermit` skill family in detail
-- **[docs/measure-savings.md](docs/measure-savings.md)** — cost-savings measurement protocol
-- **[benchmarks/](benchmarks/)** — reproducible task specs and community datapoints
-- [CONTRIBUTING.md](CONTRIBUTING.md) — contribution guide
-- [.dev/](.dev/) — internal design notes
+- [docs/cc-setup.md](docs/cc-setup.md) — Claude Code MCP registration details
+- [docs/hermit-variants.md](docs/hermit-variants.md) — the `-hermit` skill family
+- [docs/measure-savings.md](docs/measure-savings.md) — cost-savings measurement protocol
+- [benchmarks/](benchmarks/) — reproducible task specs and community datapoints
