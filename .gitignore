@@ -45,9 +45,12 @@ prd.json
 .vscode/
 *.code-workspace
 
-# Claude Code local-only settings (shared settings .claude/settings.json, rules/, skills/, hooks/ are committed)
+# Claude Code local-only settings and personal session data
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.claude/learned-feedback/
+.claude/skills/
+.claude/hooks/auto_session_learning.py
 
 # Sensitive information (never commit)
 .env
@@ -92,6 +95,14 @@ plugins/
 # Temporary/local config files
 task_state.md
 claude_code_zai_env.sh
+
+# AI-managed internal planning/design docs (not for public OSS)
+.dev/
+
+# Third-party type stubs (not project source)
+*.pyi
+mcp/
+duckduckgo_search/
 
 # Subrepos (managed separately)
 hermes-agent/

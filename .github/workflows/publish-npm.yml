@@ -95,9 +95,14 @@ jobs:
           skip-existing: true
 
       - name: Write back version and tag
+        env:
+          # GH_PAT must be a fine-grained PAT with Contents: read+write.
+          # It is used to bypass the branch protection rule that blocks GITHUB_TOKEN.
+          PUSH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${{ github.repository }}"
           git add pyproject.toml hermit-ui/package.json
           git diff --staged --quiet || git commit -m "chore: release v${NEXT} [skip ci]"
           git tag "v${NEXT}" || echo "Tag v${NEXT} already exists, skipping"
