@@ -1,4 +1,9 @@
-"""Phase 2 TDD: loop.py learner auto-trigger test."""
+"""Phase 2→3 TDD: loop.py learner integration.
+
+Phase 3 moves the WRITE path from _maybe_trigger_learner (in-process)
+to OnStop hook → agent-learner Popen. The method is removed; these tests
+verify the removal is intentional and the counter still exists for metadata.
+"""
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -7,7 +12,7 @@ from hermit_agent.loop import AgentLoop, _STATIC_SYSTEM_PROMPT
 
 
 # ---------------------------------------------------------------------------
-# System prompt nudge
+# System prompt nudge (kept)
 # ---------------------------------------------------------------------------
 
 def test_system_prompt_contains_skills_guidance():
@@ -17,7 +22,7 @@ def test_system_prompt_contains_skills_guidance():
 
 
 # ---------------------------------------------------------------------------
-# _tool_call_count counter
+# _tool_call_count counter (kept — used for ON_STOP metadata)
 # ---------------------------------------------------------------------------
 
 def test_agent_loop_has_tool_call_count():
@@ -29,7 +34,7 @@ def test_agent_loop_has_tool_call_count():
 
 
 def test_tool_call_count_resets_on_new_run(tmp_path):
-    """_tool_call_count must be reset to 0 when calling a new run_loop."""
+    """_tool_call_count must be reset to 0 when calling reset."""
     llm = MagicMock()
     agent = AgentLoop(llm=llm, tools=[], cwd=str(tmp_path))
     agent._tool_call_count = 7  # Accumulated value from previous session
@@ -38,72 +43,13 @@ def test_tool_call_count_resets_on_new_run(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Auto-trigger
+# WRITE path removal (Phase 3)
 # ---------------------------------------------------------------------------
 
-def test_maybe_trigger_learner_fires_above_threshold(tmp_path):
-    """If _tool_call_count >= 5, learner must be called."""
+def test_maybe_trigger_learner_method_removed():
+    """_maybe_trigger_learner method must no longer exist on AgentLoop."""
     llm = MagicMock()
-    agent = AgentLoop(llm=llm, tools=[], cwd=str(tmp_path))
-    agent._tool_call_count = 6
-    agent.messages = [{"role": "user", "content": "Task request"}]
-
-    with patch("hermit_agent.learner.Learner") as MockLearner:
-        mock_instance = MockLearner.return_value
-        mock_instance.extract_from_success.return_value = {
-            "name": "test_skill",
-            "description": "test",
-            "triggers": ["test"],
-            "rule": "rule",
-            "why": "reason",
-            "good_pattern": "good",
-            "bad_pattern": "bad",
-        }
-        mock_instance.save_auto_learned.return_value = "/tmp/test_skill.md"
-
-        agent._maybe_trigger_learner()
-
-        mock_instance.extract_from_success.assert_called_once_with(
-            agent.messages, 6
-        )
-        mock_instance.save_auto_learned.assert_called_once()
-
-
-def test_maybe_trigger_learner_skips_below_threshold(tmp_path):
-    """If _tool_call_count < 5, learner must not be called."""
-    llm = MagicMock()
-    agent = AgentLoop(llm=llm, tools=[], cwd=str(tmp_path))
-    agent._tool_call_count = 3
-    agent.messages = []
-
-    with patch("hermit_agent.learner.Learner") as MockLearner:
-        agent._maybe_trigger_learner()
-        MockLearner.assert_not_called()
-
-
-def test_maybe_trigger_learner_resets_count_after_fire(tmp_path):
-    """_tool_call_count must be reset to 0 after trigger."""
-    llm = MagicMock()
-    agent = AgentLoop(llm=llm, tools=[], cwd=str(tmp_path))
-    agent._tool_call_count = 5
-    agent.messages = []
-
-    with patch("hermit_agent.learner.Learner") as MockLearner:
-        mock_instance = MockLearner.return_value
-        mock_instance.extract_from_success.return_value = None
-
-        agent._maybe_trigger_learner()
-        assert agent._tool_call_count == 0
-
-
-def test_maybe_trigger_learner_silent_on_exception(tmp_path):
-    """The session must not be interrupted when a learner exception occurs."""
-    llm = MagicMock()
-    agent = AgentLoop(llm=llm, tools=[], cwd=str(tmp_path))
-    agent._tool_call_count = 5
-    agent.messages = []
-
-    with patch("hermit_agent.learner.Learner") as MockLearner:
-        MockLearner.side_effect = Exception("LLM connection error")
-        # Exception must not be propagated
-        agent._maybe_trigger_learner()  # should not raise
+    agent = AgentLoop(llm=llm, tools=[])
+    assert not hasattr(agent, "_maybe_trigger_learner"), (
+        "_maybe_trigger_learner was removed in Phase 3 (WRITE → OnStop hook)"
+    )

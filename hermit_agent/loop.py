@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import subprocess
 import threading
 import uuid
@@ -215,6 +216,13 @@ class AgentLoop:
     def shutdown(self):
         """Exit handling after running OnExit hooks. Auto-saves handoff when HERMIT_AUTO_WRAP=1."""
         self.hook_runner.run_hooks(HookEvent.ON_EXIT, "", {})
+        # OnStop: fire hook + agent-learner process for WRITE path
+        self.hook_runner.run_hooks(HookEvent.ON_STOP, "", {
+            "session_id": self.session_id,
+            "model_id": getattr(self.llm, "model_id", ""),
+            "tool_call_count": self._tool_call_count,
+        })
+        self._run_agent_learner_on_stop()
         try:
             from .session_wrap import maybe_auto_wrap
 
@@ -239,6 +247,28 @@ class AgentLoop:
                     kb.save_pending(fact)
         except Exception as exc:
             _logger.warning("KB save_pending failed: %s", exc)
+
+    def _run_agent_learner_on_stop(self) -> None:
+        """Launch agent-learner process on stop if installed."""
+        if self.session_kind in ("gateway", "mcp"):
+            return
+        if not shutil.which("agent-learner"):
+            return
+        try:
+            subprocess.Popen(
+                [
+                    "agent-learner", "process",
+                    "--adapter", "hermit",
+                    "--session-id", str(self.session_id or ""),
+                    "--cwd", str(self.cwd),
+                    "--model-id", str(getattr(self.llm, "model_id", "")),
+                    "--auto",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except Exception:
+            pass  # agent-learner not installed — silently skip
 
     def _execute_tool(self, name: str, arguments: dict) -> ToolResult:
         return self._executor.execute_tool(name, arguments)
@@ -551,10 +581,6 @@ class AgentLoop:
                     self.messages.append({"role": "assistant", "content": response.content})
                     self._lifecycle.log_assistant_text(response.content)
 
-                # Self-learning trigger: extract skill after complex task completion (5+ tool calls)
-                if not getattr(self, "_skill_active", False):
-                    self._maybe_trigger_learner()
-
                 # Auto-continue: auto-resume when a skill stops with a text-only response
                 # SDD pattern -- only works when _skill_active flag is set
                 # (only set during skill execution to prevent triggering on regular user messages)
@@ -703,32 +729,6 @@ class AgentLoop:
 
     def _reset_tool_call_count(self) -> None:
         self._tool_call_count = 0
-
-    def _maybe_trigger_learner(self) -> None:
-        """Try self-learning skill extraction after completing a 5+ tool call task (background, non-blocking)."""
-        if self.session_kind in ('gateway', 'mcp'):
-            return
-        if self._tool_call_count < 5:
-            return
-        count = self._tool_call_count
-        self._tool_call_count = 0
-        messages_snapshot = list(self.messages)  # Snapshot to prevent race condition
-
-        def _run():
-            try:
-                from .learner import Learner
-                learner = Learner(self.llm)
-                skill_data = learner.extract_from_success(messages_snapshot, count)
-                if skill_data:
-                    path = learner.save_auto_learned(skill_data)
-                    if path:
-                        name = skill_data.get("name", "")
-                        self.emitter.progress(f"[Self-learning] Skill saved: {name}")
-            except Exception:
-                pass  # Learning failure must not disrupt the session
-
-        t = threading.Thread(target=_run, daemon=True)
-        t.start()
 
     def _execute_tool_calls(self, tool_calls) -> bool:
         return self._executor.execute_tool_calls(tool_calls)

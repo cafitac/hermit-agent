@@ -11,7 +11,6 @@ Implementations (2 types):
 
 from __future__ import annotations
 
-import threading
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Callable
 
@@ -137,25 +136,8 @@ class AgentSessionBase(ABC):
         return task
 
     def _schedule_teardown(self, succeeded: bool | None) -> None:
-        """Run verify_cmd + record_run in a background thread (independent of response time)."""
-        if not self._active_skill_names:
-            return
-
-        skill_names = list(self._active_skill_names)
-        cwd = self.cwd
-        llm = self.llm
-        _succeeded = succeeded
-
-        def _record():
-            try:
-                from .learner import Learner
-                learner = Learner(llm=llm)
-                verify_results = learner.run_verify_cmds(skill_names, cwd)
-                learner.record_run(skill_names, pytest_passed=_succeeded, verify_results=verify_results)
-            except Exception:
-                pass
-
-        threading.Thread(target=_record, daemon=True, name="agent-session-teardown").start()
+        """Teardown placeholder — WRITE path moved to OnStop hook."""
+        pass
 
     # ------------------------------------------------------------------
     # Abstract methods — must be implemented by subclasses

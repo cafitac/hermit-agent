@@ -22,6 +22,7 @@ class HookEvent(Enum):
     POST_TOOL_USE = "PostToolUse"
     ON_START = "OnStart"
     ON_EXIT = "OnExit"
+    ON_STOP = "OnStop"
 
 
 class HookAction(Enum):
