@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   id-token: write
 
 jobs:
@@ -35,8 +35,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -52,9 +50,14 @@ jobs:
         working-directory: hermit-ui
         run: npm run build
 
-      - name: Bump patch version
+      - name: Bump to next patch version from registry
         working-directory: hermit-ui
-        run: npm version patch --no-git-tag-version
+        run: |
+          PUBLISHED=$(npm view @cafitac/hermit-agent version 2>/dev/null || echo "0.0.0")
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$PUBLISHED"
+          NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))"
+          npm version "$NEXT" --no-git-tag-version
+          echo "Publishing version $NEXT (previous: $PUBLISHED)"
 
       - name: Verify npm package shape
         working-directory: hermit-ui
@@ -65,12 +68,3 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public --provenance
-
-      - name: Commit version bump
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add hermit-ui/package.json
-          VERSION=$(node -p "require('./hermit-ui/package.json').version")
-          git commit -m "chore: bump npm to v${VERSION} [skip ci]"
-          git push
