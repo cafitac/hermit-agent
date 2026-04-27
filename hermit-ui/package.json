@@ -1,7 +1,7 @@
 {
   "name": "@cafitac/hermit-agent",
-  "version": "0.3.46",
-  "description": "HermitAgent TUI — React+Ink terminal UI for the hermit-agent executor",
+  "version": "0.3.47",
+  "description": "HermitAgent TUI \u2014 React+Ink terminal UI for the hermit-agent executor",
   "type": "module",
   "repository": {
     "type": "git",
