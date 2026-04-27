@@ -1,11 +1,12 @@
 # HermitAgent
 
+[![GitHub Release](https://img.shields.io/github/v/release/cafitac/hermit-agent?cacheSeconds=300)](https://github.com/cafitac/hermit-agent/releases)
 [![Python tests](https://github.com/cafitac/hermit-agent/actions/workflows/python-tests.yml/badge.svg)](https://github.com/cafitac/hermit-agent/actions/workflows/python-tests.yml)
 [![npm version](https://img.shields.io/npm/v/@cafitac/hermit-agent?cacheSeconds=300)](https://www.npmjs.com/package/@cafitac/hermit-agent)
 [![PyPI version](https://img.shields.io/pypi/v/cafitac-hermit-agent?cacheSeconds=300)](https://pypi.org/project/cafitac-hermit-agent/)
-[![npm downloads](https://img.shields.io/npm/dm/@cafitac/hermit-agent?cacheSeconds=300)](https://www.npmjs.com/package/@cafitac/hermit-agent)
+[![License: MIT](https://img.shields.io/badge/license-MIT-8b5cf6)](LICENSE)
 
-> Hermit is the executor layer for Claude Code or Codex: keep the premium orchestrator for planning and review, and offload the repetitive coding work to cheaper local or flat-rate models.
+> Hermit adds a dedicated MCP execution lane under Claude Code or Codex: keep the premium orchestrator for judgment, and route the repetitive repo work to predictable local or flat-rate models.
 
 ```
 ┌──────────────┐
@@ -19,7 +20,7 @@
 └──────────────┘
 ```
 
-Claude Code or Codex stays in charge of planning, interviewing, and review. Hermit takes the mechanical path: file edits, test runs, refactors, commits, and MCP-executed follow-through on cheaper execution models. The switch is one word in a slash command: `/foo` → `/foo-hermit`.
+Claude Code or Codex stays in charge of planning, interviewing, and review. Hermit takes the mechanical path: file edits, test runs, refactors, commits, and MCP-executed follow-through on predictable local or flat-rate execution models. The switch is one word in a slash command: `/foo` → `/foo-hermit`.
 
 Why Hermit stands out:
 - Keep your best reasoning model on the work that needs judgment, not boilerplate execution.
@@ -161,6 +162,7 @@ MIT — see [LICENSE](LICENSE).
 - [docs/hermit-variants.md](docs/hermit-variants.md) — the `-hermit` skill family
 - [docs/measure-savings.md](docs/measure-savings.md) — cost-savings measurement protocol
 - [docs/open-source-positioning.md](docs/open-source-positioning.md) — short public-facing copy for descriptions, releases, and future social previews
+- [docs/release-notes-template.md](docs/release-notes-template.md) — reusable release-note framing that matches Hermit's planner/executor positioning
 - [docs/social-preview-ops.md](docs/social-preview-ops.md) — how to review, export, and upload the GitHub social-preview image
 - [docs/assets/hermit-social-preview.svg](docs/assets/hermit-social-preview.svg) — final editable social-preview asset for repo cards and launch posts
 - [docs/assets/hermit-social-preview.png](docs/assets/hermit-social-preview.png) — ready-to-upload GitHub social-preview export

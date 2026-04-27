@@ -4,7 +4,11 @@ This file keeps the short public-facing copy for repository metadata, launch pos
 
 ## One-line description
 
-MCP executor for Claude Code or Codex that offloads repetitive coding work to cheaper local or flat-rate models.
+Primary:
+MCP executor layer for Claude Code or Codex that routes repetitive repo work to predictable local or flat-rate models.
+
+Alternate:
+Dedicated MCP execution lane for Claude Code or Codex — keep premium judgment up top, and offload repo mechanics underneath.
 
 ## Short pitch
 
@@ -71,3 +75,24 @@ Cheaper execution across multiple orchestrators.
 ## Release-note framing
 
 Hermit helps teams separate high-value reasoning from high-volume execution. That means better cost control, cleaner planner/executor boundaries, and an MCP-native path from idea to tested repo change.
+
+Template: `docs/release-notes-template.md`
+
+## Topic candidates
+
+Core:
+- `mcp`
+- `mcp-server`
+- `claude-code`
+- `codex`
+- `coding-agent`
+- `local-llm`
+- `llm-routing`
+- `cost-optimization`
+
+Optional:
+- `developer-tools`
+- `model-context-protocol`
+- `agentic-workflows`
+- `terminal-ui`
+- `sub-agent`
