@@ -9,6 +9,23 @@
 - Clarified the difference between `model` and `routing.priority_models`, and made plain `hermit` honor the routing priority chain when `model` is set to `__auto__`.
 - Made the npm launcher sync the managed Python runtime to the same published Hermit version so new install/setup behavior is not hidden behind a stale backend package.
 
+## v0.3.44
+
+### Auto-routing policy change
+- `hermit install` no longer puts Codex (`gpt-5.4`) in the default `routing.priority_models` chain.
+- The default executor auto-routing order is now `glm-5.1 -> qwen3-coder:30b`.
+- Codex remains supported as an explicit opt-in path through `codex_default_model`, direct model pinning, or a user-customized routing chain.
+
+### Why this changed
+- Hermit's default job is executor work on cheaper local or flat-rate models.
+- Automatic Codex fallback could route work onto a paid hosted model without the user explicitly choosing it.
+- Keeping Codex available but out of the default auto-routing path makes cost behavior more predictable and keeps the planner/executor split clearer.
+
+### Docs and install flow
+- Updated installer presets so Codex auto-routing is only enabled by explicit user choice.
+- Updated configuration examples and install docs to match the new default behavior.
+- Added regression tests to keep the default routing policy from drifting back.
+
 ## v0.3.10
 
 ### TUI interactive session runtime and codebase hygiene
@@ -69,7 +86,6 @@
 - Added installer/uninstaller hooks for Hermit's local Codex integration assets, including workspace marketplace cleanup and local async-interaction state removal.
 - Added a thin internal Codex interaction adapter path so Codex approvals and free-text waits can flow through Hermit while preserving the existing Hermit reply queue fallback.
 - Switched the happy path toward a package-first local runtime install, with local source-tree fallback kept only for development and unreleased-package scenarios.
-
 
 ## v0.3.0
 
