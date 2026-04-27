@@ -5,7 +5,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/cafitac-hermit-agent?cacheSeconds=300)](https://pypi.org/project/cafitac-hermit-agent/)
 [![npm downloads](https://img.shields.io/npm/dm/@cafitac/hermit-agent?cacheSeconds=300)](https://www.npmjs.com/package/@cafitac/hermit-agent)
 
-> Run Claude Code or Codex cheaper — Hermit is an MCP executor that handles the high-token mechanical work while your orchestrator stays in charge.
+> Hermit is the executor layer for Claude Code or Codex: keep the premium orchestrator for planning and review, and offload the repetitive coding work to cheaper local or flat-rate models.
 
 ```
 ┌──────────────┐
@@ -14,12 +14,18 @@
 └──────────────┘  ├───▶│  HermitAgent │ ────────────────────────▶ │  LLM  │
                   │    │  (executor)  │                           └───────┘
 ┌──────────────┐  │    └──────────────┘
-│    Codex     │──┘         ~$0 / flat-rate
+│    Codex     │──┘         local / flat-rate by default
 │  (planner)   │
 └──────────────┘
 ```
 
-Claude Code or Codex stays the orchestrator — planning, interviewing, code review. Hermit takes the rest: file edits, test runs, commits, refactors, on a cheap local or flat-rate model via MCP. The switch is one word in a slash command: `/foo` → `/foo-hermit`.
+Claude Code or Codex stays in charge of planning, interviewing, and review. Hermit takes the mechanical path: file edits, test runs, refactors, commits, and MCP-executed follow-through on cheaper execution models. The switch is one word in a slash command: `/foo` → `/foo-hermit`.
+
+Why Hermit stands out:
+- Keep your best reasoning model on the work that needs judgment, not boilerplate execution.
+- Use MCP to turn planner decisions into concrete repo changes, tests, commits, and release operations.
+- Default to predictable local / flat-rate executor routing instead of silently drifting onto a paid hosted fallback.
+- Work with both Claude Code and Codex instead of forcing a single orchestrator stack.
 
 ## Install
 

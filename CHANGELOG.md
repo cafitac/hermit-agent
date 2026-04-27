@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Repository positioning and metadata
+- Refreshed the README opening section to position Hermit as a distinct open-source executor layer for Claude Code and Codex rather than a generic terminal UI.
+- Updated package and repository-facing descriptions to emphasize the MCP executor + cheaper execution lane story instead of the outdated Codex-first fallback wording.
+- Tightened the public metadata around predictable local / flat-rate defaults so the repository pitch matches the current install and routing policy.
+
 ### Release workflow safety
 - `Publish npm + PyPI` now evaluates every `main` merge by default instead of relying on path-filtered triggers.
 - Metadata-only version syncs (`pyproject.toml` + `hermit-ui/package.json`), release write-back commits, and explicit `[skip release]` commits are still skipped so the repo does not cut meaningless follow-up patch releases.
@@ -18,6 +23,20 @@
 - Added install-time model preference selection so users can choose whether plain `hermit` follows auto-routing or stays pinned to a fixed model.
 - Clarified the difference between `model` and `routing.priority_models`, and made plain `hermit` honor the routing priority chain when `model` is set to `__auto__`.
 - Made the npm launcher sync the managed Python runtime to the same published Hermit version so new install/setup behavior is not hidden behind a stale backend package.
+
+## v0.3.48
+
+### GitHub Release automation and release-state alignment
+- The main `Publish npm + PyPI` workflow now creates or updates the GitHub Release in the same run after pushing the release tag, so the primary auto-release path no longer depends on a second tag-triggered workflow firing.
+- Kept a dedicated `Publish GitHub Release` workflow as a manual / fallback path for externally pushed tags and backfills.
+- Confirmed the published npm package, PyPI package, release tag, GitHub Release, and repository version files all converge on `0.3.48` after the protected-`main` sync PR flow completes.
+
+## v0.3.47
+
+### Clearer release stages and safer protected-main write-back
+- Split release automation into explicit stages for classification, tests, version determination, npm publish, PyPI publish, tag push, GitHub Release publication, and repository metadata write-back.
+- Added release-sync PR fallback behavior when direct write-back to protected `main` is rejected by repository rulesets.
+- Preserved metadata-only sync guards and explicit `[skip release]` markers so follow-up version-sync commits do not create meaningless extra patch releases.
 
 ## v0.3.44
 

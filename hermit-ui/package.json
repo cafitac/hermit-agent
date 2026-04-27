@@ -1,7 +1,7 @@
 {
   "name": "@cafitac/hermit-agent",
   "version": "0.3.48",
-  "description": "HermitAgent TUI \u2014 React+Ink terminal UI for the hermit-agent executor",
+  "description": "MCP executor for Claude Code or Codex with an npm-first launcher and cheaper local or flat-rate execution by default",
   "type": "module",
   "repository": {
     "type": "git",
