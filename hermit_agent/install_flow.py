@@ -5,6 +5,7 @@ import json
 import os
 import secrets
 import subprocess
+import sys
 import shutil
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -507,16 +508,32 @@ def ensure_gateway_running(*, cwd: str) -> str:
     return "started" if probe_gateway_health(timeout=5.0) else "unhealthy"
 
 
-def _setup_agent_learner_hooks(*, cwd: str) -> str:
-    """Wire agent-learner Stop hooks into ~/.claude/settings.json and ~/.codex/hooks.json.
+def _ensure_agent_learner_installed() -> bool:
+    """Install agent-learner via pip if not already importable. Returns True if available."""
+    try:
+        import agent_learner  # noqa: F401
+        return True
+    except ImportError:
+        pass
+    proc = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "agent-learner", "-q"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    return proc.returncode == 0
 
-    Requires agent-learner to be installed as a Python package. Returns a status string.
-    """
+
+def _setup_agent_learner_hooks(*, cwd: str) -> str:
+    """Install agent-learner if needed, then wire Stop hooks into ~/.claude/settings.json and ~/.codex/hooks.json."""
+    if not _ensure_agent_learner_installed():
+        return "pip-install-failed"
+
     try:
         from agent_learner.adapters.claude import install_claude_hooks
         from agent_learner.adapters.codex import install_codex_hooks
     except ImportError:
-        return "not-installed"
+        return "import-failed"
 
     errors: list[str] = []
     try:
@@ -681,8 +698,8 @@ def run_install(
             summary.codex_install_status = "skipped"
 
     summary.agent_learner_status = _setup_agent_learner_hooks(cwd=cwd)
-    if summary.agent_learner_status == "not-installed":
-        summary.next_steps.append("Install agent-learner (pip install agent-learner) to enable session learning.")
+    if summary.agent_learner_status == "pip-install-failed":
+        summary.next_steps.append("agent-learner could not be installed automatically; run `pip install agent-learner` manually.")
 
     if not summary.next_steps:
         summary.next_steps.append("Run your normal Hermit workflow.")
