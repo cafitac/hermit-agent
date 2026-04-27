@@ -1,0 +1,37 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">HermitAgent small icon</title>
+  <desc id="desc">A simplified hooded hermit silhouette with a small lantern glow for GitHub avatar-scale rendering.</desc>
+  <defs>
+    <linearGradient id="bg" x1="96" y1="76" x2="418" y2="438" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0B0E13"/>
+      <stop offset="1" stop-color="#04060A"/>
+    </linearGradient>
+    <linearGradient id="hood" x1="256" y1="110" x2="256" y2="414" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1D2330"/>
+      <stop offset="1" stop-color="#0A0D12"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(256 312) rotate(90) scale(96 88)">
+      <stop offset="0" stop-color="#F2C56A" stop-opacity="0.52"/>
+      <stop offset="1" stop-color="#B7771E" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="lamp" x1="256" y1="274" x2="256" y2="336" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FAE7B5"/>
+      <stop offset="1" stop-color="#CC8C2E"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" rx="120" fill="url(#bg)"/>
+  <rect x="18" y="18" width="476" height="476" rx="102" stroke="#171C24" stroke-width="2"/>
+  <ellipse cx="256" cy="312" rx="92" ry="88" fill="url(#glow)"/>
+
+  <path d="M256 110C214 110 177 124 151 150C126 176 114 215 114 268C114 344 161 397 256 414C351 397 398 344 398 268C398 215 386 176 361 150C335 124 298 110 256 110Z" fill="url(#hood)"/>
+  <path d="M192 182C207 156 228 144 256 144C284 144 305 156 320 182L336 208C323 199 307 195 288 195H224C205 195 189 199 176 208L192 182Z" fill="#2A3242"/>
+  <path d="M176 214L206 251C219 267 237 275 256 275C275 275 293 267 306 251L336 214C322 202 305 196 286 196H226C207 196 190 202 176 214Z" fill="#10151D"/>
+  <path d="M224 218C234 208 245 204 256 204C267 204 278 208 288 218L276 236C272 243 264 247 256 247C248 247 240 243 236 236L224 218Z" fill="#090C11"/>
+
+  <path d="M241 286C241 279.373 246.373 274 253 274H259C265.627 274 271 279.373 271 286V324C271 330.627 265.627 336 259 336H253C246.373 336 241 330.627 241 324V286Z" fill="url(#lamp)" stroke="#3D4656" stroke-width="2"/>
+  <path d="M247 274C247 269.029 251.029 265 256 265C260.971 265 265 269.029 265 274" stroke="#7A8495" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M256 282C261 290 264 296 264 302C264 310 260 316 256 321C252 316 248 310 248 302C248 296 251 290 256 282Z" fill="#FFF3CF" fill-opacity="0.9"/>
+
+  <path d="M184 386C207 400 232 410 256 415C280 410 305 400 328 386C304 381 280 378 256 378C232 378 208 381 184 386Z" fill="#0E131A"/>
+</svg>

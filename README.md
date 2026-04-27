@@ -1,12 +1,23 @@
+<p align="center">
+  <img src="assets/branding/hermit-agent-banner.png" alt="HermitAgent" width="100%">
+</p>
+
 # HermitAgent
 
-[![GitHub Release](https://img.shields.io/github/v/release/cafitac/hermit-agent?cacheSeconds=300)](https://github.com/cafitac/hermit-agent/releases)
-[![Python tests](https://github.com/cafitac/hermit-agent/actions/workflows/python-tests.yml/badge.svg)](https://github.com/cafitac/hermit-agent/actions/workflows/python-tests.yml)
-[![npm version](https://img.shields.io/npm/v/@cafitac/hermit-agent?cacheSeconds=300)](https://www.npmjs.com/package/@cafitac/hermit-agent)
-[![PyPI version](https://img.shields.io/pypi/v/cafitac-hermit-agent?cacheSeconds=300)](https://pypi.org/project/cafitac-hermit-agent/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-8b5cf6)](LICENSE)
+<p align="center">
+  <a href="https://github.com/cafitac/hermit-agent/releases"><img src="https://img.shields.io/github/v/release/cafitac/hermit-agent?cacheSeconds=300" alt="GitHub release"></a>
+  <a href="https://github.com/cafitac/hermit-agent/actions/workflows/python-tests.yml"><img src="https://github.com/cafitac/hermit-agent/actions/workflows/python-tests.yml/badge.svg" alt="Python tests"></a>
+  <a href="https://www.npmjs.com/package/@cafitac/hermit-agent"><img src="https://img.shields.io/npm/v/@cafitac/hermit-agent?cacheSeconds=300" alt="npm version"></a>
+  <a href="https://pypi.org/project/cafitac-hermit-agent/"><img src="https://img.shields.io/pypi/v/cafitac-hermit-agent?cacheSeconds=300" alt="PyPI version"></a>
+  <a href="https://www.npmjs.com/package/@cafitac/hermit-agent"><img src="https://img.shields.io/npm/dm/@cafitac/hermit-agent?cacheSeconds=300" alt="npm downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-8b5cf6" alt="License: MIT"></a>
+</p>
 
-> Hermit adds a dedicated MCP execution lane under Claude Code or Codex: keep the premium orchestrator for judgment, and route the repetitive repo work to predictable local or flat-rate models.
+> Hidden expert. Quiet executor.
+>
+> Hermit is an MCP executor for Claude Code and Codex. Your main agent handles planning, review, and conversation; Hermit quietly handles edits, test runs, refactors, commits, and other mechanical execution on a cheaper local or flat-rate model.
+
+## How it works
 
 ![Hermit README hero](docs/assets/hermit-readme-hero.svg)
 
