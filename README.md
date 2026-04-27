@@ -161,6 +161,8 @@ MIT — see [LICENSE](LICENSE).
 - [docs/hermit-variants.md](docs/hermit-variants.md) — the `-hermit` skill family
 - [docs/measure-savings.md](docs/measure-savings.md) — cost-savings measurement protocol
 - [docs/open-source-positioning.md](docs/open-source-positioning.md) — short public-facing copy for descriptions, releases, and future social previews
-- [docs/assets/hermit-social-preview.svg](docs/assets/hermit-social-preview.svg) — editable social-preview starter asset for repo cards and launch posts
+- [docs/assets/hermit-social-preview.svg](docs/assets/hermit-social-preview.svg) — final editable social-preview asset for repo cards and launch posts
+- [docs/assets/hermit-social-preview.png](docs/assets/hermit-social-preview.png) — ready-to-upload GitHub social-preview export
+- [docs/assets/hermit-social-preview-review.html](docs/assets/hermit-social-preview-review.html) — local review page for checking the social-preview composition before export
 - [CHANGELOG.md](CHANGELOG.md) — notable release and policy changes
 - [benchmarks/](benchmarks/) — reproducible task specs and community datapoints

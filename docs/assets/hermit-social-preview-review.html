@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hermit social preview review</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #020617;
+      --panel: #0f172a;
+      --panel-2: #111827;
+      --border: #1f2937;
+      --text: #e5eef8;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      background: radial-gradient(circle at top right, rgba(56, 189, 248, 0.18), transparent 24%), var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    main {
+      max-width: 1420px;
+      margin: 0 auto;
+      padding: 40px 28px 56px;
+      display: grid;
+      gap: 28px;
+    }
+    .hero {
+      display: grid;
+      gap: 10px;
+    }
+    .eyebrow {
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 50px);
+      line-height: 1.04;
+    }
+    .lede {
+      margin: 0;
+      max-width: 900px;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.6;
+    }
+    .frame {
+      background: linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(15, 23, 42, 0.82));
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      padding: 24px;
+      overflow: hidden;
+      box-shadow: 0 20px 80px rgba(0, 0, 0, 0.35);
+    }
+    .frame img {
+      width: 100%;
+      display: block;
+      border-radius: 22px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: #050b16;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.72);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 18px 18px 20px;
+    }
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 17px;
+    }
+    .card p, .card li {
+      color: var(--muted);
+      line-height: 1.55;
+      font-size: 15px;
+    }
+    .card ul { margin: 0; padding-left: 18px; }
+    code {
+      color: #bae6fd;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.95em;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <div class="eyebrow">Social preview review</div>
+      <h1>Hermit social preview final candidate</h1>
+      <p class="lede">This review page shows the repository social-preview card at full width, with the intended message hierarchy: plan with Claude Code or Codex, and route repetitive repo work through Hermit's MCP executor lane.</p>
+    </section>
+
+    <section class="frame">
+      <img src="./hermit-social-preview.svg" alt="Hermit social preview card" />
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <h2>Message hierarchy</h2>
+        <ul>
+          <li>Top line: premium judgment vs cheaper execution.</li>
+          <li>Main headline: keep Claude Code or Codex for planning and review.</li>
+          <li>Accent line: use Hermit for repetitive repo work.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h2>Visual posture</h2>
+        <ul>
+          <li>Dark terminal-like card for GitHub-native context.</li>
+          <li>Bright cyan accent only where the executor-lane value needs emphasis.</li>
+          <li>Right-side proof points reinforce routing and team-shared infrastructure.</li>
+        </ul>
+      </article>
+      <article class="card">
+        <h2>Repository use</h2>
+        <p>Use <code>docs/assets/hermit-social-preview.svg</code> as the editable source and this HTML file as the local review surface before exporting a PNG for GitHub's social preview setting.</p>
+      </article>
+    </section>
+  </main>
+</body>
+</html>

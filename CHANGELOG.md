@@ -7,7 +7,7 @@
 - Added a comparison section that explains why teams would pair Hermit with Claude Code or Codex instead of treating it as a replacement orchestrator.
 - Added explicit "who Hermit is for / not for" guidance so the landing page qualifies the intended audience instead of only describing features.
 - Added a reusable `docs/open-source-positioning.md` copy deck for repository descriptions, social preview messaging, release framing, and audience-fit guidance.
-- Added an editable `docs/assets/hermit-social-preview.svg` starter asset for repo cards, launch posts, and future GitHub social preview work.
+- Added a final social-preview asset set: editable SVG, ready-to-upload PNG export, and a local review page under `docs/assets/` for GitHub/social-preview iteration.
 - Updated package and repository-facing descriptions to emphasize the MCP executor + cheaper execution lane story instead of the outdated Codex-first fallback wording.
 - Tightened the public metadata around predictable local / flat-rate defaults so the repository pitch matches the current install and routing policy.
 
