@@ -8,7 +8,7 @@
 - Added a `classify_release` gate that skips release runs for release write-back commits and for explicit `[skip release]` commits.
 - Made manual `workflow_dispatch` releases opt-in via `force_publish=true` so accidental button-clicks do not publish by default.
 - Split the release automation into clearer stages: version determination, npm publish, PyPI publish, release-tag push, GitHub Release publication, and repository write-back / sync-PR fallback.
-- Added a dedicated `Publish GitHub Release` workflow on `v*` tags so the Releases page stays aligned with npm, PyPI, and git tags.
+- Added a dedicated `Publish GitHub Release` workflow on `v*` tags for manual or external tag pushes, while the main release workflow also creates the GitHub Release directly so auto-published releases do not depend on cross-workflow tag triggers.
 - Added release-workflow concurrency plus idempotent npm publish, tag-push, and GitHub Release checks so reruns do not accidentally create duplicate artifacts.
 - Fixed release write-back to use the configured push token correctly, and kept the protected-`main` fallback that opens a sync PR when direct write-back is rejected.
 

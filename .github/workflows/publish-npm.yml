@@ -295,11 +295,58 @@ jobs:
           git push origin "${RELEASE_TAG}"
           echo "Pushed release tag ${RELEASE_TAG}."
 
-  write_back_release_metadata:
+  publish_github_release:
     needs:
       - classify_release
       - determine_version
       - push_release_tag
+    if: needs.classify_release.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+      NEXT: ${{ needs.determine_version.outputs.next_version }}
+      RELEASE_TAG: ${{ needs.determine_version.outputs.release_tag }}
+      RELEASE_REASON: ${{ needs.classify_release.outputs.reason }}
+    steps:
+      - name: Create or update GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          NOTES=$(mktemp)
+          {
+            echo "Automated release for ${RELEASE_TAG}."
+            echo
+            echo "Release classifier: ${RELEASE_REASON}"
+            echo
+            echo "Published packages:"
+            echo "- npm: @cafitac/hermit-agent@${NEXT}"
+            echo "- PyPI: cafitac-hermit-agent==${NEXT}"
+          } > "$NOTES"
+
+          if gh release view "$RELEASE_TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --repo "${{ github.repository }}" \
+              --title "$RELEASE_TAG" \
+              --notes-file "$NOTES"
+            echo "Updated existing GitHub Release ${RELEASE_TAG}."
+            exit 0
+          fi
+
+          gh release create "$RELEASE_TAG" \
+            --repo "${{ github.repository }}" \
+            --verify-tag \
+            --title "$RELEASE_TAG" \
+            --notes-file "$NOTES" \
+            --generate-notes
+
+          echo "Created GitHub Release ${RELEASE_TAG}."
+
+  write_back_release_metadata:
+    needs:
+      - classify_release
+      - determine_version
+      - publish_github_release
     if: needs.classify_release.outputs.should_publish == 'true'
     runs-on: ubuntu-latest
     env:
