@@ -82,7 +82,7 @@ def _prompt_yes_no(question: str, *, default: bool = True, assume_yes: bool = Fa
 def _prompt_text(question: str, *, default: str = "", assume_yes: bool = False, mask_default: bool = False) -> str:
     if assume_yes or not _stdin_interactive():
         return default
-    display = ("****" if default else "") if mask_default else default
+    display = ("*" * min(len(default), 16) if default else "") if mask_default else default
     suffix = f" [{display}]" if display else ""
     answer = input(f"{question}{suffix} ").strip()
     return answer or default
