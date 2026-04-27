@@ -73,11 +73,17 @@ def _expand_home(s: str) -> str:
 def _classify_single(command: str) -> str:
     """Single command safety classification."""
     expanded = _expand_home(command)
-    if any(expanded.startswith(_expand_home(p)) for p in _SAFE_BASH_PREFIXES):
-        return "safe"
+    if _has_unsafe_shell_features(command):
+        return "unsafe"
     if any(p in command for p in _UNSAFE_BASH_PATTERNS):
         return "unsafe"
+    if any(expanded.startswith(_expand_home(p)) for p in _SAFE_BASH_PREFIXES):
+        return "safe"
     return "unknown"
+
+
+def _has_unsafe_shell_features(command: str) -> bool:
+    return "$(" in command or "`" in command
 
 
 def classify_bash_safety(command: str) -> str:

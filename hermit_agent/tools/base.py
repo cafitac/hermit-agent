@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+import tempfile
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
@@ -47,18 +48,31 @@ def _check_secrets(content: str) -> list[str]:
 def _is_safe_path(path: str, cwd: str = ".") -> str | None:
     """Check for symlink attacks and path traversal. Returns error message or None."""
     real_path = os.path.realpath(path)
-    # Check if resolved path escapes expected directories
-    # Allow: cwd subtree, /tmp, home directory
-    import tempfile
-    allowed_roots = [
+    allowed_roots = _allowed_path_roots(cwd)
+    if not any(_path_is_within(real_path, root) for root in allowed_roots):
+        return (
+            f"Path traversal blocked: {path} resolves to {real_path} outside allowed directories "
+            f"(cwd, temp, and managed config dirs only)"
+        )
+    return None
+
+
+def _allowed_path_roots(cwd: str) -> list[str]:
+    home = os.path.realpath(os.path.expanduser("~"))
+    roots = [
         os.path.realpath(cwd),
-        os.path.realpath(os.path.expanduser("~")),
         os.path.realpath("/tmp"),
         os.path.realpath(tempfile.gettempdir()),  # macOS: /var/folders → /private/var/folders
     ]
-    if not any(real_path.startswith(root) for root in allowed_roots):
-        return f"Path traversal blocked: {path} resolves to {real_path} outside allowed directories"
-    return None
+    roots.extend(
+        os.path.join(home, subdir)
+        for subdir in (".hermit", ".claude", ".codex")
+    )
+    return roots
+
+
+def _path_is_within(path: str, root: str) -> bool:
+    return path == root or path.startswith(root + os.sep)
 
 
 def _expand_path(path: str, cwd: str = ".") -> str:

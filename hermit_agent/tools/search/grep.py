@@ -59,11 +59,12 @@ class GrepTool(Tool):
             return ToolResult(content=output[:10000])
         except FileNotFoundError:
             # Fall back to grep if ripgrep is not available
-            cmd_str = f'grep -rn "{pattern}" {search_path}'
+            grep_cmd: list[str] = ["grep", "-rn"]
             if file_glob:
-                cmd_str += f' --include="{file_glob}"'
+                grep_cmd.extend(["--include", file_glob])
+            grep_cmd.extend(["--", pattern, search_path])
             try:
-                result = subprocess.run(cmd_str, shell=True, capture_output=True, text=True, timeout=30)
+                result = subprocess.run(grep_cmd, capture_output=True, text=True, timeout=30)
                 output = result.stdout
                 if not output:
                     return ToolResult(content=f"No matches for pattern: {pattern}")

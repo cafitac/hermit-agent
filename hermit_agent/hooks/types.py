@@ -35,6 +35,6 @@ class HookDefinition:
     event: HookEvent
     tool: str  # tool name or "*"
     condition: str | None = None  # if condition (checks if contained in input)
-    command: str | None = None  # shell command to execute
+    command: str | list[str] | None = None  # executable command (string or argv list)
     action: HookAction = HookAction.ALLOW
     message: str = ""

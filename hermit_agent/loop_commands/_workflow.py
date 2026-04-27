@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import shlex
+import subprocess
 from typing import TYPE_CHECKING
 
 from ._registry import slash_command, TRIGGER_AGENT, TRIGGER_AGENT_SINGLE
@@ -15,7 +17,13 @@ def cmd_vim(agent: AgentLoop, args: str) -> str:
         return "Usage: /vim <filepath>"
     filepath = args.strip()
     editor = os.environ.get("EDITOR", "vim")
-    os.system(f"{editor} {filepath}")
+    try:
+        editor_argv = shlex.split(editor)
+    except ValueError as exc:
+        return f"Invalid EDITOR value: {exc}"
+    if not editor_argv:
+        return "Invalid EDITOR value: empty command"
+    subprocess.run([*editor_argv, filepath], check=False)
     return f"Opened {filepath} in {editor}"
 
 
@@ -293,4 +301,3 @@ def cmd_hud(agent: AgentLoop, args: str) -> str:
     mem = MemorySystem()
     mem.save("hud_preset", f"HUD preset: {preset}", "feedback", f"User prefers {preset} HUD")
     return f"HUD preset set to: {preset} (applied next session)"
-

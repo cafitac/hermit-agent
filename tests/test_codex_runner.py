@@ -546,7 +546,7 @@ def test_rate_limit_event_fails_fast_when_out_of_credits():
         assert "rate-limited or out of credits" in str(exc)
 
 
-def test_auto_model_chain_order_prefers_codex_then_zai_then_local(monkeypatch):
+def test_auto_model_chain_order_prefers_default_executor_routing(monkeypatch):
     from hermit_agent.gateway import task_runner
 
     monkeypatch.setattr("hermit_agent.config.shutil.which", lambda cmd: "/usr/bin/" + cmd)
@@ -555,12 +555,11 @@ def test_auto_model_chain_order_prefers_codex_then_zai_then_local(monkeypatch):
         "codex_reasoning_effort": "medium",
         "model": "glm-5.1",
         "providers": {
-            "z.ai": {"base_url": "https://api.z.ai/api/coding/paas/v4", "api_key": "k"},
+            "z.ai": {"base_url": "https://api.z.ai/api/coding/paas/v4", "api_key": "***"},
         },
         "local_model": "qwen3-coder:30b",
     }
     assert task_runner._auto_model_chain(cfg) == [
-        {"model": "gpt-5.4", "reasoning_effort": "medium"},
         {"model": "glm-5.1"},
         {"model": "qwen3-coder:30b"},
     ]
@@ -656,7 +655,7 @@ def test_is_model_configured_recognizes_remote_ollama_without_local_binary(monke
     assert is_model_configured("qwen3-coder:30b", cfg) is True
 
 
-def test_auto_route_falls_back_to_zai_when_codex_unavailable(monkeypatch):
+def test_auto_route_uses_zai_when_default_auto_routing_omits_codex(monkeypatch):
     from hermit_agent.gateway import task_runner
 
     state = GatewayTaskState(task_id="auto-task")
@@ -711,7 +710,7 @@ def test_auto_route_falls_back_to_zai_when_codex_unavailable(monkeypatch):
             "codex_reasoning_effort": "medium",
             "model": "glm-5.1",
             "local_model": "qwen3-coder:30b",
-            "providers": {"z.ai": {"base_url": "https://example.invalid", "api_key": "k"}},
+            "providers": {"z.ai": {"base_url": "https://example.invalid", "api_key": "***"}},
         },
     )
     monkeypatch.setattr(
@@ -738,7 +737,7 @@ def test_auto_route_falls_back_to_zai_when_codex_unavailable(monkeypatch):
         sse=DummySSE(),
     )
 
-    assert calls["codex"] == 1
+    assert calls["codex"] == 0
     assert calls["session_runs"] == 1
     assert result["status"] == "done"
     assert result["model"] == "glm-5.1"

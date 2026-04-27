@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -53,9 +54,14 @@ def run_verify_command(cmd: str, cwd: str) -> bool | None:
     if not cmd:
         return None
     try:
+        argv = shlex.split(cmd)
+        if not argv:
+            return None
+        disallowed_tokens = {"|", "||", "&", "&&", ";", "<", ">", ">>"}
+        if any(token in disallowed_tokens for token in argv):
+            return None
         result = subprocess.run(
-            cmd,
-            shell=True,
+            argv,
             cwd=cwd,
             capture_output=True,
             timeout=15,

@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from hermit_agent.learner import Learner
+from hermit_agent.learner_verification import run_verify_command
 from hermit_agent.learner_storage import SkillMeta, parse_skill_file, write_skill_file
 
 
@@ -35,7 +36,7 @@ def test_run_verify_cmds_prefers_skill_frontmatter_over_rules(tmp_path):
 
     assert result == {'verify_me': True}
     mock_run.assert_called_once()
-    assert mock_run.call_args.args[0] == 'frontmatter-cmd'
+    assert mock_run.call_args.args[0] == ["frontmatter-cmd"]
 
 
 def test_run_verify_cmds_uses_trigger_keyword_rules_when_frontmatter_missing(tmp_path):
@@ -53,7 +54,7 @@ def test_run_verify_cmds_uses_trigger_keyword_rules_when_frontmatter_missing(tmp
         result = learner.run_verify_cmds(['keyword_skill'], str(tmp_path))
 
     assert result == {'keyword_skill': True}
-    assert mock_run.call_args.args[0] == 'trigger-cmd'
+    assert mock_run.call_args.args[0] == ["trigger-cmd"]
 
 
 def test_cleanup_marks_needs_review_before_deprecation(tmp_path):
@@ -120,3 +121,22 @@ def test_cleanup_marks_old_low_signal_skill_for_review(tmp_path):
     assert deprecated == []
     assert updated is not None
     assert updated.needs_review is True
+
+
+def test_run_verify_command_uses_argv_without_shell():
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value.returncode = 0
+
+        result = run_verify_command("git diff --quiet", "/tmp/demo")
+
+    assert result is True
+    assert mock_run.call_args.args[0] == ["git", "diff", "--quiet"]
+    assert "shell" not in mock_run.call_args.kwargs
+
+
+def test_run_verify_command_rejects_shell_operators():
+    with patch("subprocess.run") as mock_run:
+        result = run_verify_command("git log --oneline -1 | grep -q .", "/tmp/demo")
+
+    assert result is None
+    mock_run.assert_not_called()

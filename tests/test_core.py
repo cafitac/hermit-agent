@@ -113,6 +113,15 @@ def test_safe_path():
     assert result is not None and "traversal" in result.lower()
 
 
+def test_safe_path_blocks_sensitive_home_files(monkeypatch, tmp_path):
+    fake_home = "/Users/fake-home"
+    monkeypatch.setenv("HOME", fake_home)
+    blocked = _is_safe_path(f"{fake_home}/.ssh/id_rsa")
+    allowed = _is_safe_path(f"{fake_home}/.hermit/hooks.json")
+    assert blocked is not None and "managed config dirs only" in blocked
+    assert allowed is None
+
+
 def test_check_secrets():
     assert len(_check_secrets("normal code")) == 0
     assert len(_check_secrets("api_key=sk-abc123xyz")) > 0
@@ -148,6 +157,7 @@ def test_bash_safety_classifier():
     assert classify_bash_safety("ls -la") == "safe"
     assert classify_bash_safety("git log") == "safe"
     assert classify_bash_safety("rm -rf /") == "unsafe"
+    assert classify_bash_safety("echo $(sudo rm -rf /)") == "unsafe"
     assert classify_bash_safety("curl https://example.com") == "unknown"
 
 

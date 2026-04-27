@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
+from pathlib import Path
+from stat import S_IWGRP, S_IWOTH
 from typing import Callable
 
 from .types import HOOKS_CONFIG, HookAction, HookDefinition, HookEvent, HookResult
@@ -22,6 +25,9 @@ class HookRunner:
             return
 
         try:
+            error = _validate_hooks_config_permissions(HOOKS_CONFIG)
+            if error:
+                return
             with open(HOOKS_CONFIG) as f:
                 config = json.load(f)
 
@@ -75,8 +81,10 @@ class HookRunner:
                     env["HERMIT_OUTPUT"] = tool_output[:5000]
 
                 try:
+                    argv = _normalize_hook_command(hook.command)
                     result = subprocess.run(
-                        hook.command, shell=True, capture_output=True,
+                        argv,
+                        capture_output=True,
                         text=True, timeout=10, env=env,
                     )
                     if result.returncode != 0:
@@ -134,5 +142,39 @@ def create_default_hooks_config():
             },
         ],
     }
-    with open(HOOKS_CONFIG, "w") as f:
+    fd = os.open(HOOKS_CONFIG, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w") as f:
         json.dump(default, f, indent=2)
+
+
+def _validate_hooks_config_permissions(path: str) -> str | None:
+    config_path = Path(path)
+    try:
+        stat_result = config_path.stat()
+    except OSError as exc:
+        return f"Unable to stat hooks config: {exc}"
+
+    if not config_path.is_file():
+        return "Hooks config must be a regular file"
+
+    if stat_result.st_uid != os.getuid():
+        return "Hooks config must be owned by the current user"
+
+    if stat_result.st_mode & (S_IWGRP | S_IWOTH):
+        return "Hooks config must not be group/world writable"
+
+    return None
+
+
+def _normalize_hook_command(command: str | list[str]) -> list[str]:
+    if isinstance(command, str):
+        argv = shlex.split(command)
+    elif isinstance(command, list) and all(isinstance(part, str) for part in command):
+        argv = command
+    else:
+        raise TypeError("Hook command must be a string or list of strings")
+
+    if not argv:
+        raise ValueError("Hook command cannot be empty")
+
+    return [os.path.expandvars(os.path.expanduser(part)) for part in argv]
