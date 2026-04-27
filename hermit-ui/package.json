@@ -7,6 +7,17 @@
     "type": "git",
     "url": "https://github.com/cafitac/hermit-agent"
   },
+  "keywords": [
+    "claude-code",
+    "codex",
+    "mcp",
+    "mcp-server",
+    "coding-agent",
+    "local-llm",
+    "llm-routing",
+    "token-savings",
+    "cost-optimization"
+  ],
   "files": [
     "bin",
     "dist"

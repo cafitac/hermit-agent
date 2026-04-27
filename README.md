@@ -27,6 +27,18 @@ Why Hermit stands out:
 - Default to predictable local / flat-rate executor routing instead of silently drifting onto a paid hosted fallback.
 - Work with both Claude Code and Codex instead of forcing a single orchestrator stack.
 
+## Why not just use Claude Code or Codex directly?
+
+| Workflow shape | Claude Code / Codex alone | With Hermit |
+|---|---|---|
+| Planning and review | Strong | Still strong — keep the premium orchestrator where judgment matters |
+| Repetitive repo work | Expensive or token-heavy | Offloaded to a cheaper MCP executor lane |
+| Multi-step follow-through | Manual context handoff | MCP tasks can carry edits, tests, commits, and release ops through |
+| Default execution cost | Can drift onto paid hosted models | Defaults to local / flat-rate executor routing |
+| Team adoption | Tied to one orchestrator workflow | Works as a shared executor layer across Claude Code and Codex |
+
+Hermit is not trying to replace your orchestrator. It gives you a second lane: use the premium model for judgment, and use Hermit for the mechanical throughput that makes repositories expensive to operate at scale.
+
 ## Install
 
 ```bash
@@ -133,5 +145,6 @@ MIT — see [LICENSE](LICENSE).
 - [docs/cc-setup.md](docs/cc-setup.md) — Claude Code MCP registration details
 - [docs/hermit-variants.md](docs/hermit-variants.md) — the `-hermit` skill family
 - [docs/measure-savings.md](docs/measure-savings.md) — cost-savings measurement protocol
+- [docs/open-source-positioning.md](docs/open-source-positioning.md) — short public-facing copy for descriptions, releases, and future social previews
 - [CHANGELOG.md](CHANGELOG.md) — notable release and policy changes
 - [benchmarks/](benchmarks/) — reproducible task specs and community datapoints
