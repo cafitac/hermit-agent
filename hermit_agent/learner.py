@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import warnings
 from pathlib import Path
 
 from .learner_extraction import build_failure_prompt, build_success_prompt, extract_skill_data
@@ -63,6 +64,12 @@ class Learner:
     """
 
     def __init__(self, llm=None, root: str | None = None):
+        warnings.warn(
+            "hermit_agent.learner.Learner is deprecated and will be removed in a future release. "
+            "Use agent-learner v2 (agent_learner) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self.llm = llm
         self.root = root or os.getcwd()
 

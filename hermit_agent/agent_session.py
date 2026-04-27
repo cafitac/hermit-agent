@@ -122,8 +122,21 @@ class AgentSessionBase(ABC):
             pass
 
     def _prepare_prompt(self, task: str) -> str:
-        """Inject learned-feedback skills before the task prompt."""
+        """Inject learned rules before the task prompt.
+
+        Checks agent-learned.md (agent-learner v2) first; falls back to
+        legacy Hermit Learner approved skills if the file is absent.
+        """
         try:
+            from pathlib import Path
+            rules_file = Path(self.cwd) / ".hermit" / "rules" / "agent-learned.md"
+            if rules_file.exists():
+                content = rules_file.read_text(encoding="utf-8").strip()
+                if content:
+                    task = f"<learned_feedback>\n{content}\n</learned_feedback>\n\n{task}"
+                    return task
+            # Fallback: legacy Hermit Learner (deprecated — will be removed once
+            # agent-learner v2 is fully adopted)
             from .learner import Learner
             learner = Learner(llm=self.llm)
             active_skills = learner.get_active_skills()
