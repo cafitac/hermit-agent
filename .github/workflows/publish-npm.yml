@@ -4,10 +4,6 @@ on:
   push:
     branches:
       - main
-    paths:
-      - 'hermit-ui/**'
-      - 'hermit_agent/**'
-      - 'pyproject.toml'
   workflow_dispatch:
     inputs:
       force_publish:

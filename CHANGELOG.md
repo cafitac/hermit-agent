@@ -3,7 +3,8 @@
 ## Unreleased
 
 ### Release workflow safety
-- Hardened `Publish npm + PyPI` so pushes that only sync `pyproject.toml` and `hermit-ui/package.json` no longer cut an accidental follow-up patch release.
+- `Publish npm + PyPI` now evaluates every `main` merge by default instead of relying on path-filtered triggers.
+- Metadata-only version syncs (`pyproject.toml` + `hermit-ui/package.json`), release write-back commits, and explicit `[skip release]` commits are still skipped so the repo does not cut meaningless follow-up patch releases.
 - Added a `classify_release` gate that skips release runs for release write-back commits and for explicit `[skip release]` commits.
 - Made manual `workflow_dispatch` releases opt-in via `force_publish=true` so accidental button-clicks do not publish by default.
 - Fixed release write-back to use the configured push token correctly, and added a protected-`main` fallback that opens a sync PR when direct write-back is rejected.
