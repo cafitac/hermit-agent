@@ -187,6 +187,41 @@ def _check_local_backend(cwd: str) -> DiagCheck:
     )
 
 
+def _check_agent_learner(home: str) -> DiagCheck:
+    try:
+        import agent_learner  # noqa: F401
+        installed = True
+    except ImportError:
+        installed = False
+
+    if not installed:
+        return DiagCheck(
+            "agent-learner",
+            DiagStatus.WARN,
+            "not installed — run `hermit install` to install automatically",
+        )
+
+    claude_settings = Path(home) / ".claude" / "settings.json"
+    codex_hooks = Path(home) / ".codex" / "hooks.json"
+    missing: list[str] = []
+    for label, path in (("claude", claude_settings), ("codex", codex_hooks)):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+            hooks = data.get("hooks", {}).get("Stop", [])
+            if not any("agent-learner" in str(h) for h in hooks):
+                missing.append(label)
+        except Exception:
+            missing.append(label)
+
+    if missing:
+        return DiagCheck(
+            "agent-learner",
+            DiagStatus.WARN,
+            f"installed but Stop hook missing for: {', '.join(missing)} — run `hermit install` to repair",
+        )
+    return DiagCheck("agent-learner", DiagStatus.PASS, "installed, Stop hooks registered (claude + codex)")
+
+
 def run_diagnostics(cwd: str | None = None, home: str | None = None) -> DiagReport:
     """Diagnose HermitAgent configuration. Testable by injecting cwd/home."""
     cwd = cwd or os.getcwd()
@@ -198,6 +233,7 @@ def run_diagnostics(cwd: str | None = None, home: str | None = None) -> DiagRepo
         _check_skills(home),
         _check_sensitive_deny(),
         _check_local_backend(cwd),
+        _check_agent_learner(home),
     ]
     return DiagReport(checks=checks)
 
@@ -213,7 +249,7 @@ def format_doctor_fix_summary(*, cwd: str) -> str:
 
     lines = ["Hermit doctor --fix complete.", "", "Repairs:"]
     lines.append(f"- startup heal: gateway={startup.gateway_status}, mcp={startup.mcp_registration_status}, codex={startup.codex_runtime_status}")
-    lines.append(f"- install flow: gateway={install.gateway_status}, mcp={install.mcp_registration_status}, codex={install.codex_install_status}")
+    lines.append(f"- install flow: gateway={install.gateway_status}, mcp={install.mcp_registration_status}, codex={install.codex_install_status}, agent-learner={install.agent_learner_status}")
     lines.append("- codex-facing surface remains: hermit-channel MCP")
     if install.codex_runtime_version:
         lines.append(f"- codex integration runtime version: {install.codex_runtime_version}")
