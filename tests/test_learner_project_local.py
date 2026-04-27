@@ -52,13 +52,16 @@ def test_agent_loop_session_kind_parameter():
     assert loop.session_kind == 'gateway'
 
 
-def test_maybe_trigger_learner_skips_gateway(tmp_path, monkeypatch):
+def test_agent_learner_on_stop_skips_gateway(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr("shutil.which", lambda x: "/usr/bin/agent-learner")
+    calls = []
+    monkeypatch.setattr("subprocess.Popen", lambda cmd, **kw: calls.append(cmd))
     from hermit_agent.loop import AgentLoop
     from hermit_agent.permissions import PermissionMode
     llm = MagicMock()
     llm.model = 'm'
     loop = AgentLoop(llm=llm, tools=[], cwd=str(tmp_path), permission_mode=PermissionMode.ALLOW_READ, session_kind='gateway')
-    # Call the trigger — should return silently without creating any .hermit/skills/auto-learned dir
-    loop._maybe_trigger_learner()
-    assert not os.path.exists(os.path.join(str(tmp_path), '.hermit', 'skills', 'auto-learned'))
+    loop._run_agent_learner_on_stop()
+    al_calls = [c for c in calls if c and "agent-learner" in c[0]]
+    assert al_calls == [], "gateway session should not trigger agent-learner"
