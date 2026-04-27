@@ -30,7 +30,7 @@ from .interactive_sinks import (
     compose_interactive_prompt_sinks,
 )
 
-_LOG_PATH = os.path.expanduser("~/.hermit/mcp_server.log")
+_LOG_PATH = os.environ.get("HERMIT_LOG_PATH") or os.path.expanduser("~/.hermit/mcp_server.log")
 
 
 def _log(line: str) -> None:
