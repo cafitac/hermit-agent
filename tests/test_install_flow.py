@@ -208,6 +208,8 @@ def test_ensure_gateway_running_starts_daemon_when_probe_is_unhealthy(tmp_path, 
 
     probes = iter([False, True])
     monkeypatch.setattr("hermit_agent.install_flow.probe_gateway_health", lambda timeout=2.0: next(probes))
+    # Force fallback to bin/gateway.sh by pretending hermit-gateway is not in PATH
+    monkeypatch.setattr("hermit_agent.install_flow.shutil.which", lambda name: None)
 
     calls: list[list[str]] = []
 
