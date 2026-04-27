@@ -493,6 +493,20 @@ def ensure_gateway_running(*, cwd: str) -> str:
     if probe_gateway_health():
         return "healthy"
 
+    # pip-installed path: use hermit-gateway entry point
+    gateway_entry = shutil.which("hermit-gateway")
+    if gateway_entry:
+        log_path = Path.home() / ".hermit" / "gateway.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.Popen(
+            [gateway_entry],
+            stdout=open(log_path, "a"),
+            stderr=subprocess.STDOUT,
+            start_new_session=True,
+        )
+        return "started" if probe_gateway_health(timeout=5.0) else "unhealthy"
+
+    # dev install fallback: bin/gateway.sh in cwd
     gateway_script = Path(cwd) / "bin" / "gateway.sh"
     if not gateway_script.exists():
         return "missing-script"
