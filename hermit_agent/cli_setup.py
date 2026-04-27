@@ -208,7 +208,8 @@ def run_setup(*, yes: bool = False) -> None:
     gw_key_choice = _choose("Gateway API Key:", ["Auto-generate (recommended)", "Enter manually"])
     if gw_key_choice == 0:
         settings["gateway_api_key"] = _generate_api_key()
-        print(f"  Generated API Key: {settings['gateway_api_key']}")
+        key = settings["gateway_api_key"]
+        print(f"  Generated API Key: {key[:8]}{'*' * (len(key) - 8)}")
     else:
         settings["gateway_api_key"] = _prompt("Gateway API Key")
 
