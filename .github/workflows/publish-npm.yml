@@ -308,21 +308,23 @@ jobs:
       RELEASE_TAG: ${{ needs.determine_version.outputs.release_tag }}
       RELEASE_REASON: ${{ needs.classify_release.outputs.reason }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
       - name: Create or update GitHub Release
         shell: bash
         run: |
           set -euo pipefail
 
           NOTES=$(mktemp)
-          {
-            echo "Automated release for ${RELEASE_TAG}."
-            echo
-            echo "Release classifier: ${RELEASE_REASON}"
-            echo
-            echo "Published packages:"
-            echo "- npm: @cafitac/hermit-agent@${NEXT}"
-            echo "- PyPI: cafitac-hermit-agent==${NEXT}"
-          } > "$NOTES"
+          python3 scripts/render_release_notes.py \
+            --tag "$RELEASE_TAG" \
+            --version "$NEXT" \
+            --repo "${{ github.repository }}" \
+            --reason "$RELEASE_REASON" \
+            --out "$NOTES"
 
           if gh release view "$RELEASE_TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
             gh release edit "$RELEASE_TAG" \
@@ -337,8 +339,7 @@ jobs:
             --repo "${{ github.repository }}" \
             --verify-tag \
             --title "$RELEASE_TAG" \
-            --notes-file "$NOTES" \
-            --generate-notes
+            --notes-file "$NOTES"
 
           echo "Created GitHub Release ${RELEASE_TAG}."
 

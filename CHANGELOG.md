@@ -6,11 +6,12 @@
 - Refreshed the README opening section to position Hermit as a distinct open-source executor layer for Claude Code and Codex rather than a generic terminal UI.
 - Added a comparison section that explains why teams would pair Hermit with Claude Code or Codex instead of treating it as a replacement orchestrator.
 - Added explicit "who Hermit is for / not for" guidance so the landing page qualifies the intended audience instead of only describing features.
-- Added a reusable `docs/open-source-positioning.md` copy deck for repository descriptions, social preview messaging, release framing, audience-fit guidance, and topic candidates.
+- Added a reusable `docs/open-source-positioning.md` copy deck for repository descriptions, social preview messaging, release framing, audience-fit guidance, topic candidates, and hero-asset references.
 - Added a final social-preview asset set: editable SVG, ready-to-upload PNG export, and a local review page under `docs/assets/` for GitHub/social-preview iteration.
+- Added a dedicated `docs/assets/hermit-readme-hero.svg` so the README explains the planner/executor split with a reusable visual instead of terminal ASCII.
 - Added `docs/social-preview-ops.md` so maintainers have a concrete review/export/upload checklist for the GitHub social preview image.
 - Added `docs/release-notes-template.md` so release blurbs and GitHub Releases can reuse the same planner/executor positioning without improvising each time.
-- Reordered the README badge row around release health and package availability, and tightened the hero copy so the landing page reads closer to the final social-preview message.
+- Reordered the README badge row around release health and package availability, tightened the hero copy, and swapped the ASCII diagram for a polished SVG hero that matches the social-preview tone.
 - Updated package and repository-facing descriptions to emphasize the MCP executor + cheaper execution lane story instead of the outdated Codex-first fallback wording.
 - Tightened the public metadata around predictable local / flat-rate defaults so the repository pitch matches the current install and routing policy.
 
@@ -23,6 +24,7 @@
 - Added a dedicated `Publish GitHub Release` workflow on `v*` tags for manual or external tag pushes, while the main release workflow also creates the GitHub Release directly so auto-published releases do not depend on cross-workflow tag triggers.
 - Added release-workflow concurrency plus idempotent npm publish, tag-push, and GitHub Release checks so reruns do not accidentally create duplicate artifacts.
 - Fixed release write-back to use the configured push token correctly, and kept the protected-`main` fallback that opens a sync PR when direct write-back is rejected.
+- GitHub Release notes are now rendered from `scripts/render_release_notes.py` so the auto-publish path and the tag/manual fallback both follow the same release-note template and planner/executor framing.
 
 ### Install and model-selection UX
 - Switched the primary onboarding flow to `npm install -g @cafitac/hermit-agent` followed by `hermit`, with guided setup offered from startup when Claude Code or Codex integration is incomplete.

@@ -1,0 +1,41 @@
+<svg width="1600" height="560" viewBox="0 0 1600 560" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="70" y1="30" x2="1510" y2="530" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1020"/>
+      <stop offset="1" stop-color="#111C38"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="270" y1="350" x2="1160" y2="350" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#8B5CF6"/>
+      <stop offset="1" stop-color="#38BDF8"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="560" rx="28" fill="url(#bg)"/>
+  <rect x="36" y="36" width="1528" height="488" rx="24" fill="#0F172A" stroke="#233146"/>
+
+  <text x="90" y="110" fill="#E5EEF8" font-family="Inter, Arial, sans-serif" font-size="22" font-weight="700" letter-spacing="1.4">MCP EXECUTION LANE FOR CLAUDE CODE OR CODEX</text>
+  <text x="90" y="188" fill="white" font-family="Inter, Arial, sans-serif" font-size="54" font-weight="800">Keep Claude or Codex for judgment.</text>
+  <text x="90" y="248" fill="white" font-family="Inter, Arial, sans-serif" font-size="54" font-weight="800">Let Hermit carry the repo labor.</text>
+  <text x="90" y="306" fill="#9FB0C8" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="500">MCP execution for edits, tests, commits, and releases on predictable</text>
+  <text x="90" y="340" fill="#9FB0C8" font-family="Inter, Arial, sans-serif" font-size="26" font-weight="500">local or flat-rate models.</text>
+
+  <rect x="90" y="390" width="266" height="56" rx="18" fill="#131E35" stroke="#2D3A57"/>
+  <text x="118" y="425" fill="#E5EEF8" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">Claude Code / Codex</text>
+  <rect x="390" y="390" width="210" height="56" rx="18" fill="#131E35" stroke="#2D3A57"/>
+  <text x="432" y="425" fill="#E5EEF8" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">Hermit MCP</text>
+  <rect x="628" y="390" width="250" height="56" rx="18" fill="#131E35" stroke="#2D3A57"/>
+  <text x="654" y="425" fill="#E5EEF8" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">Local / flat-rate LLMs</text>
+
+  <rect x="1040" y="122" width="420" height="276" rx="28" fill="#0B1223" stroke="#22304A"/>
+  <rect x="1074" y="154" width="124" height="58" rx="18" fill="#17233B" stroke="#394967"/>
+  <text x="1104" y="190" fill="#E5EEF8" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">Planner</text>
+  <rect x="1292" y="154" width="128" height="58" rx="18" fill="#17233B" stroke="#394967"/>
+  <text x="1328" y="190" fill="#E5EEF8" font-family="Inter, Arial, sans-serif" font-size="24" font-weight="700">Hermit</text>
+  <path d="M1210 183H1278" stroke="url(#accent)" stroke-width="10" stroke-linecap="round"/>
+  <polygon points="1272,169 1302,183 1272,197" fill="#38BDF8"/>
+  <text x="1076" y="248" fill="#9FB0C8" font-family="Inter, Arial, sans-serif" font-size="22">Planner: interviews, scope, review</text>
+  <text x="1076" y="286" fill="#9FB0C8" font-family="Inter, Arial, sans-serif" font-size="22">Hermit: edits, tests, commits, releases</text>
+  <path d="M1080 314H1420" stroke="#233146" stroke-width="2"/>
+  <text x="1076" y="350" fill="#E5EEF8" font-family="Inter, Arial, sans-serif" font-size="22">One execution lane for many orchestrators.</text>
+
+  <path d="M320 474H910" stroke="url(#accent)" stroke-width="8" stroke-linecap="round"/>
+</svg>

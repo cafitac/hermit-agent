@@ -8,17 +8,7 @@
 
 > Hermit adds a dedicated MCP execution lane under Claude Code or Codex: keep the premium orchestrator for judgment, and route the repetitive repo work to predictable local or flat-rate models.
 
-```
-┌──────────────┐
-│  Claude Code │──┐
-│  (planner)   │  │    ┌──────────────┐   any OpenAI-compatible   ┌───────┐
-└──────────────┘  ├───▶│  HermitAgent │ ────────────────────────▶ │  LLM  │
-                  │    │  (executor)  │                           └───────┘
-┌──────────────┐  │    └──────────────┘
-│    Codex     │──┘         local / flat-rate by default
-│  (planner)   │
-└──────────────┘
-```
+![Hermit README hero](docs/assets/hermit-readme-hero.svg)
 
 Claude Code or Codex stays in charge of planning, interviewing, and review. Hermit takes the mechanical path: file edits, test runs, refactors, commits, and MCP-executed follow-through on predictable local or flat-rate execution models. The switch is one word in a slash command: `/foo` → `/foo-hermit`.
 
@@ -164,6 +154,7 @@ MIT — see [LICENSE](LICENSE).
 - [docs/open-source-positioning.md](docs/open-source-positioning.md) — short public-facing copy for descriptions, releases, and future social previews
 - [docs/release-notes-template.md](docs/release-notes-template.md) — reusable release-note framing that matches Hermit's planner/executor positioning
 - [docs/social-preview-ops.md](docs/social-preview-ops.md) — how to review, export, and upload the GitHub social-preview image
+- [docs/assets/hermit-readme-hero.svg](docs/assets/hermit-readme-hero.svg) — README hero graphic for the planner/executor split
 - [docs/assets/hermit-social-preview.svg](docs/assets/hermit-social-preview.svg) — final editable social-preview asset for repo cards and launch posts
 - [docs/assets/hermit-social-preview.png](docs/assets/hermit-social-preview.png) — ready-to-upload GitHub social-preview export
 - [docs/assets/hermit-social-preview-review.html](docs/assets/hermit-social-preview-review.html) — local review page for checking the social-preview composition before export

@@ -62,6 +62,15 @@ Hermit ships the mechanical follow-through.
 One MCP executor layer.
 Cheaper execution across multiple orchestrators.
 
+## Homepage / hero copy variants
+
+### Hero visual assets
+- README hero: `docs/assets/hermit-readme-hero.svg`
+- Social preview card: `docs/assets/hermit-social-preview.svg`
+- Social preview export: `docs/assets/hermit-social-preview.png`
+
+Use the README hero for in-page explanation of the planner/executor split, and use the social-preview card for repository thumbnails, launch posts, and Open Graph-style previews.
+
 ## Social preview asset
 
 - Final editable asset: `docs/assets/hermit-social-preview.svg`

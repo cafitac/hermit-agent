@@ -69,13 +69,12 @@ jobs:
           set -euo pipefail
 
           NOTES=$(mktemp)
-          {
-            echo "Automated release for ${RELEASE_TAG}."
-            echo
-            echo "Published packages:"
-            echo "- npm: @cafitac/hermit-agent@${VERSION}"
-            echo "- PyPI: cafitac-hermit-agent==${VERSION}"
-          } > "$NOTES"
+          python3 scripts/render_release_notes.py \
+            --tag "$RELEASE_TAG" \
+            --version "$VERSION" \
+            --repo "$REPOSITORY" \
+            --reason "tag-triggered release publication" \
+            --out "$NOTES"
 
           if gh release view "$RELEASE_TAG" --repo "$REPOSITORY" >/dev/null 2>&1; then
             gh release edit "$RELEASE_TAG" \
@@ -90,7 +89,6 @@ jobs:
             --repo "$REPOSITORY" \
             --verify-tag \
             --title "$RELEASE_TAG" \
-            --notes-file "$NOTES" \
-            --generate-notes
+            --notes-file "$NOTES"
 
           echo "Created GitHub Release ${RELEASE_TAG}."
