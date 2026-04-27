@@ -4,6 +4,8 @@
 
 ### Repository positioning and metadata
 - Refreshed the README opening section to position Hermit as a distinct open-source executor layer for Claude Code and Codex rather than a generic terminal UI.
+- Added a comparison section that explains why teams would pair Hermit with Claude Code or Codex instead of treating it as a replacement orchestrator.
+- Added a reusable `docs/open-source-positioning.md` copy deck for repository descriptions, social preview messaging, and release framing.
 - Updated package and repository-facing descriptions to emphasize the MCP executor + cheaper execution lane story instead of the outdated Codex-first fallback wording.
 - Tightened the public metadata around predictable local / flat-rate defaults so the repository pitch matches the current install and routing policy.
 

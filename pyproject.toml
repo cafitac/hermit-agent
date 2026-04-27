@@ -13,13 +13,18 @@ keywords = [
     "claude-code",
     "coding-agent",
     "codex",
+    "cost-optimization",
     "developer-tools",
     "gateway",
     "interactive",
     "llm",
+    "llm-routing",
     "local-llm",
     "mcp",
+    "mcp-server",
     "ollama",
+    "sub-agent",
+    "token-savings",
 ]
 authors = [
     { name = "HermitAgent Contributors" },
