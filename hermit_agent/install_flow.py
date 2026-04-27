@@ -33,6 +33,7 @@ class InstallSummary:
     codex_marketplace_status: str = "skipped"
     codex_reply_hook_status: str = "skipped"
     model_selection_status: str = "unchanged"
+    agent_learner_status: str = "skipped"
     codex_details: list[str] = field(default_factory=list)
     next_steps: list[str] = field(default_factory=list)
 
@@ -506,6 +507,32 @@ def ensure_gateway_running(*, cwd: str) -> str:
     return "started" if probe_gateway_health(timeout=5.0) else "unhealthy"
 
 
+def _setup_agent_learner_hooks(*, cwd: str) -> str:
+    """Wire agent-learner Stop hooks into ~/.claude/settings.json and ~/.codex/hooks.json.
+
+    Requires agent-learner to be installed as a Python package. Returns a status string.
+    """
+    try:
+        from agent_learner.adapters.claude import install_claude_hooks
+        from agent_learner.adapters.codex import install_codex_hooks
+    except ImportError:
+        return "not-installed"
+
+    errors: list[str] = []
+    try:
+        install_claude_hooks(Path.home())
+    except Exception as exc:
+        errors.append(f"claude: {exc}")
+    try:
+        install_codex_hooks(Path.home())
+    except Exception as exc:
+        errors.append(f"codex: {exc}")
+
+    if errors:
+        return f"partial ({'; '.join(errors)})"
+    return "installed"
+
+
 def format_install_summary(summary: InstallSummary) -> str:
     lines = [
         "Hermit install is ready.",
@@ -526,6 +553,7 @@ def format_install_summary(summary: InstallSummary) -> str:
         lines.append(f"- Codex integration runtime version: {summary.codex_runtime_version}")
     lines.append(f"- Codex marketplace registration: {summary.codex_marketplace_status}")
     lines.append(f"- Legacy Codex reply hook: {summary.codex_reply_hook_status}")
+    lines.append(f"- agent-learner hooks: {summary.agent_learner_status}")
     for detail in summary.codex_details:
         lines.append(f"  - {detail}")
     if summary.next_steps:
@@ -651,6 +679,10 @@ def run_install(
                 summary.next_steps.append("Repair Hermit's Codex integration before relying on approvals or interview replies from Codex.")
         else:
             summary.codex_install_status = "skipped"
+
+    summary.agent_learner_status = _setup_agent_learner_hooks(cwd=cwd)
+    if summary.agent_learner_status == "not-installed":
+        summary.next_steps.append("Install agent-learner (pip install agent-learner) to enable session learning.")
 
     if not summary.next_steps:
         summary.next_steps.append("Run your normal Hermit workflow.")
