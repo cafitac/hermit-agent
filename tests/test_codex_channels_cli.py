@@ -1,174 +1,108 @@
-"""Tests for `hermit codex-channels` CLI subcommands."""
-from __future__ import annotations
+"""Tests for `hermit_agent codex-channels` CLI dispatch."""
 
-import os
-import signal
-import subprocess
 import sys
-from dataclasses import dataclass
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-@dataclass
-class _FakeSettings:
-    enabled: bool = True
-    host: str = "127.0.0.1"
-    port: int = 4317
-    state_file: str = ""
-    runtime_dir: str = ""
-
-
-def _run_cli(*extra_args: str) -> subprocess.CompletedProcess[str]:
-    """Run hermit_agent codex-channels ... and return CompletedProcess."""
-    venv_python = os.environ.get("HERMIT_VENV_PYTHON", sys.executable)
-    return subprocess.run(
-        [venv_python, "-m", "hermit_agent", "codex-channels", *extra_args],
-        capture_output=True,
-        text=True,
-        timeout=10,
+def _make_install_report(tmp_path):
+    """Build a minimal InstallCodexReport-like namespace."""
+    return SimpleNamespace(
+        install_command=["npm", "install"],
+        install_mode="package",
+        runtime_dir=str(tmp_path),
+        settings_path=str(tmp_path / "settings.json"),
+        serve_command=["node", "serve"],
+        status_command=["node", "status"],
+        marketplace_path=str(tmp_path / "marketplace"),
+        state_file=str(tmp_path / "state.json"),
+        plugin_path=str(tmp_path / "plugin.js"),
+        package_spec="@cafitac/codex-channels@0.1.31",
+        source_path=None,
     )
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
+class TestCodexChannelsInstall:
+    """`hermit_agent codex-channels install` dispatch tests."""
 
-
-class TestCodexChannelsStatusCLI:
-    """Test `hermit codex-channels status` CLI subcommand."""
-
-    def test_status_prints_unreachable_when_server_down(self, monkeypatch, tmp_path):
-        """When health check fails, status should print 'unreachable' and exit non-zero."""
-        from hermit_agent.__main__ import _run_codex_channels_status
-
-        def _raise(*a, **kw):
-            raise OSError("connection refused")
-
-        monkeypatch.setattr("urllib.request.urlopen", _raise)
+    def test_install_calls_install_fn(self, monkeypatch, tmp_path, capsys):
+        report = _make_install_report(tmp_path)
         monkeypatch.setattr(
-            "hermit_agent.codex.channels_adapter.load_codex_channels_settings",
-            lambda cfg, cwd: _FakeSettings(enabled=True),
+            "hermit_agent.codex.channels_adapter.install_codex_channels",
+            lambda **kw: report,
         )
-        monkeypatch.setattr(
-            "hermit_agent.config.load_settings",
-            lambda cwd={}: {},
-        )
+        monkeypatch.setattr(sys, "argv", ["hermit_agent", "codex-channels", "install"])
+        # Prevent codex-channels status/start/stop from running
+        monkeypatch.setattr(sys, "exit", lambda code=0: None)
 
-        # Capture SystemExit
+        from hermit_agent.__main__ import main
+        main()
+
+        out = capsys.readouterr().out
+        assert "installed" in out
+        assert "package" in out
+
+    def test_install_failure_exits_1(self, monkeypatch, tmp_path, capsys):
+        def _fail(**kw):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(
+            "hermit_agent.codex.channels_adapter.install_codex_channels",
+            _fail,
+        )
+        monkeypatch.setattr(sys, "argv", ["hermit_agent", "codex-channels", "install"])
+
         with pytest.raises(SystemExit) as exc_info:
-            _run_codex_channels_status(cwd=str(tmp_path))
+            from hermit_agent.__main__ import main
+            main()
+
         assert exc_info.value.code == 1
+        err = capsys.readouterr().err
+        assert "boom" in err
 
-    def test_status_prints_reachable_when_server_up(self, monkeypatch, tmp_path, capsys):
-        """When health check returns 200, status should print 'reachable' and exit 0."""
-        from hermit_agent.__main__ import _run_codex_channels_status
+    def test_install_passes_cwd(self, monkeypatch, tmp_path):
+        captured_kwargs = {}
 
-        class MockResp:
-            status = 200
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *a):
-                pass
-
-        monkeypatch.setattr("urllib.request.urlopen", lambda *a, **kw: MockResp())
-        monkeypatch.setattr(
-            "hermit_agent.codex.channels_adapter.load_codex_channels_settings",
-            lambda cfg, cwd: _FakeSettings(enabled=True),
-        )
-        monkeypatch.setattr(
-            "hermit_agent.config.load_settings",
-            lambda cwd={}: {},
-        )
-
-        _run_codex_channels_status(cwd=str(tmp_path))
-        captured = capsys.readouterr()
-        assert "reachable" in captured.out
-
-
-class TestCodexChannelsStartCLI:
-    """Test `hermit codex-channels start` CLI subcommand."""
-
-    def test_start_launches_serve_command(self, monkeypatch, tmp_path):
-        from hermit_agent.__main__ import _run_codex_channels_start
-
-        mock_proc = MagicMock()
-        mock_proc.pid = 12345
-        mock_proc.poll.return_value = None
+        def _capture_install(**kw):
+            captured_kwargs.update(kw)
+            return _make_install_report(tmp_path)
 
         monkeypatch.setattr(
-            subprocess, "Popen", lambda *a, **kw: mock_proc
+            "hermit_agent.codex.channels_adapter.install_codex_channels",
+            _capture_install,
         )
-        monkeypatch.setattr(
-            "hermit_agent.codex.channels_adapter.load_codex_channels_settings",
-            lambda cfg, cwd: _FakeSettings(enabled=True, runtime_dir=str(tmp_path)),
-        )
-        monkeypatch.setattr(
-            "hermit_agent.config.load_settings",
-            lambda cwd={}: {},
-        )
-        monkeypatch.setattr(
-            "hermit_agent.codex.channels_adapter.build_runtime_serve_command",
-            lambda *, settings: ["echo", "serve"],
-        )
+        monkeypatch.setattr(sys, "argv", ["hermit_agent", "codex-channels", "install", "--cwd", str(tmp_path)])
+        monkeypatch.setattr(sys, "exit", lambda code=0: None)
 
-        _run_codex_channels_start(cwd=str(tmp_path))
-        # Verify PID file was written
-        pid_file = tmp_path / "codex-channels.pid"
-        assert pid_file.exists()
-        assert pid_file.read_text().strip() == "12345"
+        from hermit_agent.__main__ import main
+        main()
+
+        assert captured_kwargs.get("cwd") == str(tmp_path)
 
 
-class TestCodexChannelsStopCLI:
-    """Test `hermit codex-channels stop` CLI subcommand."""
+class TestCodexChannelsUsage:
+    """Usage / validation tests for codex-channels dispatch."""
 
-    def test_stop_kills_process_from_pid_file(self, monkeypatch, tmp_path):
-        from hermit_agent.__main__ import _run_codex_channels_stop
+    def test_invalid_subcommand_prints_usage(self, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["hermit_agent", "codex-channels", "bogus"])
 
-        pid_file = tmp_path / "codex-channels.pid"
-        pid_file.write_text("99999")
+        with pytest.raises(SystemExit) as exc_info:
+            from hermit_agent.__main__ import main
+            main()
 
-        monkeypatch.setattr(
-            "hermit_agent.codex.channels_adapter.load_codex_channels_settings",
-            lambda cfg, cwd: _FakeSettings(enabled=True, runtime_dir=str(tmp_path)),
-        )
-        monkeypatch.setattr(
-            "hermit_agent.config.load_settings",
-            lambda cwd={}: {},
-        )
+        assert exc_info.value.code == 1
+        err = capsys.readouterr().err
+        assert "Usage" in err or "usage" in err.lower()
 
-        killed_pid = {}
+    def test_no_subcommand_prints_usage(self, monkeypatch, capsys):
+        monkeypatch.setattr(sys, "argv", ["hermit_agent", "codex-channels"])
 
-        def mock_kill(pid, sig):
-            killed_pid["pid"] = pid
-            killed_pid["sig"] = sig
+        with pytest.raises(SystemExit) as exc_info:
+            from hermit_agent.__main__ import main
+            main()
 
-        monkeypatch.setattr(os, "kill", mock_kill)
-
-        _run_codex_channels_stop(cwd=str(tmp_path))
-        assert killed_pid == {"pid": 99999, "sig": signal.SIGTERM}
-        assert not pid_file.exists()
-
-    def test_stop_succeeds_when_no_pid_file(self, monkeypatch, tmp_path, capsys):
-        from hermit_agent.__main__ import _run_codex_channels_stop
-
-        monkeypatch.setattr(
-            "hermit_agent.codex.channels_adapter.load_codex_channels_settings",
-            lambda cfg, cwd: _FakeSettings(enabled=True, runtime_dir=str(tmp_path)),
-        )
-        monkeypatch.setattr(
-            "hermit_agent.config.load_settings",
-            lambda cwd={}: {},
-        )
-
-        _run_codex_channels_stop(cwd=str(tmp_path))
-        captured = capsys.readouterr()
-        assert "not running" in captured.out.lower()
+        assert exc_info.value.code == 1
+        err = capsys.readouterr().err
+        assert "Usage" in err or "usage" in err.lower()

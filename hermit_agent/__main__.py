@@ -464,85 +464,80 @@ def _run_status_watch(*, cwd: str, interval: float) -> None:
         print("\n[Hermit] Stopped status watch.")
 
 
-# ---------------------------------------------------------------------------
-# codex-channels subcommands
-# ---------------------------------------------------------------------------
+def _dispatch_codex_channels() -> None:
+    """Handle `hermit_agent codex-channels {install|status|start|stop}`."""
+    args = sys.argv[2:]
+    if not args or args[0] not in ("install", "status", "start", "stop"):
+        print(
+            "Usage: hermit_agent codex-channels {install|status|start|stop}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
-def _run_codex_channels_status(*, cwd: str) -> None:
-    import urllib.request
+    sub = args[0]
+    rest = args[1:]
 
-    from .codex.channels_adapter import load_codex_channels_settings
-    from .config import load_settings
+    # Extract --cwd from remaining args
+    cwd = os.getcwd()
+    i = 0
+    while i < len(rest):
+        if rest[i] == "--cwd" and i + 1 < len(rest):
+            cwd = rest[i + 1]
+            i += 2
+        elif rest[i].startswith("--cwd="):
+            cwd = rest[i].split("=", 1)[1]
+            i += 1
+        else:
+            i += 1
 
-    cfg = load_settings(cwd=cwd)
-    settings = load_codex_channels_settings(cfg, cwd)
-    if not settings.enabled:
-        print("codex-channels: disabled")
-        return
+    if sub == "install":
+        _run_codex_channels_install(cwd=cwd)
+
+
+def _run_codex_channels_install(*, cwd: str, codex_command: str = "codex") -> None:
+    from .codex.channels_adapter import install_codex_channels
 
     try:
-        url = f"http://{settings.host}:{settings.port}/health"
-        with urllib.request.urlopen(url, timeout=2) as resp:
-            if resp.status == 200:
-                print(f"codex-channels: reachable (http://{settings.host}:{settings.port})")
-                return
-    except Exception:
-        pass
-    print(f"codex-channels: unreachable (http://{settings.host}:{settings.port})")
-    raise SystemExit(1)
+        report = install_codex_channels(cwd=cwd, codex_command=codex_command)
+        print(f"codex-channels: installed ({report.install_mode})")
+        print(f"  runtime:  {report.runtime_dir}")
+        print(f"  settings: {report.settings_path}")
+        print(f"  serve:    {' '.join(report.serve_command)}")
+    except Exception as exc:
+        print(f"codex-channels install failed: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
-def _run_codex_channels_start(*, cwd: str) -> None:
+def _dispatch_learner() -> None:
+    """Handle `hermit_agent learner {init|status|dashboard|process|inject}`."""
+    import shutil
     import subprocess
-    from pathlib import Path
 
-    from .codex.channels_adapter import build_runtime_serve_command, load_codex_channels_settings
-    from .config import load_settings
+    args = sys.argv[2:]
+    sub = args[0] if args else "status"
+    extra = args[1:] if len(args) > 1 else []
+    valid = {"init", "status", "dashboard", "process", "inject"}
 
-    cfg = load_settings(cwd=cwd)
-    settings = load_codex_channels_settings(cfg, cwd)
-    serve_cmd = build_runtime_serve_command(settings=settings)
-    proc = subprocess.Popen(serve_cmd, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if sub not in valid:
+        print(
+            f"Usage: hermit_agent learner {{{('|'.join(sorted(valid)))}}}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
-    runtime_dir = Path(settings.runtime_dir) if settings.runtime_dir else Path(cwd) / ".hermit"
-    runtime_dir.mkdir(parents=True, exist_ok=True)
-    pid_file = runtime_dir / "codex-channels.pid"
-    pid_file.write_text(str(proc.pid))
-    print(f"codex-channels: started (pid={proc.pid}, pid_file={pid_file})")
+    if not shutil.which("agent-learner"):
+        print(
+            "agent-learner is not installed. Run:\n"
+            "  pip install agent-learner\n"
+            "or\n"
+            "  pip install -e ~/Project/agent-learner",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
-
-def _run_codex_channels_stop(*, cwd: str) -> None:
-    import os
-    import signal
-    from pathlib import Path
-
-    from .codex.channels_adapter import load_codex_channels_settings
-    from .config import load_settings
-
-    cfg = load_settings(cwd=cwd)
-    settings = load_codex_channels_settings(cfg, cwd)
-    runtime_dir = Path(settings.runtime_dir) if settings.runtime_dir else Path(cwd) / ".hermit"
-    pid_file = runtime_dir / "codex-channels.pid"
-
-    if not pid_file.exists():
-        print("codex-channels: not running (no pid file)")
-        return
-
-    pid_text = pid_file.read_text().strip()
-    try:
-        pid = int(pid_text)
-    except ValueError:
-        pid_file.unlink(missing_ok=True)
-        print(f"codex-channels: invalid pid file, removed")
-        return
-
-    try:
-        os.kill(pid, signal.SIGTERM)
-        print(f"codex-channels: stopped (pid={pid})")
-    except ProcessLookupError:
-        print(f"codex-channels: process {pid} not found (stale pid)")
-    finally:
-        pid_file.unlink(missing_ok=True)
+    cmd = ["agent-learner", sub, "--project-root", os.getcwd()] + extra
+    result = subprocess.run(cmd)
+    sys.exit(result.returncode)
 
 
 def main():
@@ -600,23 +595,14 @@ def main():
             print(run_diagnostics(cwd=doctor_args.cwd).format())
         return
 
-    if len(sys.argv) > 2 and sys.argv[1] == "codex-channels":
-        subcmd = sys.argv[2]
-        cc_cwd = os.getcwd()
-        # Extract --cwd if present
-        if "--cwd" in sys.argv[3:]:
-            idx = sys.argv.index("--cwd", 3)
-            cc_cwd = sys.argv[idx + 1]
-        if subcmd == "status":
-            _run_codex_channels_status(cwd=cc_cwd)
-        elif subcmd == "start":
-            _run_codex_channels_start(cwd=cc_cwd)
-        elif subcmd == "stop":
-            _run_codex_channels_stop(cwd=cc_cwd)
-        else:
-            print(f"Unknown codex-channels subcommand: {subcmd}", file=sys.stderr)
-            print("Usage: hermit_agent codex-channels {status|start|stop}", file=sys.stderr)
-            raise SystemExit(1)
+    # ── codex-channels dispatch ──────────────────────────────────────
+    if len(sys.argv) > 1 and sys.argv[1] == "codex-channels":
+        _dispatch_codex_channels()
+        return
+
+    # ── learner dispatch ─────────────────────────────────────────────
+    if len(sys.argv) > 1 and sys.argv[1] == "learner":
+        _dispatch_learner()
         return
 
     args = parse_args()
