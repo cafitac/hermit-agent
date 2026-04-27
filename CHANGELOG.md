@@ -8,6 +8,7 @@
 - Added explicit "who Hermit is for / not for" guidance so the landing page qualifies the intended audience instead of only describing features.
 - Added a reusable `docs/open-source-positioning.md` copy deck for repository descriptions, social preview messaging, release framing, and audience-fit guidance.
 - Added a final social-preview asset set: editable SVG, ready-to-upload PNG export, and a local review page under `docs/assets/` for GitHub/social-preview iteration.
+- Added `docs/social-preview-ops.md` so maintainers have a concrete review/export/upload checklist for the GitHub social preview image.
 - Updated package and repository-facing descriptions to emphasize the MCP executor + cheaper execution lane story instead of the outdated Codex-first fallback wording.
 - Tightened the public metadata around predictable local / flat-rate defaults so the repository pitch matches the current install and routing policy.
 
