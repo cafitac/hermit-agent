@@ -226,12 +226,12 @@ jobs:
           PR_BODY=$(mktemp)
           printf '%s\n' \
             '## Summary' \
-            "- sync \\`pyproject.toml\\` and \\`hermit-ui/package.json\\` to the already-published release version \\`${NEXT}\\`" \
-            '- preserve the release tag and registry state when protected `main` blocks workflow write-back' \
+            "- sync pyproject.toml and hermit-ui/package.json to the already-published release version ${NEXT}" \
+            '- preserve the release tag and registry state when protected main blocks workflow write-back' \
             '' \
             '## Why' \
-            "- npm + PyPI publish already succeeded for \\`${NEXT}\\`" \
-            '- direct workflow push to `main` was rejected by the repository ruleset' \
+            "- npm + PyPI publish already succeeded for ${NEXT}" \
+            '- direct workflow push to main was rejected by the repository ruleset' \
             '- this PR keeps repository version files aligned without requiring a force-bypass token' \
             '' \
             '## Notes' \
