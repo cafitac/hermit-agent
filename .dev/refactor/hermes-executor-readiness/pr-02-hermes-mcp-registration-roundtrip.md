@@ -153,6 +153,24 @@ Do not fake this in tests.
 Expected:
 - full suite passes
 
+## Verified follow-up status
+
+Implemented/verified by PR #67, PR #69, and the v0.3.67 release-sync:
+- registration is explicit and idempotent
+- `--test-hermes-mcp` no longer reports pass for a missing server output with exit code 0
+- `--fix-hermes-mcp` handles Hermes' tool-enable prompt and treats `Cancelled`/failure-looking output as failure
+- post-registration verification checks `hermes mcp list`
+- local `hermes mcp list`, `hermit doctor`, and `hermit install --test-hermes-mcp` agree that `hermit-channel -> hermit mcp-server` is enabled
+
+Additional follow-up smoke after MCP reload:
+- Gateway was started with `./bin/gateway.sh --daemon` and `/health` reported `glm-5.1` as the active default model.
+- A direct stdio MCP client connected to `hermit mcp-server`, listed `register_task`, `run_task`, `reply_task`, `check_task`, and `cancel_task`, then called:
+  - `run_task` with a no-edit QA prompt in a temporary git repo
+  - `register_task` with the returned task id
+  - `check_task` with `full=true`
+- Result: `status: done`, `result: "HERMIT_E2E_OK"`, proving the MCP server surface can drive the Gateway/AgentLoop/provider task path.
+- Limitation: this direct Python MCP SDK smoke printed validation warnings for the custom `notifications/claude/channel` notification method. Polling still succeeded. Hermes Agent itself needs continued observation for whether it accepts that extension cleanly; generic SDK warnings alone are not a round-trip failure.
+
 ## Acceptance criteria
 
 - Hermes registration command is idempotent.
