@@ -291,6 +291,76 @@ def format_hermes_mcp_config_snippet(*, cwd: str) -> str:
     )
 
 
+def _hermes_mcp_list_contains_expected_entry(output: str, *, expected_command: str, expected_args: list[str]) -> bool:
+    normalized = " ".join(output.split())
+    if "hermit-channel" not in normalized:
+        return False
+    if expected_command not in normalized:
+        return False
+    return all(arg in normalized for arg in expected_args)
+
+
+def ensure_hermes_mcp_registered(*, cwd: str) -> str:
+    """Explicitly register Hermit's MCP server in Hermes Agent via the Hermes CLI."""
+    if shutil.which("hermes") is None:
+        return "missing-hermes-cli"
+
+    desired_entry = resolve_hermit_mcp_stdio_entry(cwd=cwd)
+    desired_command = str(desired_entry["command"])
+    raw_args = desired_entry.get("args", [])
+    desired_args = [str(arg) for arg in raw_args] if isinstance(raw_args, list) else []
+
+    try:
+        current = subprocess.run(
+            ["hermes", "mcp", "list"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"list-failed ({exc})"
+
+    if current.returncode == 0 and _hermes_mcp_list_contains_expected_entry(
+        current.stdout,
+        expected_command=desired_command,
+        expected_args=desired_args,
+    ):
+        return "unchanged"
+
+    try:
+        proc = subprocess.run(
+            ["hermes", "mcp", "add", "hermit-channel", "--command", desired_command, "--args", *desired_args],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"failed ({exc})"
+
+    if proc.returncode != 0:
+        message = proc.stderr.strip() or proc.stdout.strip() or "failed to register Hermes MCP"
+        return f"failed ({message})"
+    return "registered"
+
+
+def format_hermes_mcp_fix_summary(status: str) -> str:
+    lines = [
+        f"Hermes MCP registration: {status}",
+        "",
+        "Next:",
+    ]
+    if status in {"registered", "unchanged"}:
+        lines.append("1. Run `hermes mcp test hermit-channel` to verify the live MCP connection.")
+        lines.append("2. Restart Hermes Agent sessions that should use Hermit as an MCP executor.")
+    elif status == "missing-hermes-cli":
+        lines.append("1. Install or update Hermes Agent, then rerun `hermit install --fix-hermes-mcp`.")
+    else:
+        lines.append("1. Inspect `hermes mcp list` and rerun `hermit install --print-hermes-mcp-config` for the manual registration command.")
+    return "\n".join(lines)
+
+
 def inspect_claude_mcp_registration(*, command_path: Path | None = None, claude_json_path: Path | None = None, entry: dict[str, object] | None = None) -> str:
     target = claude_json_path or (Path.home() / ".claude.json")
     if not target.exists():
