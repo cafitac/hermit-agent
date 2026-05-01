@@ -97,7 +97,9 @@ Preferred implementation options, in order of likely durability:
 
 ## Contract sketch
 
-Use this as a design target, not necessarily exact code shape:
+Implemented scaffold: `hermit_agent/orchestrators/contracts.py` now defines the first orchestrator-neutral DTO/protocol layer. Existing Claude/Codex/Hermes flows have not moved behind the protocol yet; this keeps the first slice behavior-free and gives later extraction work a tested shared vocabulary.
+
+Use this as the design target for the scaffold and later adapter extraction:
 
 ```python
 class OrchestratorAdapter:
@@ -119,6 +121,14 @@ DTOs should stay orchestrator-neutral:
 - `PromptReply`
 - `AdapterHealth`
 - `AdapterInstallResult`
+
+Current test anchor:
+- `tests/test_orchestrator_contracts.py` verifies immutable DTO shape, stable status/event enum values, and the structural lifecycle shape of `OrchestratorAdapter`.
+
+Next extraction candidates:
+- wrap Hermes print/fix/test install helpers with `AdapterInstallResult`
+- wrap optional Hermes doctor output with `AdapterHealth`
+- map existing interactive prompt/session objects into the neutral `InteractivePrompt` / `PromptReply` pair without changing runtime behavior
 
 ## Non-goals
 

@@ -80,6 +80,8 @@ Acceptance:
 
 ### R2.1 Define orchestrator-neutral contracts
 
+Status: first scaffold implemented in `hermit_agent/orchestrators/contracts.py`; behavior remains on the existing Claude/Codex/Hermes paths until R2.2 extraction slices.
+
 Target surfaces:
 - task submission
 - progress/status events

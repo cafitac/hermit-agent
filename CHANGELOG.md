@@ -40,6 +40,7 @@
 - Added `hermit install --fix-hermes-mcp` as an explicit Hermes Agent MCP registration path that calls `hermes mcp add hermit-channel --command hermit --args mcp-server` only when requested.
 - Added `hermit install --test-hermes-mcp` as an explicit live MCP wiring smoke that runs `hermes mcp test hermit-channel` without mutating Hermes config.
 - Added an optional `Hermes MCP` doctor diagnostic that checks for `hermit-channel -> hermit mcp-server` registration and tolerates current `hermes mcp list` text-only output.
+- Added an orchestrator-neutral adapter contract scaffold under `hermit_agent.orchestrators` so Claude Code, Codex, and Hermes integration work can converge on shared task, event, prompt, health, and install DTOs before larger runtime refactors.
 - Started tracking the long-term refactor roadmap under `.dev/refactor/**` while leaving other `.dev/*` scratch files ignored.
 - Removed warning-producing test mocks for setup coroutines so the suite no longer emits unawaited `init_db` / `create_api_key` runtime warnings.
 - Aligned contributor and harness docs on `.venv/bin/python -m pytest tests/` and added a repo hygiene regression so stale `.venv/bin/pytest` shebangs are not reintroduced as the documented path.
