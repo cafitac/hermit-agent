@@ -1,5 +1,7 @@
 """Orchestrator adapter contracts for Hermit executor integrations."""
 
+from .claude import ClaudeCodeMcpAdapter
+from .codex import CodexAdapter
 from .contracts import (
     AdapterHealth,
     AdapterHealthStatus,
@@ -30,6 +32,8 @@ __all__ = [
     "AdapterHealthStatus",
     "AdapterInstallResult",
     "AdapterInstallStatus",
+    "ClaudeCodeMcpAdapter",
+    "CodexAdapter",
     "HermesMcpAdapter",
     "InteractivePrompt",
     "OrchestratorAdapter",

@@ -125,6 +125,8 @@ DTOs should stay orchestrator-neutral:
 Current test anchor:
 - `tests/test_orchestrator_contracts.py` verifies immutable DTO shape, stable status/event enum values, and the structural lifecycle shape of `OrchestratorAdapter`.
 - `tests/test_hermes_orchestrator_adapter.py` verifies `HermesMcpAdapter` maps existing Hermes install, live-smoke, and doctor helpers into `AdapterInstallResult` / `AdapterHealth` without mutating behavior.
+- `tests/test_claude_orchestrator_adapter.py` verifies `ClaudeCodeMcpAdapter` maps existing Claude MCP print/fix/registration-health helpers into `AdapterInstallResult` / `AdapterHealth` without mutating runtime delivery behavior.
+- `tests/test_codex_orchestrator_adapter.py` verifies `CodexAdapter` maps existing codex-channels, Codex marketplace, Codex MCP, and legacy reply-hook helpers into `AdapterInstallResult` / `AdapterHealth` without mutating runtime delivery behavior.
 - `tests/test_orchestrator_prompt_mapping.py` verifies current runtime prompts can round-trip through the neutral `InteractivePrompt` / `PromptReply` DTOs while preserving method/request/thread metadata.
 - `tests/test_orchestrator_event_mapping.py` verifies current Gateway SSE events, channel actions, and task status payloads can map into neutral `TaskEvent` DTOs without rewiring delivery behavior.
 

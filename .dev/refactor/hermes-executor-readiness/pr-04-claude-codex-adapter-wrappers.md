@@ -144,6 +144,35 @@ Expected:
 
 ## Acceptance criteria
 
+Status: implemented in PR #75.
+
+Implemented wrapper scope:
+- `hermit_agent/orchestrators/claude.py` adds `ClaudeCodeMcpAdapter`.
+- `hermit_agent/orchestrators/codex.py` adds `CodexAdapter`.
+- `hermit_agent/orchestrators/__init__.py` exports both wrappers.
+- `tests/test_claude_orchestrator_adapter.py` and `tests/test_codex_orchestrator_adapter.py` cover setup/health DTO mapping and explicit unsupported lifecycle methods.
+
+Status mapping implemented:
+- Claude print-only returns `AdapterInstallStatus.PRINTED` from existing config snippet generation.
+- Claude fix maps `ensure_claude_mcp_registered()` outcomes to `REGISTERED`, `UNCHANGED`, or `FAILED`.
+- Claude health maps `is_claude_mcp_registered()` to `PASS` or `WARN`.
+- Codex print-only returns `AdapterInstallStatus.SKIPPED` with actionable details.
+- Codex fix delegates to `ensure_codex_channels_ready()`, `ensure_codex_marketplace_registered()`, `ensure_codex_mcp_registered()`, and `remove_codex_reply_hook()`, then maps outcomes to `REGISTERED`, `UNCHANGED`, or `FAILED`.
+- Codex health maps `get_codex_runtime_version()` to `PASS` or `WARN`.
+
+Runtime note:
+- This is wrapper-only. CLI dispatch, MCP server runtime, Claude channel notification behavior, codex-channels runtime delivery, and task lifecycle handling remain unchanged.
+
+Validation commands:
+
+```bash
+.venv/bin/python -m pytest tests/test_claude_orchestrator_adapter.py tests/test_codex_orchestrator_adapter.py -q
+.venv/bin/python -m pytest tests/test_claude_orchestrator_adapter.py tests/test_codex_orchestrator_adapter.py tests/test_hermes_orchestrator_adapter.py tests/test_orchestrator_contracts.py tests/test_codex_channels_adapter.py tests/test_codex_channels_mcp_wiring.py tests/test_mcp_server.py -q
+.venv/bin/python -m pytest tests/ -q
+```
+
+Original acceptance criteria:
+
 - Claude, Codex, and Hermes can all be described through setup/health adapter DTOs.
 - Runtime behavior remains unchanged.
 - Unsupported lifecycle methods fail explicitly.
