@@ -15,7 +15,7 @@
 
 > Hidden expert. Quiet executor.
 >
-> Hermit is an MCP executor for Claude Code and Codex. Your main agent handles planning, review, and conversation; Hermit quietly handles edits, test runs, refactors, commits, and other mechanical execution on a cheaper local or flat-rate model.
+> Hermit is an MCP executor lane for Claude Code, Codex, and Hermes Agent. Your main agent handles planning, review, and conversation; Hermit quietly handles edits, test runs, refactors, commits, and other mechanical execution on a cheaper local or flat-rate model.
 
 ## How it works
 
@@ -31,13 +31,13 @@
 └──────────────┘
 ```
 
-Claude Code or Codex stays in charge of planning, interviewing, and review. Hermit takes the mechanical path: file edits, test runs, refactors, commits, and MCP-executed follow-through on predictable local or flat-rate execution models. The switch is one word in a slash command: `/foo` → `/foo-hermit`.
+Claude Code, Codex, or Hermes Agent stays in charge of planning, interviewing, and review. Hermit takes the mechanical path: file edits, test runs, refactors, commits, and MCP-executed follow-through on predictable local or flat-rate execution models. In Claude Code the switch is often one word in a slash command: `/foo` → `/foo-hermit`.
 
 Why Hermit stands out:
 - Keep your best reasoning model on the work that needs judgment, not boilerplate execution.
 - Use MCP to turn planner decisions into concrete repo changes, tests, commits, and release operations.
 - Default to predictable local / flat-rate executor routing instead of silently drifting onto a paid hosted fallback.
-- Work with both Claude Code and Codex instead of forcing a single orchestrator stack.
+- Work across Claude Code, Codex, and Hermes Agent instead of forcing a single orchestrator stack.
 
 ## Why not just use Claude Code or Codex directly?
 
@@ -47,7 +47,7 @@ Why Hermit stands out:
 | Repetitive repo work | Expensive or token-heavy | Offloaded to a cheaper MCP executor lane |
 | Multi-step follow-through | Manual context handoff | MCP tasks can carry edits, tests, commits, and release ops through |
 | Default execution cost | Can drift onto paid hosted models | Defaults to local / flat-rate executor routing |
-| Team adoption | Tied to one orchestrator workflow | Works as a shared executor layer across Claude Code and Codex |
+| Team adoption | Tied to one orchestrator workflow | Works as a shared executor layer across Claude Code, Codex, and Hermes Agent |
 
 Hermit is not trying to replace your orchestrator. It gives you a second lane: use the premium model for judgment, and use Hermit for the mechanical throughput that makes repositories expensive to operate at scale.
 
@@ -73,7 +73,19 @@ npm install -g @cafitac/hermit-agent
 hermit
 ```
 
-Requires Node.js 20+ and Python 3.11+. The npm package bootstraps a managed Python runtime under `~/.hermit/` on first run — no repo checkout needed. If Claude Code or Codex integration is still missing, `hermit` will offer guided setup automatically. You can still run `hermit install` directly when you want to force the full setup/repair flow. For CI or smoke checks that must avoid optional external hook installation, use `hermit install --yes --skip-agent-learner` plus any integration-specific skips you need. For Hermes Agent orchestration, start with the non-mutating snippet: `hermit install --print-hermes-mcp-config`. When you explicitly want Hermit to register itself in Hermes via the Hermes CLI, run `hermit install --fix-hermes-mcp`; then verify the live MCP wiring with `hermit install --test-hermes-mcp`.
+Requires Node.js 20+ and Python 3.11+. The npm package bootstraps a managed Python runtime under `~/.hermit/` on first run — no repo checkout needed. If Claude Code or Codex integration is still missing, `hermit` will offer guided setup automatically. You can still run `hermit install` directly when you want to force the full setup/repair flow.
+
+For CI or smoke checks that must avoid optional external hook installation, use `hermit install --yes --skip-agent-learner` plus any integration-specific skips you need.
+
+For Hermes Agent orchestration, start with the non-mutating snippet printer:
+- `hermit install --print-hermes-mcp-config` — print the exact `hermes mcp add ...` command without editing `~/.hermes`
+- `hermit install --fix-hermes-mcp` — explicitly register `hermit-channel` through the Hermes CLI
+- `hermit install --test-hermes-mcp` — run Hermes Agent's live `hermes mcp test hermit-channel` probe without changing config
+
+Setup guides:
+- Claude Code: `docs/cc-setup.md`
+- Codex: `docs/codex-setup.md`
+- Hermes Agent: `docs/hermes-setup.md`
 
 To upgrade: `hermit update`
 
@@ -83,13 +95,13 @@ To upgrade: `hermit update`
 hermit-mcp-server   # starts the gateway + MCP stdio server
 ```
 
-Then in Claude Code:
+Then connect your orchestrator:
 
-```
-/feature-develop-hermit <task>
-```
+- Claude Code: see `docs/cc-setup.md`, then run `/feature-develop-hermit <task>`
+- Codex: see `docs/codex-setup.md`
+- Hermes Agent: see `docs/hermes-setup.md`
 
-Claude interviews, writes the plan, and delegates implementation to Hermit over MCP. Executor tokens never hit your orchestrator bill.
+Claude Code remains the most polished slash-command path today, but all three integrations share the same core idea: the orchestrator does judgment, Hermit does the repetitive repo execution over MCP.
 
 ## Reference skills
 
@@ -170,7 +182,9 @@ MIT — see [LICENSE](LICENSE).
 ## See also
 
 - [docs/cc-setup.md](docs/cc-setup.md) — Claude Code MCP registration details
-- [docs/hermit-variants.md](docs/hermit-variants.md) — the `-hermit` skill family
+- [docs/codex-setup.md](docs/codex-setup.md) — Codex setup, marketplace registration, and runtime verification
+- [docs/hermes-setup.md](docs/hermes-setup.md) — Hermes Agent setup, explicit registration, and live MCP smoke checks
+- [docs/hermit-variants.md](docs/hermit-variants.md) — the Claude Code `-hermit` skill family
 - [docs/measure-savings.md](docs/measure-savings.md) — cost-savings measurement protocol
 - [docs/open-source-positioning.md](docs/open-source-positioning.md) — short public-facing copy for descriptions, releases, and future social previews
 - [docs/release-notes-template.md](docs/release-notes-template.md) — reusable release-note framing that matches Hermit's planner/executor positioning

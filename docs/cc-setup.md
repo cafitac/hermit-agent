@@ -1,5 +1,7 @@
 # Register HermitAgent as a Claude Code MCP sub-agent
 
+This guide is specifically for Claude Code. If you want Codex or Hermes Agent instead, use `docs/codex-setup.md` or `docs/hermes-setup.md`.
+
 This is the setup that makes `/feature-develop-hermit`, `/code-apply-hermit`, etc. work from inside Claude Code. Five minutes, no Docker.
 
 ## 1. Install and initialize the gateway

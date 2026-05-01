@@ -48,7 +48,7 @@ Use this template when publishing GitHub Releases, package announcements, or cha
 
 ## Reusable opening lines
 
-- Hermit keeps Claude Code or Codex focused on judgment while offloading repetitive repo work to a dedicated MCP executor lane.
+- Hermit keeps Claude Code, Codex, or Hermes Agent focused on judgment while offloading repetitive repo work to a dedicated MCP executor lane.
 - This release sharpens the executor-layer experience: better operator guidance, clearer positioning, and more predictable follow-through.
 - This update improves the public-facing story around Hermit's planner/executor split without changing its core role.
 

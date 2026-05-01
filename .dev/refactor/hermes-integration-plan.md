@@ -39,7 +39,7 @@ For this project, Hermes support should not assume plain OpenAI API keys. Many u
 
 ### Expected user flow
 
-Possible final UX:
+Possible final UX (now implemented as explicit print/fix/test steps):
 
 ```bash
 npm install -g @cafitac/hermit-agent
@@ -62,7 +62,7 @@ hermit install --fix-hermes-mcp
 hermes mcp test hermit-channel
 ```
 
-The `mcp add` syntax has been smoke-checked against the local Hermes CLI help/list behavior. A full `hermes mcp test hermit-channel` round trip remains a later smoke because it depends on local Hermes auth/runtime state.
+The `mcp add` syntax and the bounded `hermes mcp test hermit-channel` probe have now been smoke-checked through Hermit's public install helpers. The remaining gap is stronger isolated `HERMES_HOME` automation, not baseline operator readiness.
 
 ## Implementation slices
 
@@ -150,6 +150,7 @@ Suggested remaining smoke:
 Acceptance:
 - Smoke command and expected output are documented.
 - If full isolated Hermes model auth is unavailable, separate MCP wiring smoke from provider/auth smoke.
+- Public README and setup docs point operators at the explicit print/fix/test sequence.
 
 ## Open questions
 

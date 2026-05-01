@@ -114,6 +114,12 @@ Acceptance:
 
 Objective: Hermit can be used from Hermes Agent as an executor lane.
 
+Status:
+- Public setup docs now cover Claude Code, Codex, and Hermes Agent separately so each orchestrator path matches the actual setup and runtime boundary.
+- Hermes-facing install surfaces exist in three explicit modes: `hermit install --print-hermes-mcp-config`, `hermit install --fix-hermes-mcp`, and `hermit install --test-hermes-mcp`.
+- Live runtime delivery remains the existing Hermit MCP server path; the Hermes wrapper is a setup/health adapter, not a second runtime.
+- Release smoke has already verified npm and PyPI packages can print, register, and test the Hermes-facing MCP configuration without requiring OpenAI API-key onboarding.
+
 Deliverables:
 - Hermes-facing setup guidance or installer surface.
 - Hermes MCP registration or one-shot subprocess bridge, selected by least fragile path.
