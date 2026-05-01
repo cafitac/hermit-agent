@@ -73,7 +73,7 @@ npm install -g @cafitac/hermit-agent
 hermit
 ```
 
-Requires Node.js 20+ and Python 3.11+. The npm package bootstraps a managed Python runtime under `~/.hermit/` on first run — no repo checkout needed. If Claude Code or Codex integration is still missing, `hermit` will offer guided setup automatically. You can still run `hermit install` directly when you want to force the full setup/repair flow.
+Requires Node.js 20+ and Python 3.11+. The npm package bootstraps a managed Python runtime under `~/.hermit/` on first run — no repo checkout needed. If Claude Code or Codex integration is still missing, `hermit` will offer guided setup automatically. You can still run `hermit install` directly when you want to force the full setup/repair flow. For CI or smoke checks that must avoid optional external hook installation, use `hermit install --yes --skip-agent-learner` plus any integration-specific skips you need. For Hermes Agent orchestration, start with the non-mutating snippet: `hermit install --print-hermes-mcp-config`.
 
 To upgrade: `hermit update`
 
@@ -156,7 +156,7 @@ By default, `hermit install` now keeps Codex out of `routing.priority_models` an
 ## Tests
 
 ```bash
-.venv/bin/pytest tests/
+.venv/bin/python -m pytest tests/
 ```
 
 ## Status

@@ -18,6 +18,32 @@ except ImportError:
 CLAUDE_SKILLS_DIR = Path(os.path.expanduser("~/.claude/skills"))
 
 
+@pytest.fixture(autouse=True)
+def _isolated_claude_skills(tmp_path, monkeypatch):
+    """Keep trigger tests independent from the developer's real ~/.claude tree."""
+    global CLAUDE_SKILLS_DIR
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    skills_dir = tmp_path / ".claude" / "skills"
+    skills_dir.mkdir(parents=True)
+
+    fixtures = {
+        "hermit-mcp": """---\nname: hermit-mcp\ndescription: Hermit MCP workflow for run_task, reply_task, check_task, task_id registration, and MCP channel handling.\n---\n\n# Hermit MCP\n""",
+        "feedback-learning": """---\nname: feedback-learning\ndescription: Capture feedback, correction, learning, 피드백, 학습 signals from repeated user corrections and durable working preferences.\n---\n\n# Feedback Learning\n""",
+    }
+    for name, content in fixtures.items():
+        skill_dir = skills_dir / name
+        skill_dir.mkdir()
+        (skill_dir / "SKILL.md").write_text(content, encoding="utf-8")
+
+    previous = CLAUDE_SKILLS_DIR
+    CLAUDE_SKILLS_DIR = skills_dir
+    try:
+        yield
+    finally:
+        CLAUDE_SKILLS_DIR = previous
+
+
 def _parse_skill(path: Path) -> dict:
     """Parse SKILL.md frontmatter and body."""
     content = path.read_text(encoding="utf-8")

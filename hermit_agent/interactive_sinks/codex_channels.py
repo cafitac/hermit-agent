@@ -85,6 +85,7 @@ class CodexChannelsInteractiveSink:
 
     def notify(self, prompt: InteractivePrompt) -> None:
         settings = self._settings_loader(prompt)
+        self.clear(prompt.task_id)
         session = maybe_start_codex_channels_wait_session(
             prompt,
             settings=settings,
@@ -94,7 +95,6 @@ class CodexChannelsInteractiveSink:
         if session is None:
             return
 
-        self.clear(prompt.task_id)
         with self.lock:
             self.sessions[prompt.task_id] = session
 
