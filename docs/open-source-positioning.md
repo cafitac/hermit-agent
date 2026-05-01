@@ -5,18 +5,18 @@ This file keeps the short public-facing copy for repository metadata, launch pos
 ## One-line description
 
 Primary:
-MCP executor layer for Claude Code or Codex that routes repetitive repo work to predictable local or flat-rate models.
+MCP executor layer for Claude Code, Codex, or Hermes Agent that routes repetitive repo work to predictable local or flat-rate models.
 
 Alternate:
-Dedicated MCP execution lane for Claude Code or Codex — keep premium judgment up top, and offload repo mechanics underneath.
+Dedicated MCP execution lane for Claude Code, Codex, or Hermes Agent — keep premium judgment up top, and offload repo mechanics underneath.
 
 ## Short pitch
 
-Hermit adds a dedicated execution lane to your coding-agent stack. Keep Claude Code or Codex for planning, judgment, and review; let Hermit carry the mechanical repo work through MCP with predictable local or flat-rate routing.
+Hermit adds a dedicated execution lane to your coding-agent stack. Keep Claude Code, Codex, or Hermes Agent for planning, judgment, and review; let Hermit carry the mechanical repo work through MCP with predictable local or flat-rate routing.
 
 ## What makes Hermit different
 
-- It is not another planner trying to replace Claude Code or Codex.
+- It is not another planner trying to replace Claude Code, Codex, or Hermes Agent.
 - It is an executor layer that turns orchestrator intent into edits, tests, commits, and release follow-through.
 - It defaults toward cost-predictable local or flat-rate models instead of surprising hosted fallback behavior.
 - It works across multiple orchestrators, which makes it easier to adopt as shared team infrastructure.
@@ -24,7 +24,7 @@ Hermit adds a dedicated execution lane to your coding-agent stack. Keep Claude C
 ## Audience fit
 
 ### Great fit
-- Teams already invested in Claude Code or Codex that want a dedicated execution lane.
+- Teams already invested in Claude Code, Codex, or Hermes Agent that want a dedicated execution lane.
 - Repositories where test runs, refactors, commits, and release chores are burning expensive planner tokens.
 - Maintainers who want one MCP executor path shared across multiple orchestrators.
 
@@ -37,14 +37,14 @@ Hermit adds a dedicated execution lane to your coding-agent stack. Keep Claude C
 
 ### Option A
 Premium reasoning on top, cheap execution underneath.
-Hermit is the MCP executor layer for Claude Code and Codex.
+Hermit is the MCP executor layer for Claude Code, Codex, and Hermes Agent.
 
 ### Option B
 Keep your best model for judgment.
 Use Hermit for the repetitive coding work.
 
 ### Option C
-Claude Code or Codex plans.
+Claude Code, Codex, or Hermes Agent plans.
 Hermit executes.
 Your bill stays predictable.
 
@@ -55,7 +55,7 @@ Keep the premium orchestrator for judgment.
 Use Hermit for the repetitive repo work.
 
 ### Variant B
-Claude Code or Codex thinks.
+Claude Code, Codex, or Hermes Agent thinks.
 Hermit ships the mechanical follow-through.
 
 ### Variant C
@@ -79,7 +79,7 @@ Use the README hero for in-page explanation of the planner/executor split, and u
 - Operating guide: `docs/social-preview-ops.md`
 - Intended use: GitHub social preview image export, release cards, launch posts, and docs screenshots.
 - Design direction: dark terminal-like card, premium planner on top, cheaper execution lane underneath, no provider-specific billing claims beyond predictable local / flat-rate defaults.
-- Message hierarchy: plan with Claude Code or Codex, execute repetitive repo work with Hermit, and reinforce predictable local / flat-rate routing on the supporting side of the card.
+- Message hierarchy: plan with Claude Code, Codex, or Hermes Agent, execute repetitive repo work with Hermit, and reinforce predictable local / flat-rate routing on the supporting side of the card.
 
 ## Release-note framing
 
