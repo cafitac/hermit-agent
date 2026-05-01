@@ -97,7 +97,9 @@ task_state.md
 claude_code_zai_env.sh
 
 # AI-managed internal planning/design docs (not for public OSS)
-.dev/
+.dev/*
+!.dev/refactor/
+!.dev/refactor/**
 
 # Third-party type stubs (not project source)
 *.pyi
