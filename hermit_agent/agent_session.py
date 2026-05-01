@@ -1,7 +1,7 @@
 """AgentSession — AgentLoop execution lifecycle defined with Template Method Pattern.
 
 Common flow: setup → prepare_prompt → execute → teardown
-  - SessionLogger, Learner, skill injection, and post-run stats are shared across all modes.
+  - SessionLogger, agent-learner v2 rule injection, and post-run stats are shared across all modes.
   - Tool initialization, agent execution strategy, and error/completion notifications are implemented by subclasses.
 
 Implementations (2 types):
@@ -122,11 +122,7 @@ class AgentSessionBase(ABC):
             pass
 
     def _prepare_prompt(self, task: str) -> str:
-        """Inject learned rules before the task prompt.
-
-        Checks agent-learned.md (agent-learner v2) first; falls back to
-        legacy Hermit Learner approved skills if the file is absent.
-        """
+        """Inject agent-learner v2 rules before the task prompt."""
         try:
             from pathlib import Path
             rules_file = Path(self.cwd) / ".hermit" / "rules" / "agent-learned.md"
@@ -135,15 +131,6 @@ class AgentSessionBase(ABC):
                 if content:
                     task = f"<learned_feedback>\n{content}\n</learned_feedback>\n\n{task}"
                     return task
-            # Fallback: legacy Hermit Learner (deprecated — will be removed once
-            # agent-learner v2 is fully adopted)
-            from .learner import Learner
-            learner = Learner(llm=self.llm)
-            active_skills = learner.get_active_skills()
-            if active_skills:
-                self._active_skill_names = [name for name, _ in active_skills]
-                skill_block = "\n\n".join(f"### {name}\n{content}" for name, content in active_skills)
-                task = f"<learned_feedback>\n{skill_block}\n</learned_feedback>\n\n{task}"
         except Exception:
             pass
         return task

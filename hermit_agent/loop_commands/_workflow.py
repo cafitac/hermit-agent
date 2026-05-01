@@ -232,33 +232,17 @@ def cmd_consensus(agent: AgentLoop, args: str) -> str:
     return f"[Consensus plan ready]\n{result}"
 
 
-@slash_command("learn", "Extract a reusable skill from this conversation. Use 'reset' to clear auto-learned skills.")
+@slash_command("learn", "Show agent-learner v2 guidance; learning now runs on session stop.")
 def cmd_learn(agent: AgentLoop, args: str) -> str:
-    from pathlib import Path
-    from ..learner import Learner, AUTO_LEARNED_DIR
-    import shutil
-
-    if args.strip() == "reset":
-        if os.path.exists(AUTO_LEARNED_DIR):
-            count = len(list(Path(AUTO_LEARNED_DIR).glob("*.md")))
-            shutil.rmtree(AUTO_LEARNED_DIR)
-            os.makedirs(AUTO_LEARNED_DIR, exist_ok=True)
-            return f"Reset {count} auto-learned skill(s). ({AUTO_LEARNED_DIR})"
-        return "Auto-learned folder is empty."
-
-    if args.strip() == "status":
-        learner = Learner(agent.llm)
-        return learner.status_report()
-
-    tool_count = getattr(agent, "_tool_call_count", len(agent.messages))
-    learner = Learner(agent.llm)
-    result = learner.extract_from_success(agent.messages, tool_call_count=max(5, tool_count))
-    if result:
-        path = learner.save_auto_learned(result)
-        if path:
-            return f"Skill extracted: {result['name']}\n  {path}"
-        return f"Skill extracted ({result['name']}) -- blocked by security scan, not saved."
-    return "No reusable pattern found."
+    requested = args.strip()
+    if requested == "status":
+        return "Learning is handled by agent-learner v2. Run: hermit_agent learner status"
+    if requested == "reset":
+        return "Learning is handled by agent-learner v2. Use agent-learner review/cleanup commands instead of /learn reset."
+    return (
+        "Learning is handled by agent-learner v2 on session stop. "
+        "Use `hermit_agent learner status` to inspect learned rules."
+    )
 
 
 @slash_command("team", "Run tasks with coordinated parallel agents")
