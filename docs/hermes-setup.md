@@ -69,9 +69,12 @@ If you want an isolated Hermes config during registration, smoke, or doctor chec
 
 ```bash
 hermit install --fix-hermes-mcp --hermes-home /tmp/hermes-home
-hermit install --test-hermes-mcp --hermes-home /tmp/hermes-home
+hermit doctor --fix --hermes-home /tmp/hermes-home
 hermit doctor --hermes-home /tmp/hermes-home
+hermit install --test-hermes-mcp --hermes-home /tmp/hermes-home
 ```
+
+When you use `doctor --fix --hermes-home`, the repair summary now echoes `Hermes target: ...` so logs make the isolated target explicit.
 
 Under the hood this executes Hermes Agent's live MCP check for `hermit-channel` without mutating config beyond the explicit `--fix-hermes-mcp` path.
 

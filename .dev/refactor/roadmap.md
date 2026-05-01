@@ -119,6 +119,7 @@ Status:
 - Hermes-facing install surfaces exist in three explicit modes: `hermit install --print-hermes-mcp-config`, `hermit install --fix-hermes-mcp`, and `hermit install --test-hermes-mcp`.
 - The Hermes-facing fix/test surfaces now also accept `--hermes-home` so registration and smoke can be exercised against an isolated Hermes config directory.
 - `hermit doctor` now also accepts `--hermes-home` so the Hermes MCP diagnostic can inspect the same isolated config target before or after repair.
+- `hermit doctor --fix --hermes-home ...` now reports the targeted Hermes config directory back in the repair summary so isolated repair runs are easier to verify in logs.
 - Live runtime delivery remains the existing Hermit MCP server path; the Hermes wrapper is a setup/health adapter, not a second runtime.
 - Release smoke has already verified npm and PyPI packages can print, register, and test the Hermes-facing MCP configuration without requiring OpenAI API-key onboarding.
 

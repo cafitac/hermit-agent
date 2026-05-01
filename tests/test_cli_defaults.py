@@ -282,11 +282,16 @@ def test_main_dispatches_doctor_fix(monkeypatch, capsys):
 
     monkeypatch.setattr(main_mod.sys, "argv", ["hermit-agent", "doctor", "--cwd", "/tmp/demo", "--fix", "--hermes-home", "/tmp/hermes-home"])
     seen = []
-    monkeypatch.setattr("hermit_agent.doctor.format_doctor_fix_summary", lambda **kwargs: seen.append(kwargs) or "Hermit doctor --fix complete.")
+    monkeypatch.setattr(
+        "hermit_agent.doctor.format_doctor_fix_summary",
+        lambda **kwargs: seen.append(kwargs) or "Hermit doctor --fix complete.\nHermes target: /tmp/hermes-home",
+    )
 
     main_mod.main()
 
-    assert "Hermit doctor --fix complete." in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Hermit doctor --fix complete." in out
+    assert "Hermes target: /tmp/hermes-home" in out
     assert seen == [{"cwd": "/tmp/demo", "hermes_home": "/tmp/hermes-home"}]
 
 

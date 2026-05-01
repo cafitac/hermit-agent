@@ -34,6 +34,7 @@ def test_format_doctor_fix_summary_includes_repair_status(monkeypatch):
     text = format_doctor_fix_summary(cwd="/tmp/demo", hermes_home="/tmp/hermes-home")
 
     assert "Hermit doctor --fix complete." in text
+    assert "Hermes target: /tmp/hermes-home" in text
     assert "gateway=started" in text
     assert "mcp=registered" in text
     assert "codex=installed" in text
