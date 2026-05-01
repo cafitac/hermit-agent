@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cafitac-hermit-agent"
-version = "0.3.64"
+version = "0.3.65"
 description = "MCP executor for Claude Code or Codex that offloads repetitive coding work to cheaper local or flat-rate models."
 readme = "README.md"
 requires-python = ">=3.11"
