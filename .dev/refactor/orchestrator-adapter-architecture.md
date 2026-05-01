@@ -125,10 +125,11 @@ DTOs should stay orchestrator-neutral:
 Current test anchor:
 - `tests/test_orchestrator_contracts.py` verifies immutable DTO shape, stable status/event enum values, and the structural lifecycle shape of `OrchestratorAdapter`.
 - `tests/test_hermes_orchestrator_adapter.py` verifies `HermesMcpAdapter` maps existing Hermes install, live-smoke, and doctor helpers into `AdapterInstallResult` / `AdapterHealth` without mutating behavior.
+- `tests/test_orchestrator_prompt_mapping.py` verifies current runtime prompts can round-trip through the neutral `InteractivePrompt` / `PromptReply` DTOs while preserving method/request/thread metadata.
 
 Next extraction candidates:
-- map existing interactive prompt/session objects into the neutral `InteractivePrompt` / `PromptReply` pair without changing runtime behavior
 - start equivalent Claude/Codex install and health wrappers after the Hermes wrapper shape proves stable
+- map task lifecycle/status payloads into `TaskEvent` before moving channel delivery behind adapters
 
 ## Non-goals
 

@@ -14,6 +14,11 @@ from .contracts import (
     TaskRequest,
 )
 from .hermes import HermesMcpAdapter
+from .prompts import (
+    adapter_prompt_to_runtime_prompt,
+    prompt_reply_from_answer,
+    runtime_prompt_to_adapter_prompt,
+)
 
 __all__ = [
     "AdapterHealth",
@@ -28,4 +33,7 @@ __all__ = [
     "TaskEventKind",
     "TaskHandle",
     "TaskRequest",
+    "adapter_prompt_to_runtime_prompt",
+    "prompt_reply_from_answer",
+    "runtime_prompt_to_adapter_prompt",
 ]
