@@ -13,6 +13,11 @@ from .contracts import (
     TaskHandle,
     TaskRequest,
 )
+from .events import (
+    channel_action_to_task_event,
+    sse_event_to_task_event,
+    task_status_payload_to_task_event,
+)
 from .hermes import HermesMcpAdapter
 from .prompts import (
     adapter_prompt_to_runtime_prompt,
@@ -34,6 +39,9 @@ __all__ = [
     "TaskHandle",
     "TaskRequest",
     "adapter_prompt_to_runtime_prompt",
+    "channel_action_to_task_event",
     "prompt_reply_from_answer",
     "runtime_prompt_to_adapter_prompt",
+    "sse_event_to_task_event",
+    "task_status_payload_to_task_event",
 ]

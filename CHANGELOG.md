@@ -45,6 +45,7 @@
 - Added an orchestrator-neutral adapter contract scaffold under `hermit_agent.orchestrators` so Claude Code, Codex, and Hermes integration work can converge on shared task, event, prompt, health, and install DTOs before larger runtime refactors.
 - Added a thin `HermesMcpAdapter` wrapper that maps existing Hermes print/fix/live-smoke and doctor helpers onto the shared adapter DTOs without rewiring current CLI or MCP runtime behavior.
 - Added adapter prompt mapping helpers that round-trip the current runtime `InteractivePrompt` shape through the neutral `InteractivePrompt` / `PromptReply` DTOs without changing interactive delivery behavior.
+- Added pure task event mapping helpers that convert existing Gateway SSE events, channel actions, and task status payloads into neutral `TaskEvent` DTOs without changing MCP/channel delivery behavior.
 - Started tracking the long-term refactor roadmap under `.dev/refactor/**` while leaving other `.dev/*` scratch files ignored.
 - Removed warning-producing test mocks for setup coroutines so the suite no longer emits unawaited `init_db` / `create_api_key` runtime warnings.
 - Aligned contributor and harness docs on `.venv/bin/python -m pytest tests/` and added a repo hygiene regression so stale `.venv/bin/pytest` shebangs are not reintroduced as the documented path.

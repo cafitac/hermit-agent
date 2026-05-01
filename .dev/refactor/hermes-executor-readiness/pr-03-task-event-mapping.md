@@ -121,6 +121,14 @@ Expected:
 
 ## Acceptance criteria
 
+Status: implemented in PR-03.
+
+- Added `hermit_agent/orchestrators/events.py` with pure mapping helpers for Gateway SSE events, existing channel actions, and task status payloads.
+- Exported the helpers from `hermit_agent.orchestrators` for later adapter extraction slices.
+- Covered submitted/running/progress/waiting/done/error/cancelled and unknown-event behavior in `tests/test_orchestrator_event_mapping.py`.
+- Existing runtime delivery behavior remains unchanged; no MCP/channel dispatch code was rewired.
+
+Acceptance criteria:
 - Existing runtime delivery behavior is unchanged.
 - Current event/prompt metadata can be represented in neutral DTOs.
 - Mapping helpers are tested and defensive against unknown payloads.
