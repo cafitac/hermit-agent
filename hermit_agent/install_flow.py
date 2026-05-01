@@ -361,6 +361,17 @@ def format_hermes_mcp_fix_summary(status: str) -> str:
     return "\n".join(lines)
 
 
+def _hermes_mcp_test_output_indicates_failure(output: str) -> bool:
+    lowered = output.casefold()
+    failure_markers = (
+        "not found",
+        "no mcp servers configured",
+        "failed",
+        "error",
+    )
+    return any(marker in lowered for marker in failure_markers)
+
+
 def run_hermes_mcp_connection_test(*, cwd: str) -> str:
     """Run Hermes Agent's live MCP probe for the Hermit MCP channel.
 
@@ -381,10 +392,10 @@ def run_hermes_mcp_connection_test(*, cwd: str) -> str:
     except (OSError, subprocess.TimeoutExpired) as exc:
         return f"failed ({exc})"
 
-    if proc.returncode == 0:
+    message = "\n".join(part.strip() for part in (proc.stdout, proc.stderr) if part.strip())
+    if proc.returncode == 0 and not _hermes_mcp_test_output_indicates_failure(message):
         return "passed"
-    message = proc.stderr.strip() or proc.stdout.strip() or "Hermes MCP test failed"
-    return f"failed ({message})"
+    return f"failed ({message or 'Hermes MCP test failed'})"
 
 
 def format_hermes_mcp_test_summary(status: str) -> str:

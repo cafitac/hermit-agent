@@ -39,6 +39,7 @@
 - Added `hermit install --print-hermes-mcp-config` as a print-only Hermes Agent registration aid; it does not mutate the user's Hermes config.
 - Added `hermit install --fix-hermes-mcp` as an explicit Hermes Agent MCP registration path that calls `hermes mcp add hermit-channel --command hermit --args mcp-server` only when requested.
 - Added `hermit install --test-hermes-mcp` as an explicit live MCP wiring smoke that runs `hermes mcp test hermit-channel` without mutating Hermes config.
+- Tightened the Hermes MCP smoke so it treats `hermes mcp test hermit-channel` output such as `Server 'hermit-channel' not found in config` as a failure even when the Hermes CLI exits with status 0.
 - Added an optional `Hermes MCP` doctor diagnostic that checks for `hermit-channel -> hermit mcp-server` registration and tolerates current `hermes mcp list` text-only output.
 - Added an orchestrator-neutral adapter contract scaffold under `hermit_agent.orchestrators` so Claude Code, Codex, and Hermes integration work can converge on shared task, event, prompt, health, and install DTOs before larger runtime refactors.
 - Added a thin `HermesMcpAdapter` wrapper that maps existing Hermes print/fix/live-smoke and doctor helpers onto the shared adapter DTOs without rewiring current CLI or MCP runtime behavior.

@@ -238,6 +238,21 @@ def test_run_hermes_mcp_connection_test_reports_cli_and_probe_failures(tmp_path,
     assert run_hermes_mcp_connection_test(cwd=str(tmp_path)) == "failed (server not found)"
 
 
+def test_hermes_mcp_connection_test_fails_when_server_missing_despite_zero_exit(tmp_path, monkeypatch):
+    class Result:
+        returncode = 0
+        stdout = "✗ Server 'hermit-channel' not found in config.\n"
+        stderr = ""
+
+    monkeypatch.setattr("hermit_agent.install_flow.shutil.which", lambda name: "/usr/local/bin/hermes" if name == "hermes" else None)
+    monkeypatch.setattr("hermit_agent.install_flow.subprocess.run", lambda *args, **kwargs: Result())
+
+    status = run_hermes_mcp_connection_test(cwd=str(tmp_path))
+
+    assert status.startswith("failed (")
+    assert "not found" in status
+
+
 def test_format_hermes_mcp_test_summary_keeps_fix_path_actionable():
     text = format_hermes_mcp_test_summary("failed (server not found)")
 
