@@ -55,6 +55,13 @@ hermes mcp add hermit-channel --command hermit --args mcp-server
 hermes mcp test hermit-channel
 ```
 
+or with the explicit Hermit fix command:
+
+```bash
+hermit install --fix-hermes-mcp
+hermes mcp test hermit-channel
+```
+
 The `mcp add` syntax has been smoke-checked against the local Hermes CLI help/list behavior. A full `hermes mcp test hermit-channel` round trip remains a later smoke because it depends on local Hermes auth/runtime state.
 
 ## Implementation slices
@@ -106,7 +113,13 @@ Acceptance:
 
 ### H3 — Optional installer mutation with backup
 
-Objective: allow `hermit install --orchestrator hermes --fix` or similar to register Hermit in Hermes automatically.
+Objective: allow explicit user-requested registration so Hermit can register itself in Hermes automatically.
+
+Status:
+- Implemented as `hermit install --fix-hermes-mcp`.
+- Uses the Hermes CLI instead of direct config file mutation: `hermes mcp add hermit-channel --command hermit --args mcp-server`.
+- Checks `hermes mcp list` first and returns `unchanged` when the expected `hermit-channel -> hermit mcp-server` entry already appears.
+- Does not run the full guided install flow and does not touch Claude/Codex/agent-learner setup.
 
 Rules:
 - Back up any Hermes config file before mutation if direct file writes are used.

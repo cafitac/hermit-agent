@@ -13,7 +13,9 @@ from hermit_agent.install_flow import (
     ensure_codex_marketplace_registered,
     ensure_gateway_api_key,
     ensure_gateway_running,
+    ensure_hermes_mcp_registered,
     format_hermes_mcp_config_snippet,
+    format_hermes_mcp_fix_summary,
     format_install_summary,
     format_startup_heal_summary,
     get_codex_runtime_version,
@@ -127,6 +129,70 @@ def test_format_hermes_mcp_config_snippet_is_print_only_and_uses_stable_stdio_en
     assert "command: hermit" in text
     assert "args: [mcp-server]" in text
     assert "print-only" in text.lower()
+
+
+def test_ensure_hermes_mcp_registered_adds_missing_channel(tmp_path, monkeypatch):
+    calls: list[list[str]] = []
+
+    class Result:
+        def __init__(self, returncode=0, stdout="", stderr=""):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    monkeypatch.setattr("hermit_agent.install_flow.shutil.which", lambda name: "/usr/local/bin/hermes" if name == "hermes" else None)
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        if args == ["hermes", "mcp", "list"]:
+            return Result(returncode=0, stdout="No MCP servers configured.\n")
+        if args == ["hermes", "mcp", "add", "hermit-channel", "--command", "hermit", "--args", "mcp-server"]:
+            return Result(returncode=0, stdout="Added MCP server hermit-channel\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr("hermit_agent.install_flow.subprocess.run", fake_run)
+
+    status = ensure_hermes_mcp_registered(cwd=str(tmp_path))
+
+    assert status == "registered"
+    assert calls == [
+        ["hermes", "mcp", "list"],
+        ["hermes", "mcp", "add", "hermit-channel", "--command", "hermit", "--args", "mcp-server"],
+    ]
+
+
+def test_ensure_hermes_mcp_registered_reuses_existing_channel(tmp_path, monkeypatch):
+    calls: list[list[str]] = []
+
+    class Result:
+        returncode = 0
+        stdout = "hermit-channel  stdio  hermit mcp-server\n"
+        stderr = ""
+
+    monkeypatch.setattr("hermit_agent.install_flow.shutil.which", lambda name: "/usr/local/bin/hermes" if name == "hermes" else None)
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        assert args == ["hermes", "mcp", "list"]
+        return Result()
+
+    monkeypatch.setattr("hermit_agent.install_flow.subprocess.run", fake_run)
+
+    assert ensure_hermes_mcp_registered(cwd=str(tmp_path)) == "unchanged"
+    assert calls == [["hermes", "mcp", "list"]]
+
+
+def test_ensure_hermes_mcp_registered_warns_when_cli_missing(tmp_path, monkeypatch):
+    monkeypatch.setattr("hermit_agent.install_flow.shutil.which", lambda name: None)
+
+    assert ensure_hermes_mcp_registered(cwd=str(tmp_path)) == "missing-hermes-cli"
+
+
+def test_format_hermes_mcp_fix_summary_reports_next_steps():
+    text = format_hermes_mcp_fix_summary("registered")
+
+    assert "Hermes MCP registration: registered" in text
+    assert "hermes mcp test hermit-channel" in text
 
 
 def test_ensure_codex_mcp_registered_replaces_mismatched_entry(tmp_path, monkeypatch):

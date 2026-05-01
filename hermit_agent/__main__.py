@@ -85,6 +85,7 @@ def _build_install_parser() -> argparse.ArgumentParser:
     parser.add_argument("--skip-codex", action="store_true", help="Skip Hermit's internal Codex async runtime install/refresh")
     parser.add_argument("--skip-agent-learner", action="store_true", help="Skip agent-learner hook installation/refresh")
     parser.add_argument("--print-hermes-mcp-config", action="store_true", help="Print Hermes Agent MCP registration snippet and exit without changing files")
+    parser.add_argument("--fix-hermes-mcp", action="store_true", help="Explicitly register Hermit MCP with Hermes Agent via `hermes mcp add`")
     return parser
 
 
@@ -625,11 +626,20 @@ def _dispatch_learner() -> None:
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "install":
-        from .install_flow import format_hermes_mcp_config_snippet, format_install_summary, run_install
+        from .install_flow import (
+            ensure_hermes_mcp_registered,
+            format_hermes_mcp_config_snippet,
+            format_hermes_mcp_fix_summary,
+            format_install_summary,
+            run_install,
+        )
 
         install_args = _build_install_parser().parse_args(sys.argv[2:])
         if install_args.print_hermes_mcp_config:
             print(format_hermes_mcp_config_snippet(cwd=install_args.cwd))
+            return
+        if install_args.fix_hermes_mcp:
+            print(format_hermes_mcp_fix_summary(ensure_hermes_mcp_registered(cwd=install_args.cwd)))
             return
         summary = run_install(
             cwd=install_args.cwd,

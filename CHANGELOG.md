@@ -37,6 +37,7 @@
 - Fixed stale Codex channel cleanup and isolated skill-trigger tests from the developer's real `~/.claude/skills` directory so the local suite no longer depends on machine-specific state.
 - Added smoke-safe install coverage, including `hermit install --skip-agent-learner` for isolated CI/dev checks that should not mutate agent-learner hooks.
 - Added `hermit install --print-hermes-mcp-config` as a print-only Hermes Agent registration aid; it does not mutate the user's Hermes config.
+- Added `hermit install --fix-hermes-mcp` as an explicit Hermes Agent MCP registration path that calls `hermes mcp add hermit-channel --command hermit --args mcp-server` only when requested.
 - Added an optional `Hermes MCP` doctor diagnostic that checks for `hermit-channel -> hermit mcp-server` registration and tolerates current `hermes mcp list` text-only output.
 - Started tracking the long-term refactor roadmap under `.dev/refactor/**` while leaving other `.dev/*` scratch files ignored.
 - Removed warning-producing test mocks for setup coroutines so the suite no longer emits unawaited `init_db` / `create_api_key` runtime warnings.

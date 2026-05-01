@@ -92,6 +92,14 @@ def test_install_parser_can_print_hermes_mcp_config_without_mutating_state():
     assert ns.print_hermes_mcp_config is True
 
 
+def test_install_parser_can_explicitly_fix_hermes_mcp_registration():
+    from hermit_agent.__main__ import _build_install_parser
+
+    ns = _build_install_parser().parse_args(["--fix-hermes-mcp"])
+
+    assert ns.fix_hermes_mcp is True
+
+
 def test_main_dispatches_install(monkeypatch, capsys):
     from hermit_agent import __main__ as main_mod
     from hermit_agent.install_flow import InstallSummary
@@ -145,6 +153,20 @@ def test_main_prints_hermes_mcp_config_without_running_install(monkeypatch, caps
     out = capsys.readouterr().out
     assert "Hermit MCP for Hermes Agent" in out
     assert "hermes mcp add hermit-channel" in out
+
+
+def test_main_fixes_hermes_mcp_without_running_full_install(monkeypatch, capsys):
+    from hermit_agent import __main__ as main_mod
+
+    monkeypatch.setattr(main_mod.sys, "argv", ["hermit-agent", "install", "--fix-hermes-mcp", "--cwd", "/tmp/demo"])
+    monkeypatch.setattr("hermit_agent.install_flow.run_install", lambda **kwargs: (_ for _ in ()).throw(AssertionError("must not install")))
+    monkeypatch.setattr("hermit_agent.install_flow.ensure_hermes_mcp_registered", lambda *, cwd: "registered")
+
+    main_mod.main()
+
+    out = capsys.readouterr().out
+    assert "Hermes MCP registration: registered" in out
+    assert "hermes mcp test hermit-channel" in out
 
 
 def test_main_dispatches_mcp_server(monkeypatch):
