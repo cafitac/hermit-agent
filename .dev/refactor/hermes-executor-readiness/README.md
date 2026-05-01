@@ -6,26 +6,25 @@
 
 Repository: `/Users/reddit/Project/hermit-agent`
 
-Current base at time of writing:
+Current base at latest QA update:
 - branch: `main`
-- HEAD observed: `6bf092f Merge pull request #66 from cafitac/release-sync/v0.3.65`
-- working tree was clean before writing this planning set
-- latest release observed: `v0.3.65`
+- HEAD observed before this docs-only QA note: `62cb930 chore: release v0.3.67 [skip ci] [skip release] (#70)`
+- working tree was clean before starting the follow-up QA branch
+- latest release observed: `v0.3.67`
 
 Verification already run:
 - `.venv/bin/python -m pytest tests/test_orchestrator_contracts.py tests/test_orchestrator_prompt_mapping.py tests/test_hermes_orchestrator_adapter.py -q`
-  - expected/current: `10 passed`
+  - earlier expected/current: `10 passed`
 - `.venv/bin/python -m pytest tests/ -q`
-  - expected/current: `1063 passed`
+  - latest preserved result after PR-02 fixes: `1066 passed`
 
-Important local Hermes observation:
-- `command -v hermes` returned `/Users/reddit/.local/bin/hermes`
-- `hermes mcp list` returned no configured MCP servers
-- `hermit doctor` reported `WARN Hermes MCP: hermit-channel missing`
-- `.venv/bin/python -m hermit_agent install --test-hermes-mcp` initially incorrectly reported `passed` because Hermes CLI printed `Server 'hermit-channel' not found in config.` while returning exit code 0; PR-01 is intended to make that output fail truthfully.
-- direct `hermes mcp test hermit-channel` printed `✗ Server 'hermit-channel' not found in config.` while returning exit code 0
-
-This means the current `run_hermes_mcp_connection_test()` is not trustworthy: it treats return code 0 as success even when Hermes reports that the server is missing.
+Important local Hermes observation history:
+- Before PR-01, `hermes mcp test hermit-channel` printed `✗ Server 'hermit-channel' not found in config.` while returning exit code 0, and `hermit install --test-hermes-mcp` incorrectly reported `passed`.
+- PR-01 fixed the live-smoke false positive by inspecting failure-looking Hermes output, not just exit code.
+- During PR-02 QA, `hermit install --fix-hermes-mcp` also had a false-positive path: Hermes could cancel the tool-enable prompt while returning exit code 0. PR-02 fixed this by sending explicit approval input and verifying `hermes mcp list` after registration.
+- Current local Hermes state after v0.3.67 reinstall: `hermes mcp list` shows `hermit-channel   hermit mcp-server   all   ✓ enabled`, `hermit doctor` reports `✅ Hermes MCP`, and `hermit install --test-hermes-mcp` passes.
+- Follow-up direct MCP client smoke through `hermit mcp-server` successfully called `run_task`, registered the returned task id, polled `check_task`, and received `HERMIT_E2E_OK` from `glm-5.1` through the Gateway/AgentLoop/provider path.
+- The direct Python MCP SDK client printed validation warnings for the custom `notifications/claude/channel` notification method, but polling still returned `status: done`; treat this as generic-client compatibility noise unless Hermes itself shows the same issue.
 
 ## Product goal
 
@@ -56,7 +55,7 @@ Do not claim "Claude Code / Codex / Hermes executor readiness is complete" until
 - `hermit install --fix-hermes-mcp` is idempotent and registers `hermit-channel -> hermit mcp-server` through the Hermes CLI.
 - `hermit doctor` agrees with `hermes mcp list` and does not report a false PASS.
 - A live Hermes MCP probe succeeds only after the server is registered.
-- At least one tiny Hermit task can be invoked through the same MCP server surface used by Hermes, or the limitation is explicitly documented as not yet ready.
+- At least one tiny Hermit task can be invoked through the same MCP server surface used by Hermes. Latest direct stdio MCP smoke did this with `run_task` → `register_task` → `check_task`, returning `HERMIT_E2E_OK` through Gateway/AgentLoop/provider.
 - Claude Code and Codex regression tests remain green after Hermes changes.
 - Public docs distinguish stable behavior from experimental / adapter-in-progress behavior.
 
