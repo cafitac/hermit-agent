@@ -24,15 +24,17 @@ If you want the optional local tooling mentioned below, install the dev extra in
 .venv/bin/uv pip install -e '.[dev]'
 ```
 
-The root GitHub Actions workflow (`.github/workflows/python-tests.yml`) uses the same editable install + `pytest tests/` contract.
+The root GitHub Actions workflow (`.github/workflows/python-tests.yml`) uses the same editable install + `.venv/bin/python -m pytest tests/` contract.
 
 ## Running tests
 
 ```bash
-.venv/bin/pytest                                # whole suite; ollama-dependent tests skipped via conftest.py
-.venv/bin/pytest tests/test_loop_guards.py -v   # targeted
-.venv/bin/pytest -k "learner"                   # by keyword
+.venv/bin/python -m pytest tests/                              # whole suite; ollama-dependent tests skipped via conftest.py
+.venv/bin/python -m pytest tests/test_loop_guards.py -v         # targeted
+.venv/bin/python -m pytest tests/ -k "learner"                  # by keyword
 ```
+
+Prefer `python -m pytest` over the direct `.venv/bin/pytest` script so the active interpreter is explicit and stale entrypoint shebangs cannot select the wrong Python.
 
 No network calls in tests. `httpx` / `requests` should be mocked. See `tests/test_llm_retry.py` for the pattern.
 

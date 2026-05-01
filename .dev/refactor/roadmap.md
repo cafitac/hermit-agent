@@ -16,6 +16,10 @@ Tasks:
 - Remove or isolate tests that depend on live `~/.claude` state unless explicitly marked integration.
 - Add a short note to the developer docs or README test section once verified.
 
+Status:
+- README, CONTRIBUTING, CLAUDE, and HERMIT docs now point developers at `.venv/bin/python -m pytest tests/` rather than the direct `.venv/bin/pytest` entrypoint.
+- `tests/test_repo_hygiene.py` guards the documented test command so future docs do not drift back to the stale shebang path.
+
 Acceptance:
 - Full suite passes in the repo venv.
 - Running plain `pytest` with the wrong Python is no longer the recommended path.

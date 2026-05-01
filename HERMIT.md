@@ -24,7 +24,7 @@ hermit-agent/
 ## Build/Test
 ```bash
 # Python tests (uses project-local .venv by default; override with HERMIT_VENV_DIR)
-pytest tests/
+.venv/bin/python -m pytest tests/
 
 # Run via launcher (CLI or TUI)
 ./bin/hermit.sh "your message"    # single-message CLI mode

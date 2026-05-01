@@ -41,6 +41,7 @@
 - Added an optional `Hermes MCP` doctor diagnostic that checks for `hermit-channel -> hermit mcp-server` registration and tolerates current `hermes mcp list` text-only output.
 - Started tracking the long-term refactor roadmap under `.dev/refactor/**` while leaving other `.dev/*` scratch files ignored.
 - Removed warning-producing test mocks for setup coroutines so the suite no longer emits unawaited `init_db` / `create_api_key` runtime warnings.
+- Aligned contributor and harness docs on `.venv/bin/python -m pytest tests/` and added a repo hygiene regression so stale `.venv/bin/pytest` shebangs are not reintroduced as the documented path.
 
 ### Breaking changes
 - Removed the deprecated in-process `hermit_agent.learner` compatibility surface and its helper modules; agent-learner v2 is now the supported learner path.

@@ -16,7 +16,7 @@ Layer A = this file + `.claude/` (CC working on this repo). Layer B = `HERMIT.md
 
 ## Tests
 ```bash
-pytest   # conftest.py auto-excludes Ollama-dependent tests
+.venv/bin/python -m pytest tests/   # conftest.py auto-excludes Ollama-dependent tests
 ```
 
 ## Run Scripts
@@ -25,7 +25,7 @@ pytest   # conftest.py auto-excludes Ollama-dependent tests
 - `./bin/hermit.sh` — standalone Hermit CLI/TUI
 
 ## Session Routine
-Plan first (`/ralplan`), verify before exit (`pytest tests/`), wrap with `/session-wrap`.
+Plan first (`/ralplan`), verify before exit (`.venv/bin/python -m pytest tests/`), wrap with `/session-wrap`.
 
 ## Hermit MCP
 Register task_id immediately after run_task/check_task:
