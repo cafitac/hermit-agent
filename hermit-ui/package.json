@@ -1,6 +1,6 @@
 {
   "name": "@cafitac/hermit-agent",
-  "version": "0.3.68",
+  "version": "0.3.69",
   "description": "MCP executor for Claude Code or Codex with an npm-first launcher and cheaper local or flat-rate execution by default",
   "type": "module",
   "repository": {
