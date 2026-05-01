@@ -3,13 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from hermit_agent.learner import Learner
 from hermit_agent.learner_verification import run_verify_command
 from hermit_agent.learner_storage import SkillMeta, parse_skill_file, write_skill_file
 
 
 def _make_learner(tmp_path):
-    return Learner(root=str(tmp_path))
+    with pytest.warns(DeprecationWarning, match="hermit_agent\\.learner\\.Learner is deprecated"):
+        return Learner(root=str(tmp_path))
 
 
 def _write_skill(base: Path, folder: str, meta: SkillMeta, body: str = '## Rule\n\nBody') -> str:

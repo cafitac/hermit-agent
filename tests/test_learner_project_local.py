@@ -1,13 +1,21 @@
 import os
 from unittest.mock import MagicMock
+
+import pytest
+
 from hermit_agent.learner import Learner
+
+
+def _make_legacy_learner(*args, **kwargs):
+    with pytest.warns(DeprecationWarning, match="hermit_agent\\.learner\\.Learner is deprecated"):
+        return Learner(*args, **kwargs)
 
 
 def test_learner_default_root_is_cwd(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     llm = MagicMock()
     llm.model = 'm'
-    learner = Learner(llm=llm)
+    learner = _make_legacy_learner(llm=llm)
     assert learner.root == str(tmp_path)
     assert learner.auto_learned_dir == os.path.join(str(tmp_path), '.hermit', 'skills', 'auto-learned')
     assert learner.pending_dir.startswith(str(tmp_path))
@@ -16,14 +24,14 @@ def test_learner_default_root_is_cwd(tmp_path, monkeypatch):
 def test_learner_explicit_root(tmp_path):
     llm = MagicMock()
     llm.model = 'm'
-    learner = Learner(llm=llm, root=str(tmp_path / 'subproject'))
+    learner = _make_legacy_learner(llm=llm, root=str(tmp_path / 'subproject'))
     assert learner.root == str(tmp_path / 'subproject')
 
 
 def test_learner_save_writes_under_root(tmp_path):
     llm = MagicMock()
     llm.model = 'm'
-    learner = Learner(llm=llm, root=str(tmp_path))
+    learner = _make_legacy_learner(llm=llm, root=str(tmp_path))
     sample = {'name': 'test_rule', 'description': 'x', 'body': 'y'}
     path = learner.save_auto_learned(sample)
     assert path is not None

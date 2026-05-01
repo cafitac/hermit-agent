@@ -40,7 +40,8 @@ def isolated_dirs(tmp_path, monkeypatch):
 @pytest.fixture
 def learner():
     mock_llm = MagicMock()
-    return Learner(llm=mock_llm)
+    with pytest.warns(DeprecationWarning, match="hermit_agent\\.learner\\.Learner is deprecated"):
+        return Learner(llm=mock_llm)
 
 
 @pytest.fixture
