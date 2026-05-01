@@ -367,7 +367,10 @@ def format_doctor_fix_summary(*, cwd: str, hermes_home: str | None = None) -> st
         hermes_home=hermes_home,
     )
 
-    lines = ["Hermit doctor --fix complete.", "", "Repairs:"]
+    lines = ["Hermit doctor --fix complete."]
+    if hermes_home:
+        lines.extend(["", f"Hermes target: {hermes_home}"])
+    lines.extend(["", "Repairs:"])
     lines.append(f"- startup heal: gateway={startup.gateway_status}, mcp={startup.mcp_registration_status}, codex={startup.codex_runtime_status}")
     lines.append(f"- install flow: gateway={install.gateway_status}, mcp={install.mcp_registration_status}, codex={install.codex_install_status}, agent-learner={install.agent_learner_status}")
     lines.append("- codex-facing surface remains: hermit-channel MCP")

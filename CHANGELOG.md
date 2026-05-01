@@ -40,6 +40,7 @@
 - Added `hermit install --fix-hermes-mcp` as an explicit Hermes Agent MCP registration path that calls `hermes mcp add hermit-channel --command hermit --args mcp-server` only when requested.
 - Added `hermit install --test-hermes-mcp` as an explicit live MCP wiring smoke that runs `hermes mcp test hermit-channel` without mutating Hermes config.
 - Added optional `--hermes-home` targeting for `hermit doctor`, `hermit install --fix-hermes-mcp`, and `hermit install --test-hermes-mcp` so isolated Hermes config directories can be diagnosed, repaired, and smoke-tested without touching the operator's default `~/.hermes`.
+- `hermit doctor --fix --hermes-home ...` now echoes the targeted Hermes config directory in its repair summary so operators can verify which isolated config was just modified.
 - Tightened the Hermes MCP smoke so it treats `hermes mcp test hermit-channel` output such as `Server 'hermit-channel' not found in config` as a failure even when the Hermes CLI exits with status 0.
 - Tightened `hermit install --fix-hermes-mcp` so it answers Hermes Agent's tool-enable prompt, rejects `Cancelled` output even with exit code 0, and verifies the registration is visible in `hermes mcp list` before reporting success.
 - Added an optional `Hermes MCP` doctor diagnostic that checks for `hermit-channel -> hermit mcp-server` registration and tolerates current `hermes mcp list` text-only output.
