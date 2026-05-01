@@ -33,6 +33,19 @@
 - Clarified the difference between `model` and `routing.priority_models`, and made plain `hermit` honor the routing priority chain when `model` is set to `__auto__`.
 - Made the npm launcher sync the managed Python runtime to the same published Hermit version so new install/setup behavior is not hidden behind a stale backend package.
 
+### Stabilization and Hermes orchestrator support
+- Fixed stale Codex channel cleanup and isolated skill-trigger tests from the developer's real `~/.claude/skills` directory so the local suite no longer depends on machine-specific state.
+- Added smoke-safe install coverage, including `hermit install --skip-agent-learner` for isolated CI/dev checks that should not mutate agent-learner hooks.
+- Added `hermit install --print-hermes-mcp-config` as a print-only Hermes Agent registration aid; it does not mutate the user's Hermes config.
+- Added an optional `Hermes MCP` doctor diagnostic that checks for `hermit-channel -> hermit mcp-server` registration and tolerates current `hermes mcp list` text-only output.
+- Started tracking the long-term refactor roadmap under `.dev/refactor/**` while leaving other `.dev/*` scratch files ignored.
+- Removed warning-producing test mocks for setup coroutines so the suite no longer emits unawaited `init_db` / `create_api_key` runtime warnings.
+
+### Breaking changes
+- Removed the deprecated in-process `hermit_agent.learner` compatibility surface and its helper modules; agent-learner v2 is now the supported learner path.
+- Runtime learned-rule injection now reads `.hermit/rules/agent-learned.md` only; the legacy `.hermit/skills/learned-feedback/approved` fallback is gone.
+- `/learn` no longer runs legacy extraction, status, or reset flows; it now points users to agent-learner v2 session-stop learning and `hermit_agent learner status`.
+
 ## v0.3.48
 
 ### GitHub Release automation and release-state alignment
