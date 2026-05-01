@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
-from .install_flow import run_install, run_startup_self_heal
+from .install_flow import resolve_hermit_mcp_stdio_entry, run_install, run_startup_self_heal
 
 
 class DiagStatus(Enum):
@@ -222,6 +224,118 @@ def _check_agent_learner(home: str) -> DiagCheck:
     return DiagCheck("agent-learner", DiagStatus.PASS, "installed, Stop hooks registered (claude + codex)")
 
 
+def _extract_mcp_servers(payload: object) -> dict[str, object]:
+    if isinstance(payload, dict):
+        for key in ("servers", "mcpServers", "mcp_servers"):
+            value = payload.get(key)
+            if isinstance(value, dict):
+                return value
+            if isinstance(value, list):
+                servers: dict[str, object] = {}
+                for item in value:
+                    if isinstance(item, dict) and item.get("name"):
+                        servers[str(item["name"])] = item
+                return servers
+        if "hermit-channel" in payload:
+            return payload
+    if isinstance(payload, list):
+        servers = {}
+        for item in payload:
+            if isinstance(item, dict) and item.get("name"):
+                servers[str(item["name"])] = item
+        return servers
+    return {}
+
+
+def _server_transport(server: object) -> dict[str, object]:
+    if not isinstance(server, dict):
+        return {}
+    transport = server.get("transport")
+    if isinstance(transport, dict):
+        return transport
+    return server
+
+
+def _check_hermes_mcp(cwd: str) -> DiagCheck:
+    if shutil.which("hermes") is None:
+        return DiagCheck(
+            "Hermes MCP",
+            DiagStatus.WARN,
+            "hermes command not found — run `hermit install --print-hermes-mcp-config` after installing Hermes Agent",
+        )
+
+    try:
+        proc = subprocess.run(
+            ["hermes", "mcp", "list", "--json"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return DiagCheck("Hermes MCP", DiagStatus.WARN, f"unable to inspect Hermes MCP servers: {exc}")
+    raw_output = ""
+    if proc.returncode != 0:
+        message = proc.stderr.strip() or proc.stdout.strip() or "hermes mcp list failed"
+        if "--json" not in message and "unrecognized arguments" not in message:
+            return DiagCheck("Hermes MCP", DiagStatus.WARN, f"unable to inspect Hermes MCP servers: {message}")
+        try:
+            proc = subprocess.run(
+                ["hermes", "mcp", "list"],
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                timeout=15,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return DiagCheck("Hermes MCP", DiagStatus.WARN, f"unable to inspect Hermes MCP servers: {exc}")
+        if proc.returncode != 0:
+            message = proc.stderr.strip() or proc.stdout.strip() or "hermes mcp list failed"
+            return DiagCheck("Hermes MCP", DiagStatus.WARN, f"unable to inspect Hermes MCP servers: {message}")
+        raw_output = proc.stdout or ""
+    else:
+        raw_output = proc.stdout or ""
+
+    if raw_output and not raw_output.lstrip().startswith(("{", "[")):
+        lowered = raw_output.lower()
+        if "hermit-channel" in lowered and "hermit" in lowered and "mcp-server" in lowered:
+            return DiagCheck("Hermes MCP", DiagStatus.PASS, "hermit-channel registered for Hermes Agent")
+        if "hermit-channel" not in lowered or "no mcp servers" in lowered:
+            return DiagCheck(
+                "Hermes MCP",
+                DiagStatus.WARN,
+                "hermit-channel missing — run `hermit install --print-hermes-mcp-config` and register the printed snippet",
+            )
+        return DiagCheck("Hermes MCP", DiagStatus.WARN, "hermit-channel present but Hermes text output did not expose the expected hermit mcp-server transport")
+
+    try:
+        payload = json.loads(raw_output or "{}")
+    except json.JSONDecodeError as exc:
+        return DiagCheck("Hermes MCP", DiagStatus.WARN, f"Hermes MCP list returned invalid JSON: {exc}")
+
+    servers = _extract_mcp_servers(payload)
+    server = servers.get("hermit-channel")
+    if server is None:
+        return DiagCheck(
+            "Hermes MCP",
+            DiagStatus.WARN,
+            "hermit-channel missing — run `hermit install --print-hermes-mcp-config` and register the printed snippet",
+        )
+
+    expected = resolve_hermit_mcp_stdio_entry(cwd=cwd)
+    transport = _server_transport(server)
+    command = str(transport.get("command") or "")
+    args = [str(arg) for arg in (transport.get("args") or [])] if isinstance(transport.get("args"), list) else []
+    expected_args = [str(arg) for arg in (expected.get("args") or [])] if isinstance(expected.get("args"), list) else []
+    if command == str(expected["command"]) and args == expected_args:
+        return DiagCheck("Hermes MCP", DiagStatus.PASS, "hermit-channel registered for Hermes Agent")
+    return DiagCheck(
+        "Hermes MCP",
+        DiagStatus.WARN,
+        f"hermit-channel registered but points to command={command!r} args={args!r}; expected hermit mcp-server",
+    )
+
+
 def run_diagnostics(cwd: str | None = None, home: str | None = None) -> DiagReport:
     """Diagnose HermitAgent configuration. Testable by injecting cwd/home."""
     cwd = cwd or os.getcwd()
@@ -234,6 +348,7 @@ def run_diagnostics(cwd: str | None = None, home: str | None = None) -> DiagRepo
         _check_sensitive_deny(),
         _check_local_backend(cwd),
         _check_agent_learner(home),
+        _check_hermes_mcp(cwd),
     ]
     return DiagReport(checks=checks)
 

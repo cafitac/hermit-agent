@@ -13,6 +13,7 @@ from hermit_agent.install_flow import (
     ensure_codex_marketplace_registered,
     ensure_gateway_api_key,
     ensure_gateway_running,
+    format_hermes_mcp_config_snippet,
     format_install_summary,
     format_startup_heal_summary,
     get_codex_runtime_version,
@@ -117,6 +118,15 @@ def test_resolve_hermit_mcp_stdio_entry_uses_stable_hermit_command():
     entry = resolve_hermit_mcp_stdio_entry(cwd="/tmp/demo")
 
     assert entry == {"type": "stdio", "command": "hermit", "args": ["mcp-server"]}
+
+
+def test_format_hermes_mcp_config_snippet_is_print_only_and_uses_stable_stdio_entry():
+    text = format_hermes_mcp_config_snippet(cwd="/tmp/demo")
+
+    assert "hermes mcp add hermit-channel" in text
+    assert "command: hermit" in text
+    assert "args: [mcp-server]" in text
+    assert "print-only" in text.lower()
 
 
 def test_ensure_codex_mcp_registered_replaces_mismatched_entry(tmp_path, monkeypatch):
@@ -364,6 +374,68 @@ def test_startup_heal_summary_is_healthy_when_gateway_and_integrations_are_ready
     )
 
     assert summary.guided_install_recommended is False
+
+
+def test_run_install_and_doctor_zero_config_smoke_is_idempotent_with_isolated_home(tmp_path, monkeypatch):
+    global_settings = tmp_path / "home" / ".hermit" / "settings.json"
+    monkeypatch.setattr("hermit_agent.config.GLOBAL_SETTINGS_PATH", global_settings)
+    monkeypatch.setattr("hermit_agent.install_flow.GLOBAL_SETTINGS_PATH", global_settings)
+    monkeypatch.setattr("hermit_agent.install_flow.Path.home", lambda: tmp_path / "home")
+    monkeypatch.setattr("hermit_agent.install_flow.ensure_gateway_running", lambda *, cwd: "healthy")
+    monkeypatch.setattr("hermit_agent.install_flow._setup_agent_learner_hooks", lambda **kwargs: (_ for _ in ()).throw(AssertionError("agent-learner must be skipped")))
+
+    async def fake_init_db() -> None:
+        return None
+
+    stored_tokens: set[str] = set()
+
+    async def fake_lookup_api_key(token: str) -> str | None:
+        return token if token in stored_tokens else None
+
+    async def fake_create_api_key(api_key: str, user: str, *, grant_all_platforms: bool = False) -> None:
+        stored_tokens.add(api_key)
+
+    monkeypatch.setattr("hermit_agent.gateway.db.init_db", fake_init_db)
+    monkeypatch.setattr("hermit_agent.gateway.db.lookup_api_key", fake_lookup_api_key)
+    monkeypatch.setattr("hermit_agent.gateway.db.create_api_key", fake_create_api_key)
+
+    first = run_install(
+        cwd=str(tmp_path),
+        assume_yes=True,
+        skip_mcp_register=True,
+        skip_codex=True,
+        skip_agent_learner=True,
+    )
+    first_payload = json.loads(global_settings.read_text(encoding="utf-8"))
+    second = run_install(
+        cwd=str(tmp_path),
+        assume_yes=True,
+        skip_mcp_register=True,
+        skip_codex=True,
+        skip_agent_learner=True,
+    )
+    second_payload = json.loads(global_settings.read_text(encoding="utf-8"))
+
+    assert first.settings_path == str(global_settings)
+    assert first.gateway_api_key_created is True
+    assert first.gateway_api_key_present is True
+    assert first.gateway_status == "healthy"
+    assert first.mcp_registration_status == "skipped"
+    assert first.codex_install_status == "skipped"
+    assert first.agent_learner_status == "skipped"
+    assert first_payload["gateway_api_key"].startswith("hermit-mcp-")
+    assert second.gateway_api_key_created is False
+    assert second.gateway_api_key_present is True
+    assert second.agent_learner_status == "skipped"
+    assert second_payload["gateway_api_key"] == first_payload["gateway_api_key"]
+    assert stored_tokens == {first_payload["gateway_api_key"]}
+
+    from hermit_agent.doctor import DiagStatus, run_diagnostics
+
+    doctor_report = run_diagnostics(cwd=str(tmp_path), home=str(tmp_path / "home"))
+    home_check = next(c for c in doctor_report.checks if c.name == "~/.hermit dir")
+    assert home_check.status == DiagStatus.PASS
+    assert doctor_report.overall in {DiagStatus.PASS, DiagStatus.WARN}
 
 
 def test_run_install_accepts_defaults_and_invokes_optional_steps(tmp_path, monkeypatch):

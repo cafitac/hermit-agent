@@ -268,6 +268,29 @@ def resolve_hermit_mcp_stdio_entry(*, cwd: str) -> dict[str, object]:
     }
 
 
+def format_hermes_mcp_config_snippet(*, cwd: str) -> str:
+    entry = resolve_hermit_mcp_stdio_entry(cwd=cwd)
+    args = entry.get("args") if isinstance(entry.get("args"), list) else []
+    rendered_args = ", ".join(str(arg) for arg in args)
+    command = str(entry["command"])
+    cli_args = " ".join(str(arg) for arg in args)
+    cli_suffix = f" --args {cli_args}" if cli_args else ""
+    return "\n".join(
+        [
+            "Hermit MCP for Hermes Agent (print-only; no files were changed)",
+            "",
+            "Recommended Hermes CLI registration:",
+            f"  hermes mcp add hermit-channel --command {command}{cli_suffix}",
+            "",
+            "Equivalent stdio transport:",
+            "  name: hermit-channel",
+            "  type: stdio",
+            f"  command: {command}",
+            f"  args: [{rendered_args}]",
+        ]
+    )
+
+
 def inspect_claude_mcp_registration(*, command_path: Path | None = None, claude_json_path: Path | None = None, entry: dict[str, object] | None = None) -> str:
     target = claude_json_path or (Path.home() / ".claude.json")
     if not target.exists():
@@ -642,6 +665,7 @@ def run_install(
     assume_yes: bool = False,
     skip_mcp_register: bool = False,
     skip_codex: bool = False,
+    skip_agent_learner: bool = False,
 ) -> InstallSummary:
     settings_path = init_settings_file(global_=True)
     summary = InstallSummary(settings_path=str(settings_path))
@@ -719,9 +743,12 @@ def run_install(
         else:
             summary.codex_install_status = "skipped"
 
-    summary.agent_learner_status = _setup_agent_learner_hooks(cwd=cwd)
-    if summary.agent_learner_status == "pip-install-failed":
-        summary.next_steps.append("agent-learner could not be installed automatically; run `pip install agent-learner` manually.")
+    if skip_agent_learner:
+        summary.agent_learner_status = "skipped"
+    else:
+        summary.agent_learner_status = _setup_agent_learner_hooks(cwd=cwd)
+        if summary.agent_learner_status == "pip-install-failed":
+            summary.next_steps.append("agent-learner could not be installed automatically; run `pip install agent-learner` manually.")
 
     if not summary.next_steps:
         summary.next_steps.append("Run your normal Hermit workflow.")

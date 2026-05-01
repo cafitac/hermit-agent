@@ -76,25 +76,75 @@ def test_install_parser_defaults_codex_scope_to_user():
     assert ns.codex_scope == "user"
 
 
+def test_install_parser_can_skip_agent_learner_for_smoke_runs():
+    from hermit_agent.__main__ import _build_install_parser
+
+    ns = _build_install_parser().parse_args(["--skip-agent-learner"])
+
+    assert ns.skip_agent_learner is True
+
+
+def test_install_parser_can_print_hermes_mcp_config_without_mutating_state():
+    from hermit_agent.__main__ import _build_install_parser
+
+    ns = _build_install_parser().parse_args(["--print-hermes-mcp-config"])
+
+    assert ns.print_hermes_mcp_config is True
+
+
 def test_main_dispatches_install(monkeypatch, capsys):
     from hermit_agent import __main__ as main_mod
     from hermit_agent.install_flow import InstallSummary
 
-    monkeypatch.setattr(main_mod.sys, "argv", ["hermit-agent", "install", "--cwd", "/tmp/demo", "--yes"])
+    seen = []
     monkeypatch.setattr(
-        "hermit_agent.install_flow.run_install",
-        lambda **kwargs: InstallSummary(
+        main_mod.sys,
+        "argv",
+        ["hermit-agent", "install", "--cwd", "/tmp/demo", "--yes", "--skip-agent-learner"],
+    )
+
+    def fake_run_install(**kwargs):
+        seen.append(kwargs)
+        return InstallSummary(
             settings_path="/tmp/settings.json",
             gateway_api_key_created=True,
             gateway_api_key_present=True,
             mcp_registration_status="registered",
             codex_install_status="installed",
-        ),
+        )
+
+    monkeypatch.setattr(
+        "hermit_agent.install_flow.run_install",
+        fake_run_install,
     )
 
     main_mod.main()
 
     assert "Hermit install is ready." in capsys.readouterr().out
+    assert seen == [
+        {
+            "cwd": "/tmp/demo",
+            "codex_command": "codex",
+            "codex_scope": "user",
+            "assume_yes": True,
+            "skip_mcp_register": False,
+            "skip_codex": False,
+            "skip_agent_learner": True,
+        }
+    ]
+
+
+def test_main_prints_hermes_mcp_config_without_running_install(monkeypatch, capsys):
+    from hermit_agent import __main__ as main_mod
+
+    monkeypatch.setattr(main_mod.sys, "argv", ["hermit-agent", "install", "--print-hermes-mcp-config", "--cwd", "/tmp/demo"])
+    monkeypatch.setattr("hermit_agent.install_flow.run_install", lambda **kwargs: (_ for _ in ()).throw(AssertionError("must not install")))
+
+    main_mod.main()
+
+    out = capsys.readouterr().out
+    assert "Hermit MCP for Hermes Agent" in out
+    assert "hermes mcp add hermit-channel" in out
 
 
 def test_main_dispatches_mcp_server(monkeypatch):

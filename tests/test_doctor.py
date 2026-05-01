@@ -36,6 +36,7 @@ def test_report_has_expected_axes():
             "hooks.json",
             "skills",
             "permissions.sensitive_deny",
+            "Hermes MCP",
         }.issubset(axis_names)
 
 
@@ -104,6 +105,82 @@ def test_permissions_sensitive_deny_active():
         report = run_diagnostics(cwd=project, home=home)
         chk = next(c for c in report.checks if c.name == "permissions.sensitive_deny")
         assert chk.status == DiagStatus.PASS
+
+
+def test_hermes_mcp_missing_cli_warns(monkeypatch):
+    import hermit_agent.doctor as doctor_mod
+
+    monkeypatch.setattr(doctor_mod.shutil, "which", lambda name: None if name == "hermes" else "/bin/tool")
+
+    with tempfile.TemporaryDirectory() as project, tempfile.TemporaryDirectory() as home:
+        report = run_diagnostics(cwd=project, home=home)
+        chk = next(c for c in report.checks if c.name == "Hermes MCP")
+        assert chk.status == DiagStatus.WARN
+        assert "hermes command not found" in chk.message
+        assert "--print-hermes-mcp-config" in chk.message
+
+
+def test_hermes_mcp_registered_passes(monkeypatch):
+    import hermit_agent.doctor as doctor_mod
+
+    class Result:
+        returncode = 0
+        stdout = json.dumps({"servers": {"hermit-channel": {"command": "hermit", "args": ["mcp-server"]}}})
+        stderr = ""
+
+    calls: list[list[str]] = []
+    monkeypatch.setattr(doctor_mod.shutil, "which", lambda name: "/usr/local/bin/hermes" if name == "hermes" else None)
+    monkeypatch.setattr(doctor_mod.subprocess, "run", lambda args, **kwargs: calls.append(args) or Result())
+
+    with tempfile.TemporaryDirectory() as project, tempfile.TemporaryDirectory() as home:
+        report = run_diagnostics(cwd=project, home=home)
+        chk = next(c for c in report.checks if c.name == "Hermes MCP")
+        assert chk.status == DiagStatus.PASS
+        assert "hermit-channel registered" in chk.message
+        assert calls == [["hermes", "mcp", "list", "--json"]]
+
+
+def test_hermes_mcp_list_falls_back_when_json_flag_is_unsupported(monkeypatch):
+    import hermit_agent.doctor as doctor_mod
+
+    class Result:
+        def __init__(self, returncode: int, stdout: str = "", stderr: str = ""):
+            self.returncode = returncode
+            self.stdout = stdout
+            self.stderr = stderr
+
+    calls: list[list[str]] = []
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        if args == ["hermes", "mcp", "list", "--json"]:
+            return Result(2, stderr="hermes: error: unrecognized arguments: --json")
+        if args == ["hermes", "mcp", "list"]:
+            return Result(0, stdout="hermit-channel\n  command: hermit\n  args: mcp-server\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(doctor_mod.shutil, "which", lambda name: "/usr/local/bin/hermes" if name == "hermes" else None)
+    monkeypatch.setattr(doctor_mod.subprocess, "run", fake_run)
+
+    with tempfile.TemporaryDirectory() as project, tempfile.TemporaryDirectory() as home:
+        report = run_diagnostics(cwd=project, home=home)
+        chk = next(c for c in report.checks if c.name == "Hermes MCP")
+        assert chk.status == DiagStatus.PASS
+        assert "hermit-channel registered" in chk.message
+        assert calls == [["hermes", "mcp", "list", "--json"], ["hermes", "mcp", "list"]]
+
+
+def test_hermes_mcp_subprocess_error_warns(monkeypatch):
+    import hermit_agent.doctor as doctor_mod
+
+    monkeypatch.setattr(doctor_mod.shutil, "which", lambda name: "/usr/local/bin/hermes" if name == "hermes" else None)
+    monkeypatch.setattr(doctor_mod.subprocess, "run", lambda *args, **kwargs: (_ for _ in ()).throw(OSError("cwd missing")))
+
+    with tempfile.TemporaryDirectory() as project, tempfile.TemporaryDirectory() as home:
+        report = run_diagnostics(cwd=project, home=home)
+        chk = next(c for c in report.checks if c.name == "Hermes MCP")
+        assert chk.status == DiagStatus.WARN
+        assert "unable to inspect Hermes MCP servers" in chk.message
 
 
 def test_overall_status_fail_when_any_fail():
