@@ -116,6 +116,14 @@ def test_install_parser_accepts_explicit_hermes_home_for_isolated_smoke_runs():
     assert ns.hermes_home == "/tmp/hermes-home"
 
 
+def test_doctor_parser_accepts_explicit_hermes_home_for_isolated_checks():
+    from hermit_agent.__main__ import _build_doctor_parser
+
+    ns = _build_doctor_parser().parse_args(["--hermes-home", "/tmp/hermes-home"])
+
+    assert ns.hermes_home == "/tmp/hermes-home"
+
+
 def test_main_dispatches_install(monkeypatch, capsys):
     from hermit_agent import __main__ as main_mod
     from hermit_agent.install_flow import InstallSummary
@@ -253,28 +261,33 @@ def test_main_dispatches_status_watch(monkeypatch):
 def test_main_dispatches_doctor(monkeypatch, capsys):
     from hermit_agent import __main__ as main_mod
 
-    monkeypatch.setattr(main_mod.sys, "argv", ["hermit-agent", "doctor", "--cwd", "/tmp/demo"])
+    monkeypatch.setattr(main_mod.sys, "argv", ["hermit-agent", "doctor", "--cwd", "/tmp/demo", "--hermes-home", "/tmp/hermes-home"])
+
+    seen = []
 
     class DummyReport:
         def format(self):
             return "HermitAgent Doctor — overall: PASS"
 
-    monkeypatch.setattr("hermit_agent.doctor.run_diagnostics", lambda **kwargs: DummyReport())
+    monkeypatch.setattr("hermit_agent.doctor.run_diagnostics", lambda **kwargs: seen.append(kwargs) or DummyReport())
 
     main_mod.main()
 
     assert "HermitAgent Doctor — overall: PASS" in capsys.readouterr().out
+    assert seen == [{"cwd": "/tmp/demo", "hermes_home": "/tmp/hermes-home"}]
 
 
 def test_main_dispatches_doctor_fix(monkeypatch, capsys):
     from hermit_agent import __main__ as main_mod
 
-    monkeypatch.setattr(main_mod.sys, "argv", ["hermit-agent", "doctor", "--cwd", "/tmp/demo", "--fix"])
-    monkeypatch.setattr("hermit_agent.doctor.format_doctor_fix_summary", lambda **kwargs: "Hermit doctor --fix complete.")
+    monkeypatch.setattr(main_mod.sys, "argv", ["hermit-agent", "doctor", "--cwd", "/tmp/demo", "--fix", "--hermes-home", "/tmp/hermes-home"])
+    seen = []
+    monkeypatch.setattr("hermit_agent.doctor.format_doctor_fix_summary", lambda **kwargs: seen.append(kwargs) or "Hermit doctor --fix complete.")
 
     main_mod.main()
 
     assert "Hermit doctor --fix complete." in capsys.readouterr().out
+    assert seen == [{"cwd": "/tmp/demo", "hermes_home": "/tmp/hermes-home"}]
 
 
 def test_main_prints_startup_self_heal_summary_when_repairs_happen(monkeypatch, capsys):

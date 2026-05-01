@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
-from .install_flow import resolve_hermit_mcp_stdio_entry, run_install, run_startup_self_heal
+from .install_flow import _hermes_cli_env, resolve_hermit_mcp_stdio_entry, run_install, run_startup_self_heal
 
 
 class DiagStatus(Enum):
@@ -256,7 +256,7 @@ def _server_transport(server: object) -> dict[str, object]:
     return server
 
 
-def _check_hermes_mcp(cwd: str) -> DiagCheck:
+def _check_hermes_mcp(cwd: str, hermes_home: str | None = None) -> DiagCheck:
     if shutil.which("hermes") is None:
         return DiagCheck(
             "Hermes MCP",
@@ -264,10 +264,13 @@ def _check_hermes_mcp(cwd: str) -> DiagCheck:
             "hermes command not found — run `hermit install --print-hermes-mcp-config` after installing Hermes Agent",
         )
 
+    hermes_env = _hermes_cli_env(hermes_home=hermes_home)
+
     try:
         proc = subprocess.run(
             ["hermes", "mcp", "list", "--json"],
             cwd=cwd,
+            env=hermes_env,
             capture_output=True,
             text=True,
             timeout=15,
@@ -283,6 +286,7 @@ def _check_hermes_mcp(cwd: str) -> DiagCheck:
             proc = subprocess.run(
                 ["hermes", "mcp", "list"],
                 cwd=cwd,
+                env=hermes_env,
                 capture_output=True,
                 text=True,
                 timeout=15,
@@ -336,7 +340,7 @@ def _check_hermes_mcp(cwd: str) -> DiagCheck:
     )
 
 
-def run_diagnostics(cwd: str | None = None, home: str | None = None) -> DiagReport:
+def run_diagnostics(cwd: str | None = None, home: str | None = None, hermes_home: str | None = None) -> DiagReport:
     """Diagnose HermitAgent configuration. Testable by injecting cwd/home."""
     cwd = cwd or os.getcwd()
     home = home or os.path.expanduser("~")
@@ -348,18 +352,19 @@ def run_diagnostics(cwd: str | None = None, home: str | None = None) -> DiagRepo
         _check_sensitive_deny(),
         _check_local_backend(cwd),
         _check_agent_learner(home),
-        _check_hermes_mcp(cwd),
+        _check_hermes_mcp(cwd, hermes_home=hermes_home),
     ]
     return DiagReport(checks=checks)
 
 
-def format_doctor_fix_summary(*, cwd: str) -> str:
+def format_doctor_fix_summary(*, cwd: str, hermes_home: str | None = None) -> str:
     startup = run_startup_self_heal(cwd=cwd)
     install = run_install(
         cwd=cwd,
         assume_yes=True,
         skip_mcp_register=False,
         skip_codex=False,
+        hermes_home=hermes_home,
     )
 
     lines = ["Hermit doctor --fix complete.", "", "Repairs:"]

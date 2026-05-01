@@ -109,6 +109,7 @@ def _build_doctor_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Diagnose or repair Hermit setup")
     parser.add_argument("--cwd", default=os.getcwd(), help="Working directory")
     parser.add_argument("--fix", action="store_true", help="Attempt common setup/runtime repairs automatically")
+    parser.add_argument("--hermes-home", default=None, help="Optional Hermes Agent config directory for isolated MCP diagnostics/repairs")
     return parser
 
 
@@ -695,9 +696,9 @@ def main():
 
         doctor_args = _build_doctor_parser().parse_args(sys.argv[2:])
         if doctor_args.fix:
-            print(format_doctor_fix_summary(cwd=doctor_args.cwd))
+            print(format_doctor_fix_summary(cwd=doctor_args.cwd, hermes_home=doctor_args.hermes_home))
         else:
-            print(run_diagnostics(cwd=doctor_args.cwd).format())
+            print(run_diagnostics(cwd=doctor_args.cwd, hermes_home=doctor_args.hermes_home).format())
         return
 
     # ── codex-channels dispatch ──────────────────────────────────────

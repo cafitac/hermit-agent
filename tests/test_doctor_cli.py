@@ -5,6 +5,7 @@ from hermit_agent.install_flow import InstallSummary, StartupHealSummary
 
 
 def test_format_doctor_fix_summary_includes_repair_status(monkeypatch):
+    seen = {}
     monkeypatch.setattr(
         "hermit_agent.doctor.run_startup_self_heal",
         lambda **kwargs: StartupHealSummary(
@@ -15,9 +16,9 @@ def test_format_doctor_fix_summary_includes_repair_status(monkeypatch):
             codex_runtime_status="missing",
         ),
     )
-    monkeypatch.setattr(
-        "hermit_agent.doctor.run_install",
-        lambda **kwargs: InstallSummary(
+    def fake_run_install(**kwargs):
+        seen["run_install"] = kwargs
+        return InstallSummary(
             settings_path="/tmp/settings.json",
             gateway_api_key_created=True,
             gateway_api_key_present=True,
@@ -26,10 +27,11 @@ def test_format_doctor_fix_summary_includes_repair_status(monkeypatch):
             codex_install_status="installed",
             codex_runtime_version="0.1.31",
             next_steps=["Run Hermit."],
-        ),
-    )
+        )
 
-    text = format_doctor_fix_summary(cwd="/tmp/demo")
+    monkeypatch.setattr("hermit_agent.doctor.run_install", fake_run_install)
+
+    text = format_doctor_fix_summary(cwd="/tmp/demo", hermes_home="/tmp/hermes-home")
 
     assert "Hermit doctor --fix complete." in text
     assert "gateway=started" in text
@@ -37,3 +39,4 @@ def test_format_doctor_fix_summary_includes_repair_status(monkeypatch):
     assert "codex=installed" in text
     assert "codex-facing surface remains: hermit-channel MCP" in text
     assert "codex integration runtime version: 0.1.31" in text
+    assert seen["run_install"]["hermes_home"] == "/tmp/hermes-home"

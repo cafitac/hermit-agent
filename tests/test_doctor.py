@@ -128,16 +128,21 @@ def test_hermes_mcp_registered_passes(monkeypatch):
         stdout = json.dumps({"servers": {"hermit-channel": {"command": "hermit", "args": ["mcp-server"]}}})
         stderr = ""
 
-    calls: list[list[str]] = []
+    calls: list[dict[str, object]] = []
     monkeypatch.setattr(doctor_mod.shutil, "which", lambda name: "/usr/local/bin/hermes" if name == "hermes" else None)
-    monkeypatch.setattr(doctor_mod.subprocess, "run", lambda args, **kwargs: calls.append(args) or Result())
+    monkeypatch.setattr(
+        doctor_mod.subprocess,
+        "run",
+        lambda args, **kwargs: calls.append({"args": args, "env": kwargs.get("env")}) or Result(),
+    )
 
     with tempfile.TemporaryDirectory() as project, tempfile.TemporaryDirectory() as home:
-        report = run_diagnostics(cwd=project, home=home)
+        hermes_home = Path(home) / ".hermes-isolated"
+        report = run_diagnostics(cwd=project, home=home, hermes_home=str(hermes_home))
         chk = next(c for c in report.checks if c.name == "Hermes MCP")
         assert chk.status == DiagStatus.PASS
         assert "hermit-channel registered" in chk.message
-        assert calls == [["hermes", "mcp", "list", "--json"]]
+        assert calls == [{"args": ["hermes", "mcp", "list", "--json"], "env": {**__import__("os").environ, "HERMES_HOME": str(hermes_home)}}]
 
 
 def test_hermes_mcp_list_falls_back_when_json_flag_is_unsupported(monkeypatch):
