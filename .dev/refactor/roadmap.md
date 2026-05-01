@@ -97,6 +97,8 @@ Acceptance:
 
 ### R2.2 Move orchestrator-specific code behind adapters
 
+Status: first Hermes wrapper added as `HermesMcpAdapter`; it maps existing install/doctor/live-smoke helpers to adapter DTOs but does not yet change CLI dispatch or MCP task runtime paths.
+
 Likely areas:
 - `hermit_agent/mcp_channel.py`
 - `hermit_agent/interactive_sinks/*`

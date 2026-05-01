@@ -13,12 +13,14 @@ from .contracts import (
     TaskHandle,
     TaskRequest,
 )
+from .hermes import HermesMcpAdapter
 
 __all__ = [
     "AdapterHealth",
     "AdapterHealthStatus",
     "AdapterInstallResult",
     "AdapterInstallStatus",
+    "HermesMcpAdapter",
     "InteractivePrompt",
     "OrchestratorAdapter",
     "PromptReply",
