@@ -2,13 +2,19 @@
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE = ROOT / "docs/release-notes-template.md"
+
+# Keep release rendering self-contained. Public releases must not depend on
+# retired documentation files that are intentionally excluded from the product.
+OPENING = (
+    "Hermit keeps planner judgment premium while pushing repetitive repo work "
+    "into a dedicated MCP executor lane."
+)
+CLOSING = "The planner stays premium; the repo mechanics stay efficient."
 
 
 def git(*args: str) -> str:
@@ -75,12 +81,6 @@ def main() -> None:
     headline = subjects[0] if subjects else f"Automated release for {current_tag}"
     summary = sentence_case(headline)
 
-    template_text = TEMPLATE.read_text()
-    opening_lines = re.findall(r"^- (.+)$", template_text.split("## Reusable opening lines", 1)[1].split("## Reusable closing lines", 1)[0], re.M)
-    closing_lines = re.findall(r"^- (.+)$", template_text.split("## Reusable closing lines", 1)[1], re.M)
-    opening = opening_lines[0] if opening_lines else "Hermit keeps planner judgment premium while pushing repetitive repo work into a dedicated MCP executor lane."
-    closing = closing_lines[0] if closing_lines else "The planner stays premium; the repo mechanics stay efficient."
-
     bullets = []
     if subjects:
         for subject in subjects[:3]:
@@ -101,7 +101,7 @@ def main() -> None:
 - Published packages: npm @cafitac/hermit-agent@{version} and PyPI cafitac-hermit-agent=={version}.
 
 ## Why it matters
-{opening} This release was classified as: {reason}. {range_line}
+{OPENING} This release was classified as: {reason}. {range_line}
 
 ## Operator notes
 - Release tag: {current_tag}
@@ -114,7 +114,7 @@ def main() -> None:
 - PyPI: https://pypi.org/project/cafitac-hermit-agent/
 - README: https://github.com/{repo}#readme
 
-> {closing}
+> {CLOSING}
 """
     Path(args.out).write_text(body)
 
