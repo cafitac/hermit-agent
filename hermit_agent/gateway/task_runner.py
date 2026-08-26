@@ -6,7 +6,6 @@ import time
 from typing import Any
 
 from ..agent_session import MCPAgentSession
-from ..codex_runner import run_codex_task
 from ..llm_client import create_llm_client
 from ._singletons import sse_manager, MAX_WORKERS
 from .task_models import AUTO_MODEL_SENTINEL, normalize_requested_model
@@ -17,8 +16,8 @@ from .db import insert_usage
 from .session_log import GatewaySessionLog
 from .task_execution import run_single_model
 
-# Re-export patch points used by existing tests. task_execution imports these at call time.
-__all__ = ["run_codex_task", "MCPAgentSession", "GatewayPermissionChecker", "create_llm_client", "SSEEvent"]
+# Re-export patch points used by the gateway execution tests.
+__all__ = ["MCPAgentSession", "GatewayPermissionChecker", "create_llm_client", "SSEEvent"]
 
 logger = logging.getLogger("hermit_agent.gateway.runner")
 
@@ -76,12 +75,16 @@ def _run(
     max_turns: int,
     state: GatewayTaskState,
     sse: SSEManager,
+    strategy: str = "",
 ) -> dict:
     """Runs in the executor thread. Always calls release_worker_slot() in finally."""
     from ..config import load_settings, select_llm_endpoint
+    from ..orchestration import resolve_orchestration
 
     requested_model = normalize_requested_model(model)
     cfg = load_settings(cwd=cwd)
+    orchestration_plan = resolve_orchestration(task, cfg, mode=strategy)
+    state.orchestration = orchestration_plan.as_dict() | {"completed_stages": []}
 
     gw_log = GatewaySessionLog(
         task_id=task_id,
@@ -98,6 +101,7 @@ def _run(
             for route in _auto_model_chain(cfg):
                 selected_model = route["model"]
                 reasoning_effort = route.get("reasoning_effort")
+                provider = route.get("provider")
                 attempted.append(selected_model)
                 gw_log.write_event({
                     "type": "model_attempt",
@@ -110,6 +114,8 @@ def _run(
                         task=task,
                         cwd=cwd,
                         selected_model=selected_model,
+                        provider=provider,
+                        orchestration_plan=orchestration_plan,
                         reasoning_effort=reasoning_effort,
                         max_turns=max_turns,
                         state=state,
@@ -117,7 +123,6 @@ def _run(
                         gw_log=gw_log,
                         cfg=cfg,
                         select_llm_endpoint=select_llm_endpoint,
-                        codex_runner=run_codex_task,
                         llm_factory=create_llm_client,
                         session_cls=MCPAgentSession,
                         permission_checker_cls=GatewayPermissionChecker,
@@ -125,6 +130,7 @@ def _run(
                     gw_log.mark_completed(state.token_totals)
                     return result | {
                         "model": selected_model,
+                        **({"provider": provider} if provider else {}),
                         "auto_route": {
                             "requested": requested_model,
                             "attempted": attempted,
@@ -160,7 +166,7 @@ def _run(
             gw_log=gw_log,
             cfg=cfg,
             select_llm_endpoint=select_llm_endpoint,
-            codex_runner=run_codex_task,
+            orchestration_plan=orchestration_plan,
             llm_factory=create_llm_client,
             session_cls=MCPAgentSession,
             permission_checker_cls=GatewayPermissionChecker,
@@ -198,6 +204,7 @@ async def run_task_async(
     model: str,
     max_turns: int,
     state: GatewayTaskState,
+    strategy: str = "",
 ) -> None:
     """FastAPI background task. Runs _run() in executor, then records usage in DB."""
     start_ms = int(time.monotonic() * 1000)
@@ -206,7 +213,7 @@ async def run_task_async(
     result = await loop.run_in_executor(
         _EXECUTOR,
         _run,
-        task_id, task, cwd, user, model, max_turns, state, sse_manager,
+        task_id, task, cwd, user, model, max_turns, state, sse_manager, strategy,
     )
 
     duration_ms = int(time.monotonic() * 1000) - start_ms

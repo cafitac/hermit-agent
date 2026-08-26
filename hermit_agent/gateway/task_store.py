@@ -27,6 +27,7 @@ class GatewayTaskState:
     waiting_prompt: dict[str, object] | None = None
     result: str | None = None
     token_totals: dict = field(default_factory=lambda: {"prompt_tokens": 0, "completion_tokens": 0})
+    orchestration: dict[str, object] = field(default_factory=dict)
     parent_session_id: str | None = None
     created_at: float = field(default_factory=time.monotonic)
     TTL_SECONDS: int = 3600

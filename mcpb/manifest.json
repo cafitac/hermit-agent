@@ -1,0 +1,77 @@
+{
+  "manifest_version": "0.4",
+  "name": "hermit",
+  "display_name": "Hermit",
+  "version": "0.4.0",
+  "description": "A cost-optimized MCP coding executor for Claude Desktop.",
+  "long_description": "Hermit keeps planning and final judgment in Claude while a configured local or lower-cost model executes bounded repository work.",
+  "author": {
+    "name": "HermitAgent Contributors",
+    "url": "https://github.com/cafitac/hermit-agent"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cafitac/hermit-agent.git"
+  },
+  "homepage": "https://github.com/cafitac/hermit-agent",
+  "documentation": "https://github.com/cafitac/hermit-agent#readme",
+  "support": "https://github.com/cafitac/hermit-agent/issues",
+  "server": {
+    "type": "uv",
+    "entry_point": "server.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": ["run", "--directory", "${__dirname}", "server.py"],
+      "env": {
+        "HERMIT_DESKTOP_EXECUTOR_MODEL": "${user_config.executor_model}",
+        "HERMIT_DESKTOP_EXECUTOR_BASE_URL": "${user_config.executor_base_url}",
+        "HERMIT_DESKTOP_EXECUTOR_API_KEY": "${user_config.executor_api_key}"
+      }
+    }
+  },
+  "user_config": {
+    "executor_model": {
+      "type": "string",
+      "title": "Executor model",
+      "description": "Optional. For example, qwen3-coder:30b for Ollama or coder-small for a compatible API. Leave blank to preserve Hermit settings.",
+      "required": false
+    },
+    "executor_base_url": {
+      "type": "string",
+      "title": "OpenAI-compatible base URL",
+      "description": "Optional. Provide this together with an executor model to use any compatible Chat Completions API.",
+      "required": false
+    },
+    "executor_api_key": {
+      "type": "string",
+      "title": "Executor API key",
+      "description": "Optional unless your executor endpoint requires authentication.",
+      "sensitive": true,
+      "required": false
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32"],
+    "runtimes": {
+      "python": ">=3.11"
+    }
+  },
+  "tools": [
+    {
+      "name": "run_task",
+      "description": "Start a bounded repository task with Hermit."
+    },
+    {
+      "name": "check_task",
+      "description": "Get the status and result of a Hermit task."
+    },
+    {
+      "name": "reply_task",
+      "description": "Provide requested input or a permission decision to a Hermit task."
+    },
+    {
+      "name": "cancel_task",
+      "description": "Cancel a running or waiting Hermit task."
+    }
+  ]
+}

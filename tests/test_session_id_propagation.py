@@ -21,12 +21,6 @@ def test_task_request_with_parent_session_id():
     assert req.parent_session_id == 'abc123def456'
 
 
-def test_gateway_client_create_task_accepts_parent_session_id():
-    from hermit_agent.bridge_client import GatewayClient
-    sig = inspect.signature(GatewayClient.create_task)
-    assert 'parent_session_id' in sig.parameters, 'GatewayClient.create_task must accept parent_session_id'
-
-
 def test_agent_loop_accepts_session_id_parameter():
     from hermit_agent.loop import AgentLoop
     sig = inspect.signature(AgentLoop.__init__)

@@ -19,7 +19,7 @@ class MCPGatewayProxy:
     truncate_result: Callable[[str], tuple[str, dict]]
     remember_task_context: Callable[[str, str], None] | None = None
 
-    def run_task(self, *, task: str, cwd: str, model: str, max_turns: int) -> dict[str, Any]:
+    def run_task(self, *, task: str, cwd: str, model: str, max_turns: int, strategy: str = "single") -> dict[str, Any]:
         payload: dict[str, Any] = {
             "task": task,
             "cwd": cwd,
@@ -27,6 +27,8 @@ class MCPGatewayProxy:
         }
         if model:
             payload["model"] = model
+        if strategy:
+            payload["strategy"] = strategy
 
         r = self.gateway_client.post(
             f"{self.gateway_url}/tasks",
@@ -97,7 +99,7 @@ class MCPGatewayProxy:
                 method=method,
             )
 
-        if status == "done":
+        if status in {"done", "needs_review"}:
             result = data.get("result", "")
             if not full:
                 truncated, meta = self.truncate_result(result)

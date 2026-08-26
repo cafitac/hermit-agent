@@ -332,27 +332,3 @@ def test_apply_detected_backend_does_not_overwrite_local_model():
     info = LocalRuntimeInfo(backend=BACKEND_MLX, base_url="http://localhost:8080/v1", default_port=8080, model_hint="detected-model", available=True)
     result = apply_detected_backend(cfg, info, [info])
     assert result["local_model"] == "my-custom-model"
-
-
-# ── _check_local_backend (doctor) ──────────────────────────────────────
-
-def test_check_local_backend_nothing_configured_or_available():
-    """_check_local_backend warns when nothing is available."""
-    with patch("sys.platform", "linux"), \
-         patch("shutil.which", return_value=None):
-        from hermit_agent.doctor import _check_local_backend, DiagStatus
-        check = _check_local_backend(cwd="/tmp")
-        assert check.status == DiagStatus.WARN
-        assert "no local LLM backend" in check.message
-
-
-def test_check_local_backend_configured_and_healthy():
-    """_check_local_backend passes when configured backend is healthy."""
-    with patch("sys.platform", "linux"), \
-         patch("shutil.which", side_effect=lambda cmd: "/usr/bin/ollama" if cmd == "ollama" else None), \
-         patch("httpx.get", return_value=MagicMock(status_code=200)), \
-         patch("hermit_agent.config.load_settings", return_value={"local_backend": "ollama"}):
-        from hermit_agent.doctor import _check_local_backend, DiagStatus
-        check = _check_local_backend(cwd="/tmp")
-        assert check.status == DiagStatus.PASS
-        assert "ollama" in check.message

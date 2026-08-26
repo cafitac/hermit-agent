@@ -1,13 +1,13 @@
 {
   "name": "@cafitac/hermit-agent",
-  "version": "0.3.11",
-  "description": "npm-first launcher for the Hermit runtime — MCP executor for Claude Code and Codex",
+  "version": "0.4.0",
+  "description": "Cost-optimized MCP coding executor for Claude Code and Codex",
   "type": "module",
-  "scripts": {
-    "dev": "cd hermit-ui && npm run dev",
-    "build": "cd hermit-ui && npm run build",
-    "test": "pytest tests/ -q"
+  "bin": {
+    "hermit": "./bin/hermit.js"
   },
+  "files": ["bin/hermit.js"],
+  "scripts": {"test": "python -m pytest tests/ -q"},
   "engines": {
     "node": ">=20"
   },

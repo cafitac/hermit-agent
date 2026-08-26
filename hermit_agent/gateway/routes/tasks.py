@@ -4,7 +4,6 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from .._singletons import sse_manager
-from .. import task_commands as _task_commands
 from ..task_store import acquire_worker_slot
 from ..task_actions import is_waiting_for_reply
 from ..task_api import GatewayTaskAPI
@@ -16,30 +15,17 @@ router = APIRouter()
 api = GatewayTaskAPI()
 
 
-def _discover_available_models() -> list[dict[str, object]]:
-    return _task_commands._discover_available_models()
-
-
-def _handle_slash_command(text: str) -> str | None:
-    return _task_commands._handle_slash_command(text, discover_available_models=_discover_available_models)
-
-
 class TaskRequest(BaseModel):
     task: str
     cwd: str = ""
     model: str = ""
     max_turns: int = 200
+    strategy: str = "single"
     parent_session_id: str | None = None
 
 
 class ReplyRequest(BaseModel):
     message: str
-
-
-@router.get("/models")
-async def list_models():
-    """Return available models from the configured LLM."""
-    return {"models": _discover_available_models()}
 
 
 @router.post("/tasks")
@@ -48,13 +34,6 @@ async def create_task_endpoint(
     background: BackgroundTasks,
     auth: AuthContext = Depends(get_current_user),
 ):
-    # Handle slash commands immediately (bypass AgentLoop)
-    task_text = req.task.strip()
-    if task_text.startswith("/"):
-        instant_result = _handle_slash_command(task_text)
-        if instant_result is not None:
-            return {"task_id": "instant", "status": "done", "result": instant_result}
-
     if not acquire_worker_slot():
         raise gateway_error(ErrorCode.SERVER_BUSY)
 
@@ -65,6 +44,7 @@ async def create_task_endpoint(
         max_turns=req.max_turns,
         user=auth.user,
         parent_session_id=req.parent_session_id,
+        strategy=req.strategy,
     )
 
     background.add_task(
@@ -76,6 +56,7 @@ async def create_task_endpoint(
         model=launch.model,
         max_turns=launch.max_turns,
         state=launch.state,
+        strategy=launch.strategy,
     )
 
     return {"task_id": launch.task_id, "status": "running"}

@@ -13,7 +13,8 @@ by a per-platform block:
       }
     }
 
-Routing is still by model prefix — `glm-*` → `z.ai`, `:` → local ollama.
+Known model prefixes still work, and custom OpenAI-compatible providers can be
+selected explicitly in each routing entry.
 """
 from __future__ import annotations
 
@@ -23,6 +24,7 @@ import json
 from hermit_agent.config import (
     DEFAULTS,
     get_provider_cred,
+    get_routing_priority_models,
     load_settings,
     select_llm_endpoint,
 )
@@ -77,6 +79,30 @@ def test_select_llm_endpoint_external_reads_providers():
     url, key = select_llm_endpoint("glm-5.1", cfg)
     assert url == "https://api.z.ai/api/coding/paas/v4"
     assert key == "k-123"
+
+
+def test_explicit_provider_routes_an_arbitrary_openai_compatible_model(monkeypatch):
+    cfg = {
+        "providers": {
+            "budget-provider": {
+                "base_url": "https://llm.example.com/v1",
+                "api_key_env": "BUDGET_PROVIDER_API_KEY",
+            }
+        },
+        "routing": {
+            "priority_models": [{"model": "coder-small", "provider": "budget-provider"}]
+        },
+    }
+    monkeypatch.setenv("BUDGET_PROVIDER_API_KEY", "budget-key")
+
+    assert get_provider_cred(cfg, "budget-provider")["api_key"] == "budget-key"
+    assert select_llm_endpoint("coder-small", cfg, provider="budget-provider") == (
+        "https://llm.example.com/v1",
+        "budget-key",
+    )
+    assert get_routing_priority_models(cfg, available_only=True) == [
+        {"model": "coder-small", "provider": "budget-provider"}
+    ]
 
 
 def test_select_llm_endpoint_unknown_model_falls_back_to_empty():

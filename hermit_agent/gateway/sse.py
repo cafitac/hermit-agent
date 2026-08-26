@@ -10,7 +10,7 @@ logger = logging.getLogger("hermit_agent.gateway.sse")
 class SSEEvent(BaseModel):
     type: Literal[
         # Existing types (semantics unchanged)
-        "progress", "tool_result", "waiting", "reply_ack", "done", "error", "cancelled",
+        "progress", "tool_result", "waiting", "reply_ack", "done", "needs_review", "error", "cancelled",
         # New types (bridge TUI only)
         "streaming",      # token-level streaming → token field
         "stream_end",     # streaming end
@@ -41,7 +41,6 @@ class SSEEvent(BaseModel):
     new_model: str = ""
     permission: str = ""
     version: str = ""
-    auto_agents: int = 0
     modified_files: int = 0
 
 
@@ -85,7 +84,7 @@ class SSEManager:
                 try:
                     event = await asyncio.wait_for(q.get(), timeout=keepalive_interval)
                     yield f"data: {event.model_dump_json()}\n\n"
-                    if event.type in ("done", "error", "cancelled"):
+                    if event.type in ("done", "needs_review", "error", "cancelled"):
                         break
                 except asyncio.TimeoutError:
                     yield ": ping\n\n"

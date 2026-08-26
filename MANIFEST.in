@@ -1,0 +1,6 @@
+include LICENSE
+include README.md
+prune tests
+prune hermit-ui
+prune .dev
+global-exclude __pycache__ *.py[cod]

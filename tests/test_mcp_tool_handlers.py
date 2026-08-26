@@ -55,7 +55,7 @@ def test_run_task_request_resolves_cwd_and_formats_http_errors():
 
     parsed = json.loads(text)
     assert parsed == {'status': 'error', 'message': 'Gateway HTTP error: 503'}
-    proxy.run_task.assert_called_once_with(task='hello', cwd='/tmp/resolved', model='m', max_turns=5)
+    proxy.run_task.assert_called_once_with(task='hello', cwd='/tmp/resolved', model='m', max_turns=5, strategy='single')
     assert logs and '[err] run_task:' in logs[0]
 
 

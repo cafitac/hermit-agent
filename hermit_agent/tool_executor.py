@@ -21,8 +21,6 @@ def _tool_detail(name: str, arguments: dict) -> str:
         return arguments.get("path", "")
     if name == "glob" or name == "grep":
         return arguments.get("pattern", "")
-    if name == "sub_agent":
-        return arguments.get("description", "")
     return str(arguments)[:80]
 
 
@@ -112,9 +110,8 @@ class ToolExecutor:
         if name in ("edit_file", "write_file") and not result.is_error:
             path = arguments.get("path", "")
             if path:
-                agent.auto_agents.track_file_change(path)
-        if result.is_error:
-            agent.auto_agents.track_error(name, result.content)
+                if path not in agent.modified_files:
+                    agent.modified_files.append(path)
 
         agent._track_loop_state(name, arguments, result)
 
@@ -223,4 +220,3 @@ class ToolExecutor:
             model=agent.llm.model,
         )
         return False
-

@@ -1,54 +1,55 @@
 from __future__ import annotations
 
-import os
-import subprocess
+import json
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _check_ignore(path: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", "check-ignore", "-q", path],
-        cwd=REPO_ROOT,
-        text=True,
-        capture_output=True,
+def test_npm_package_exposes_the_minimal_hermit_launcher() -> None:
+    package = json.loads((REPO_ROOT / "package.json").read_text(encoding="utf-8"))
+
+    assert package["bin"] == {"hermit": "./bin/hermit.js"}
+    assert (REPO_ROOT / "bin" / "hermit.js").is_file()
+    assert not (REPO_ROOT / "hermit-ui" / "package.json").exists()
+
+
+def test_readme_starts_with_supported_install_paths() -> None:
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "hermit install claude" in readme
+    assert "hermit install codex" in readme
+    assert "hermit mcp-server" in readme
+    assert "### Claude Desktop" in readme
+    assert ".mcpb" in readme
+    assert "React" not in readme
+    assert "Hermes" not in readme
+
+
+def test_docs_contain_only_the_supported_user_guides() -> None:
+    docs = sorted(path.relative_to(REPO_ROOT / "docs").as_posix() for path in (REPO_ROOT / "docs").rglob("*.md"))
+
+    assert {"architecture/overview.md", "cc-setup.md", "codex-setup.md"}.issubset(docs)
+    assert not any("hermes" in path or "notification" in path or "variants" in path for path in docs)
+
+
+def test_legacy_cli_and_host_channel_modules_are_not_shipped() -> None:
+    removed = (
+        "hermit_agent/loop_commands/_workflow.py",
+        "hermit_agent/gateway/task_commands.py",
+        "hermit_agent/interfaces/telegram.py",
+        "hermit_agent/sinks/codex_channels.py",
+        "hermit_agent/codex_runner.py",
+        "hermit_agent/codex_channels_adapter.py",
+        "hermit_agent/channels_core/approvals.py",
+        "hermit_agent/interactive_sinks/codex_app.py",
+        "hermit_agent/auto_agents.py",
+        "hermit_agent/tools/agent/subagent.py",
+        "hermit_agent/codex/runner.py",
+        "hermit_agent/autopilot.py",
+        "hermit_agent/ralph.py",
+        "hermit_agent/ultraqa.py",
     )
 
-
-def test_refactor_planning_docs_are_trackable_but_other_dev_files_stay_ignored():
-    """Long-term refactor plans are intentional project docs, unlike local .dev scratch files."""
-    assert _check_ignore(".dev/refactor/README.md").returncode == 1
-    assert _check_ignore(".dev/refactor/roadmap.md").returncode == 1
-    assert _check_ignore(".dev/scratch.md").returncode == 0
-
-
-def test_developer_docs_use_python_module_pytest_entrypoint():
-    """The repo-local pytest script can have a stale shebang; docs should use python -m pytest."""
-    docs = {
-        path: (REPO_ROOT / path).read_text(encoding="utf-8")
-        for path in ("README.md", "CONTRIBUTING.md", "CLAUDE.md", "HERMIT.md")
-    }
-
-    forbidden_command_prefixes = (
-        ".venv/bin/pytest",
-        "pytest tests/",
-        "pytest   ",
-    )
-
-    offending_docs = {
-        path: line.strip()
-        for path, content in docs.items()
-        for line in content.splitlines()
-        if line.strip().startswith(forbidden_command_prefixes)
-    }
-
-    assert offending_docs == {}
-
-
-def test_npm_hermit_launcher_is_executable_for_local_global_installs():
-    """Local `npm install -g ./hermit-ui` links this file directly; it must be executable."""
-    launcher = REPO_ROOT / "hermit-ui" / "bin" / "hermit.js"
-
-    assert os.access(launcher, os.X_OK)
+    assert all(not (REPO_ROOT / path).exists() for path in removed)

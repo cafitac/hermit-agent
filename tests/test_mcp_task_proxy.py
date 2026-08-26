@@ -40,7 +40,7 @@ def test_proxy_run_task_starts_sse_bridge_for_running_tasks():
     assert result == {"status": "running", "task_id": "task-1"}
     assert calls["remember_task_context"] == ("task-1", "/tmp")
     assert calls["start_sse_bridge"] == "task-1"
-    client.post.assert_called_once()
+    assert client.post.call_args.kwargs["json"]["strategy"] == "single"
 
 
 def test_proxy_check_task_notifies_waiting_and_truncates_done():
@@ -56,6 +56,10 @@ def test_proxy_check_task_notifies_waiting_and_truncates_done():
     done = proxy.check_task(task_id="task-2", full=False)
     assert done["result"] == "truncated:full text"
     assert done["_truncation"] == {"truncated": True}
+
+    proxy, _client, _calls = _make_proxy({"status": "needs_review", "result": "review findings"})
+    needs_review = proxy.check_task(task_id="task-3", full=False)
+    assert needs_review["result"] == "truncated:review findings"
 
 
 def test_proxy_reply_and_cancel_return_running_and_cancelled():

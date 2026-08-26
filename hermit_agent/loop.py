@@ -14,12 +14,10 @@ import threading
 import uuid
 from typing import Callable
 
-from .auto_agents import AutoAgentRunner
 from .context import ContextManager, estimate_messages_tokens
 from .events import AgentEventEmitter
 from .hooks import HookEvent, HookRunner
 from .llm_client import LLMClientBase, LLMResponse
-from .memory import MemorySystem
 from .permissions import PermissionChecker, PermissionMode
 from .tools import Tool, ToolResult
 from .version import VERSION
@@ -43,15 +41,6 @@ from .session_lifecycle import SessionLifecycle
 from .tool_executor import ToolExecutor
 from .context_injector import ContextInjector
 from .stream_caller import StreamingCaller
-from .loop_commands import (  # noqa: F401 — re-exported for hermit_agent.loop consumers
-    SLASH_COMMANDS,
-    TRIGGER_AGENT,
-    TRIGGER_AGENT_SINGLE,
-    _load_rules,
-    _preprocess_slash_command,
-    _resolve_skill_references,
-    handle_slash_command,
-)
 
 
 class AgentLoop:
@@ -133,10 +122,6 @@ class AgentLoop:
         self._tool_repeat_count = 0
         self._ran_ralph = False
 
-        # Inject emitter + permission_checker into SubAgentTool (after permission_checker is created)
-        if "sub_agent" in self.tools:
-            setattr(self.tools["sub_agent"], "_emitter", self.emitter)
-            setattr(self.tools["sub_agent"], "_permission_checker", self.permission_checker)
         self.hook_runner = HookRunner()
         self.hook_runner.run_hooks(HookEvent.ON_START, "", {})
 
@@ -145,31 +130,16 @@ class AgentLoop:
 
         self.plugin_registry = PluginRegistry()
 
-        # Auto agents
-        self.auto_agents = AutoAgentRunner()
+        self.modified_files: list[str] = []
 
         self.context_manager = ContextManager(
             max_context_tokens=max_context_tokens,
             llm=llm,
         )
 
-        # Background agent tracking (fire-and-forget sub-agents)
-        self._background_results: list[dict] = []  # {"description": str, "result": str}
-
         # Loop-detection state (also reset in run(), but initialize here for path-independence)
         self._last_text_sig: str = ""
         self._text_repeat_count: int = 0
-        self._bg_lock = threading.Lock()
-
-        # Wire background queue into SubAgentTool if present
-        from .tools import SubAgentTool
-
-        for tool in self.tools.values():
-            if isinstance(tool, SubAgentTool):
-                tool._bg_queue = (self._background_results, self._bg_lock)
-                tool._bg_notify = self._on_bg_complete
-                break
-
         # Inject abort_event so long-blocking tools like BashTool can detect it.
         # (Preserves existing execute signature by passing via instance attribute.)
         for tool in self._all_tools.values():
@@ -214,7 +184,7 @@ class AgentLoop:
             self.tools = {k: v for k, v in self._all_tools.items() if k in allowed_names}
 
     def shutdown(self):
-        """Exit handling after running OnExit hooks. Auto-saves handoff when HERMIT_AUTO_WRAP=1."""
+        """Exit handling after running the lifecycle hooks."""
         self.hook_runner.run_hooks(HookEvent.ON_EXIT, "", {})
         # OnStop: fire hook + agent-learner process for WRITE path
         try:
@@ -226,30 +196,6 @@ class AgentLoop:
         except Exception as exc:
             _logger.warning("ON_STOP hook failed: %s", exc)
         self._run_agent_learner_on_stop()
-        try:
-            from .session_wrap import maybe_auto_wrap
-
-            maybe_auto_wrap(
-                cwd=self.cwd,
-                session_id=self.session_id,
-                modified_files=list(self.auto_agents.modified_files),
-                messages=self.messages,
-            )
-        except Exception as exc:
-            _logger.warning("auto-wrap failed: %s", exc)
-        # KB auto-extract — save domain knowledge to pending/ on session exit.
-        # Low quality risk because it's not injected into wiki/.
-        try:
-            if self.auto_agents.modified_files:
-                from .kb_learner import KBLearner
-
-                kb = KBLearner(cwd=self.cwd, llm=self.llm)
-                pytest_passed = bool(getattr(self, "_last_test_passed", False))
-                facts = kb.extract_from_conversation(self.messages, pytest_passed=pytest_passed)
-                for fact in (facts or []):
-                    kb.save_pending(fact)
-        except Exception as exc:
-            _logger.warning("KB save_pending failed: %s", exc)
 
     def _run_agent_learner_on_stop(self) -> None:
         """Fire-and-forget agent-learner process on stop if installed.
@@ -332,9 +278,6 @@ class AgentLoop:
             }
         )
         self._guards._last_test_hint_count = self._guards.consecutive_test_failures
-
-    def _on_bg_complete(self, description: str):
-        """Callback for background-agent completion notifications (overridable in bridge.py)."""
 
     def _pin_pr_body(self, user_message: str) -> None:
         """G41: on `/feature-develop <PR_NUM>` input, save the PR body to pinned_reminders.
@@ -486,18 +429,6 @@ class AgentLoop:
             if self.turn_count > self.MAX_TURNS:
                 self.last_termination = "max_turns"
                 return f"[Agent stopped: max turns ({self.MAX_TURNS}) reached]"
-
-            # Inject completed background agent results into context
-            with self._bg_lock:
-                if self._background_results:
-                    for bg in self._background_results:
-                        self.messages.append(
-                            {
-                                "role": "user",
-                                "content": f"[Background agent completed: {bg['description']}]\n{bg['result']}",
-                            }
-                        )
-                    self._background_results.clear()
 
             # Context compression check
             compact_level = self.context_manager.get_compact_level(self.messages)
@@ -745,4 +676,3 @@ class AgentLoop:
 
     def _call_streaming(self) -> LLMResponse | None:
         return self._stream_caller.call()
-

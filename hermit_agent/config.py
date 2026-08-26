@@ -44,17 +44,10 @@ DEFAULTS: dict[str, Any] = {
     # `anthropic_base_url`. See `get_provider_cred(cfg, platform)`.
     "providers": {},
     "ollama_url": "http://localhost:11434/v1",
-    "codex_command": "codex",
-    "codex_default_model": "gpt-5.4",
-    "codex_reasoning_effort": "medium",
-    "codex_channels": {
-        "enabled": False,
-        "host": "127.0.0.1",
-        "port": 4317,
-        "state_file": ".codex-channels/state.json",
-        "timeout_ms": 300000,
-        "package_spec": "@cafitac/codex-channels@0.1.31",
-        "npx_command": "npx",
+    "orchestration": {
+        "mode": "single",
+        "max_agents": 3,
+        "allow_parallel_writes": False,
     },
     "model": "qwen3-coder:30b",
     "routing": {
@@ -104,9 +97,6 @@ _ENV_MAP = {
     "HERMIT_LLM_URL": "llm_url",
     "HERMIT_API_KEY": "llm_api_key",
     "HERMIT_OLLAMA_URL": "ollama_url",
-    "HERMIT_CODEX_COMMAND": "codex_command",
-    "HERMIT_CODEX_DEFAULT_MODEL": "codex_default_model",
-    "HERMIT_CODEX_REASONING_EFFORT": "codex_reasoning_effort",
     "Z_AI_API_KEY": "llm_api_key",
     "HERMIT_LANG": "response_language",
     "HERMIT_COMPACT_INSTRUCTIONS": "compact_instructions",
@@ -146,7 +136,13 @@ def _resolve_platform_for_model(model: str) -> str | None:
 def get_provider_cred(cfg: dict[str, Any], platform: str) -> dict[str, Any]:
     providers = cfg.get("providers") or {}
     block = providers.get(platform)
-    return dict(block) if isinstance(block, dict) else {}
+    if not isinstance(block, dict):
+        return {}
+    credential = dict(block)
+    api_key_env = credential.get("api_key_env")
+    if not credential.get("api_key") and isinstance(api_key_env, str) and api_key_env.strip():
+        credential["api_key"] = os.environ.get(api_key_env.strip(), "")
+    return credential
 
 
 def _is_local_ollama_url(url: str) -> bool:
@@ -157,34 +153,19 @@ def _is_local_ollama_url(url: str) -> bool:
     return host in _LOCAL_HOSTS
 
 
-def is_model_configured(model: str, cfg: dict[str, Any]) -> bool:
-    platform = _resolve_platform_for_model(model)
+def is_model_configured(model: str, cfg: dict[str, Any], *, provider: str | None = None) -> bool:
+    platform = provider or _resolve_platform_for_model(model)
     if platform == "local":
         ollama_url = str(cfg.get("ollama_url", DEFAULTS["ollama_url"]) or DEFAULTS["ollama_url"])
         if not _is_local_ollama_url(ollama_url):
             return True
         return shutil.which("ollama") is not None
 
-    if is_codex_model_name(model):
-        codex_command = str(cfg.get("codex_command", DEFAULTS["codex_command"]) or DEFAULTS["codex_command"])
-        return shutil.which(codex_command) is not None
-
     if platform is None:
         return False
 
     cred = get_provider_cred(cfg, platform)
     return bool(cred.get("base_url")) and bool(cred.get("api_key"))
-
-
-def is_codex_model_name(model: str) -> bool:
-    lowered = (model or "").strip().lower()
-    return (
-        lowered.startswith("codex/")
-        or lowered == "codex"
-        or "-codex" in lowered
-        or lowered == "gpt-5.4"
-        or lowered.startswith("gpt-5.4-")
-    )
 
 
 def get_routing_priority_models(cfg: dict[str, Any], *, available_only: bool = False) -> list[dict[str, str]]:
@@ -201,17 +182,29 @@ def get_routing_priority_models(cfg: dict[str, Any], *, available_only: bool = F
         elif isinstance(item, dict):
             model = str(item.get("model", "") or "").strip()
             reasoning_effort = str(item.get("reasoning_effort", "") or "").strip() or None
+            provider = str(item.get("provider", "") or "").strip() or None
         else:
             continue
 
+        if isinstance(item, str):
+            provider = None
+
         if not model or model in seen_models:
             continue
-        if available_only and not is_model_configured(model, cfg):
-            continue
+        if available_only:
+            configured = (
+                is_model_configured(model, cfg, provider=provider)
+                if provider
+                else is_model_configured(model, cfg)
+            )
+            if not configured:
+                continue
 
         entry = {"model": model}
         if reasoning_effort:
             entry["reasoning_effort"] = reasoning_effort
+        if provider:
+            entry["provider"] = provider
         deduped.append(entry)
         seen_models.add(model)
     return deduped
@@ -224,14 +217,14 @@ def get_primary_model(cfg: dict[str, Any], *, available_only: bool = False) -> s
     return str(cfg.get("model", "") or "")
 
 
-def select_llm_endpoint(model: str, cfg: dict[str, Any]) -> tuple[str, str]:
+def select_llm_endpoint(model: str, cfg: dict[str, Any], *, provider: str | None = None) -> tuple[str, str]:
     """Resolves (base_url, api_key) for *model*.
 
     Ollama models (`name:tag`) route to `ollama_url`; external models
     look up their platform block in `providers`. Returns `('', '')`
     when nothing is configured so callers can raise.
     """
-    platform = _resolve_platform_for_model(model)
+    platform = provider or _resolve_platform_for_model(model)
     if platform == "local":
         return cfg.get("ollama_url", DEFAULTS["ollama_url"]), ""
     if platform is None:
@@ -306,6 +299,13 @@ def load_settings(cwd: str | None = None) -> dict[str, Any]:
         block.setdefault("base_url", legacy_url)
         block.setdefault("api_key", legacy_key)
     settings["providers"] = providers
+
+    # Claude Desktop's MCPB form is passed as process-local environment
+    # variables.  Apply it after legacy migration so it can replace routing
+    # without ever writing a sensitive key to ~/.hermit/settings.json.
+    from .desktop_config import apply_desktop_executor_override
+
+    apply_desktop_executor_override(settings)
 
     routing = settings.get("routing")
     if not isinstance(routing, dict):

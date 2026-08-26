@@ -18,6 +18,7 @@ class GatewayTaskAPI:
         max_turns: int,
         user: str,
         parent_session_id: str | None = None,
+        strategy: str = "",
     ) -> TaskLaunch:
         return prepare_task_launch(
             task=task,
@@ -26,6 +27,7 @@ class GatewayTaskAPI:
             max_turns=max_turns,
             user=user,
             parent_session_id=parent_session_id,
+            strategy=strategy,
         )
 
     def get_state(self, task_id: str) -> GatewayTaskState | None:
@@ -45,6 +47,8 @@ class GatewayTaskAPI:
             "status": state.status,
             "token_totals": state.token_totals,
         }
-        if state.status in ("done", "error"):
+        if state.orchestration:
+            result["orchestration"] = dict(state.orchestration)
+        if state.status in ("done", "error", "needs_review"):
             result["result"] = state.result
         return add_waiting_prompt_fields(result, state, include_kind=include_kind)

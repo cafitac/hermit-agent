@@ -12,13 +12,13 @@ TOOLS: list[dict[str, Any]] = [
         "name": "run_task",
         "description": (
             "Run a coding task using a local LLM (default: qwen3-coder:30b).\n"
-            "If background=true, immediately returns {status:'running', task_id} and runs in the background.\n"
-            "Check completion with check_task(task_id).\n"
+            "Immediately returns {status:'running', task_id}; poll with check_task(task_id).\n"
             "Return values:\n"
-            '  {status:"running", task_id} — running in background (when background=true).\n'
+            '  {status:"running", task_id} — task is running.\n'
             '  {status:"waiting", task_id, question, options} — HermitAgent is asking a question. '
             "Reply with reply_task(task_id, message).\n"
             '  {status:"done", result} — task completed.'
+            '  {status:"needs_review", result} — execution finished but Hermit found a likely issue.'
         ),
         "inputSchema": {
             "type": "object",
@@ -27,7 +27,12 @@ TOOLS: list[dict[str, Any]] = [
                 "cwd": {"type": "string", "description": "Absolute path of working directory"},
                 "model": {"type": "string", "description": f"Model to use (default: {DEFAULT_MODEL})"},
                 "max_turns": {"type": "integer", "description": "Maximum number of turns (default: 200)"},
-                "background": {"type": "boolean", "description": "If true, return task_id immediately and run in background (default: false)"},
+                "strategy": {
+                    "type": "string",
+                    "enum": ["single", "auto"],
+                    "description": "single uses one executor; auto adds read-only planning and review only for complex work.",
+                    "default": "single",
+                },
             },
             "required": ["task", "cwd"],
         },
@@ -55,6 +60,7 @@ TOOLS: list[dict[str, Any]] = [
             '  {status:"running"} — still running.\n'
             '  {status:"waiting", question, options} — user input required.\n'
             '  {status:"done", result} — completed.\n'
+            '  {status:"needs_review", result} — completed execution requires host review.\n'
             '  {status:"not_found"} — task_id not found (already completed and removed).\n'
             "Use full=true to retrieve the complete result without truncation."
         ),

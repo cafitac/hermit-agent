@@ -1,150 +1,119 @@
-<p align="center">
-  <img src="assets/branding/hermit-agent-banner.png" alt="HermitAgent" width="100%">
-</p>
+# Hermit
 
-# HermitAgent
+**Spend premium agent tokens on judgment, not on routine execution.**
 
-<p align="center">
-  <a href="https://github.com/cafitac/hermit-agent/releases"><img src="https://img.shields.io/github/v/release/cafitac/hermit-agent?cacheSeconds=300" alt="GitHub release"></a>
-  <a href="https://github.com/cafitac/hermit-agent/actions/workflows/python-tests.yml"><img src="https://github.com/cafitac/hermit-agent/actions/workflows/python-tests.yml/badge.svg" alt="Python tests"></a>
-  <a href="https://www.npmjs.com/package/@cafitac/hermit-agent"><img src="https://img.shields.io/npm/v/@cafitac/hermit-agent?cacheSeconds=300" alt="npm version"></a>
-  <a href="https://pypi.org/project/cafitac-hermit-agent/"><img src="https://img.shields.io/pypi/v/cafitac-hermit-agent?cacheSeconds=300" alt="PyPI version"></a>
-  <a href="https://www.npmjs.com/package/@cafitac/hermit-agent"><img src="https://img.shields.io/npm/dm/@cafitac/hermit-agent?cacheSeconds=300" alt="npm downloads"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-8b5cf6" alt="License: MIT"></a>
-</p>
+Hermit is a small MCP coding executor for Claude Code and Codex. Your paid host
+agent plans, reviews, and makes the important calls; Hermit delegates bounded
+repository work—reading and editing files, running commands, and tests—to a
+local or lower-cost executor model.
 
-> Hidden expert. Quiet executor.
->
-> Hermit is an MCP executor lane for Claude Code, Codex, and Hermes Agent. Your main agent handles planning, review, and conversation; Hermit quietly handles edits, test runs, refactors, commits, and other mechanical execution on a cheaper local or flat-rate model.
+It is a cost-optimization layer for agentic coding, not another chat UI and not
+a replacement for Claude Code or Codex.
 
-## How it works
-
+```text
+Claude Code or Codex: plan, review, decide
+                 │ delegate a bounded task
+                 ▼
+Hermit: execute with a local or lower-cost model
+                 │ return status and result
+                 ▼
+Claude Code or Codex: verify and continue
 ```
-┌──────────────┐
-│  Claude Code │──┐
-│  (planner)   │  │    ┌──────────────┐   any OpenAI-compatible   ┌───────┐
-└──────────────┘  ├───▶│  HermitAgent │ ────────────────────────▶ │  LLM  │
-                  │    │  (executor)  │                           └───────┘
-┌──────────────┐  │    └──────────────┘
-│    Codex     │──┘         ~$0 / flat-rate
-│  (planner)   │
-└──────────────┘
-```
-
-Claude Code, Codex, or Hermes Agent stays in charge of planning, interviewing, and review. Hermit takes the mechanical path: file edits, test runs, refactors, commits, and MCP-executed follow-through on predictable local or flat-rate execution models. In Claude Code the switch is often one word in a slash command: `/foo` → `/foo-hermit`.
-
-Why Hermit stands out:
-- Keep your best reasoning model on the work that needs judgment, not boilerplate execution.
-- Use MCP to turn planner decisions into concrete repo changes, tests, commits, and release operations.
-- Default to predictable local / flat-rate executor routing instead of silently drifting onto a paid hosted fallback.
-- Work across Claude Code, Codex, and Hermes Agent instead of forcing a single orchestrator stack.
-
-## Why not just use Claude Code or Codex directly?
-
-| Workflow shape | Claude Code / Codex alone | With Hermit |
-|---|---|---|
-| Planning and review | Strong | Still strong — keep the premium orchestrator where judgment matters |
-| Repetitive repo work | Expensive or token-heavy | Offloaded to a cheaper MCP executor lane |
-| Multi-step follow-through | Manual context handoff | MCP tasks can carry edits, tests, commits, and release ops through |
-| Default execution cost | Can drift onto paid hosted models | Defaults to local / flat-rate executor routing |
-| Team adoption | Tied to one orchestrator workflow | Works as a shared executor layer across Claude Code, Codex, and Hermes Agent |
-
-Hermit is not trying to replace your orchestrator. It gives you a second lane: use the premium model for judgment, and use Hermit for the mechanical throughput that makes repositories expensive to operate at scale.
-
-## Who Hermit is for
-
-- Teams that already like Claude Code or Codex for planning, review, and decision-making, but want a cheaper execution lane for repo mechanics.
-- Developers who want MCP-driven follow-through on edits, tests, commits, and release chores without spending premium-model tokens on every step.
-- Repositories that need predictable default routing toward local or flat-rate models instead of surprising hosted fallback costs.
-- Maintainers who want one shared executor layer even if different contributors prefer different orchestrators.
-
-## Who Hermit is not for
-
-- People looking for a brand-new premium planner to replace Claude Code or Codex entirely.
-- Teams that want a single hosted model to do both judgment and execution with no planner/executor split.
-- Workflows where provider cost predictability, MCP task handoff, and execution-lane separation are not important.
-
-If your pain is not "my orchestrator is smart enough, but too much of its time is spent on repetitive repo labor," Hermit is probably not the right abstraction.
 
 ## Install
 
+Requires Node.js 20+ and Python 3.11+.
+
+### Claude Code
+
 ```bash
 npm install -g @cafitac/hermit-agent
-hermit
+hermit install claude
 ```
 
-Requires Node.js 20+ and Python 3.11+. The npm package bootstraps a managed Python runtime under `~/.hermit/` on first run — no repo checkout needed. If Claude Code or Codex integration is still missing, `hermit` will offer guided setup automatically. You can still run `hermit install` directly when you want to force the full setup/repair flow.
-
-For CI or smoke checks that must avoid optional external hook installation, use `hermit install --yes --skip-agent-learner` plus any integration-specific skips you need.
-
-For Hermes Agent orchestration, start with the non-mutating snippet printer:
-- `hermit install --print-hermes-mcp-config` — print the exact `hermes mcp add ...` command without editing `~/.hermes`
-- `hermit install --fix-hermes-mcp` — explicitly register `hermit-channel` through the Hermes CLI
-- `hermit install --test-hermes-mcp` — run Hermes Agent's live `hermes mcp test hermit-channel` probe without changing config
-
-Setup guides:
-- Claude Code: `docs/cc-setup.md`
-- Codex: `docs/codex-setup.md`
-- Hermes Agent: `docs/hermes-setup.md`
-
-To upgrade: `hermit update`
-
-## Quick start
+### Codex
 
 ```bash
-hermit-mcp-server   # starts the gateway + MCP stdio server
+npm install -g @cafitac/hermit-agent
+hermit install codex
 ```
 
-Then connect your orchestrator:
+`hermit install` registers both hosts. Each command creates the local Hermit
+settings if needed, starts the local gateway when necessary, and registers this
+stable stdio command with the selected host:
 
-- Claude Code: see `docs/cc-setup.md`, then run `/feature-develop-hermit <task>`
-- Codex: see `docs/codex-setup.md`
-- Hermes Agent: see `docs/hermes-setup.md`
+```text
+hermit mcp-server
+```
 
-Claude Code remains the most polished slash-command path today, but all three integrations share the same core idea: the orchestrator does judgment, Hermit does the repetitive repo execution over MCP.
+Restart the selected host after installation. Check the result at any time:
 
-## Reference skills
-
-Four example skills ship under `.claude/commands/`. Fork these into your own workflow:
-
-| Command | Claude does | Hermit does |
-|---|---|---|
-| `/feature-develop-hermit` | interview + plan | implement + test |
-| `/code-apply-hermit` | read PR review | apply every change |
-| `/code-polish-hermit` | pick what to polish | lint/test loop |
-| `/code-push-hermit` | write PR description | commit + push |
-
-See [docs/hermit-variants.md](docs/hermit-variants.md) to add your own.
-
-## Executor LLM
-
-**ollama (local, free):**
 ```bash
-brew install ollama && ollama pull qwen3-coder:30b
+hermit doctor
 ```
 
-**z.ai (flat-rate subscription)** — add to `~/.hermit/settings.json`:
+`hermit install codex` writes the shared Codex MCP configuration, so the same
+registration is available to the Codex CLI, desktop app, and IDE extension
+after they restart.
+
+### Claude Desktop
+
+Download `hermit-<version>.mcpb` from the matching GitHub Release and either
+double-click it or choose **Settings → Extensions → Advanced settings → Install
+Extension** in Claude Desktop. The extension uses the MCPB UV runtime, so it
+installs Hermit's matching PyPI dependency without requiring a global Python
+installation. It creates `~/.hermit/settings.json` on first launch. It supports
+Claude Desktop on macOS and Windows; network access is required the first time
+UV resolves the Hermit package. The installation screen optionally accepts an
+executor model, OpenAI-compatible base URL, and API key; these values are held
+by Claude Desktop and applied only to Hermit's MCP process, rather than written
+to `settings.json`. Leave them blank to keep existing Hermit/Ollama settings.
+
+## Use
+
+Ask Claude Code or Codex to delegate a scoped repository task to Hermit. The
+MCP server exposes four task-lifecycle tools:
+
+- `run_task(task, cwd, model?, max_turns?)`
+- `check_task(task_id)`
+- `reply_task(task_id, message)`
+- `cancel_task(task_id)`
+
+`run_task` starts a background task. Poll with `check_task`; if Hermit needs
+input or a permission decision, reply through `reply_task`.
+
+Hermit also supplies a small server instruction that recommends delegation for
+bounded implementation, debugging, test, and maintenance work. It is guidance,
+not a hidden autopilot: the host still owns the decision to delegate.
+
+## Quality and multi-agent work
+
+`run_task` defaults to `strategy: "single"`: one low-cost executor, with no
+quality trade-off from orchestration. For a complex refactor, migration, or
+security-sensitive change, the host can use `strategy: "auto"`. Hermit then
+runs a read-only planner, one writing executor, and a read-only reviewer.
+
+There are never parallel writing agents. If the reviewer does not return
+`VERDICT: PASS`, Hermit returns `needs_review` instead of `done`; the host gets
+the execution result and review findings together. Users can make `auto` their
+local default in `~/.hermit/settings.json`:
+
 ```json
 {
-  "providers": {
-    "z.ai": {
-      "base_url": "https://api.z.ai/api/coding/paas/v4",
-      "api_key": "<your key>",
-      "anthropic_base_url": "https://api.z.ai/api/anthropic"
-    }
+  "orchestration": {
+    "mode": "auto",
+    "max_agents": 3,
+    "allow_parallel_writes": false
   }
 }
 ```
 
 ## Configuration
 
-`~/.hermit/settings.json` (created by `hermit install`):
+Settings live at `~/.hermit/settings.json`. The default executor routing is:
 
 ```json
 {
-  "gateway_url": "http://localhost:8765",
-  "gateway_api_key": "hermit-mcp-…",
-  "model": "__auto__",
   "routing": {
     "priority_models": [
       {"model": "glm-5.1"},
@@ -154,44 +123,53 @@ brew install ollama && ollama pull qwen3-coder:30b
 }
 ```
 
-`model` controls the default model for plain `hermit`. Set it to `__auto__` if you want plain `hermit` to follow the `routing.priority_models` order. `routing.priority_models` is the ordered fallback chain for auto-routing in gateway / interactive flows, and providers that are not configured or installed are skipped automatically. If `model` is a concrete name like `gpt-5.4`, plain `hermit` stays pinned to that model even if you reorder `priority_models`.
+Use Ollama for a local executor (no per-token API cost) or any provider that
+offers the OpenAI-compatible Chat Completions API with tool calling. Give a
+custom endpoint an explicit provider profile; model names never need to match
+a built-in prefix:
 
-By default, `hermit install` now keeps Codex out of `routing.priority_models` and treats it as an explicit opt-in executor path instead of an automatic fallback. This is intentional: local / flat-rate executor models stay the safe default, while Codex remains available when a user explicitly pins it or adds it back to routing. That separation makes billing behavior more predictable, keeps executor defaults aligned with Hermit's "cheap mechanical work" role, and avoids surprising auto-routing onto a paid hosted model.
+```json
+{
+  "providers": {
+    "budget-provider": {
+      "base_url": "https://llm.example.com/v1",
+      "api_key_env": "BUDGET_PROVIDER_API_KEY"
+    }
+  },
+  "routing": {
+    "priority_models": [
+      {"model": "coder-small", "provider": "budget-provider"},
+      {"model": "qwen3-coder:30b"}
+    ]
+  }
+}
+```
+
+Codex is a supported MCP host; it is not part of the default executor fallback
+chain.
 
 ## Architecture
 
-- **AgentLoop** — LLM turn → tool call → result → compact on context fill
-- **Gateway** — FastAPI relay in front of the executor (routing, 429 failover, dashboard at `:8765`)
-- **MCP server** — `run_task` / `reply_task` / `check_task` / `cancel_task`
-- **TUI** — optional React+Ink terminal UI for standalone interactive sessions (`hermit`)
+```text
+Claude Code or Codex
+        │ MCP over stdio
+        ▼
+  hermit mcp-server
+        │ REST + task status
+        ▼
+ FastAPI gateway (:8765)
+        ▼
+ AgentLoop → repository tools → local/flat-rate LLM
+```
 
-## Tests
+The gateway owns background execution, cancellation, permission waits, model
+routing, and task state. The MCP process stays small and transports only the
+four public task operations.
+
+## Development
 
 ```bash
 .venv/bin/python -m pytest tests/
 ```
 
-## Status
-
-Early, working, MIT. No release cadence guarantees.
-
-## License
-
-MIT — see [LICENSE](LICENSE).
-
-## See also
-
-- [docs/cc-setup.md](docs/cc-setup.md) — Claude Code MCP registration details
-- [docs/codex-setup.md](docs/codex-setup.md) — Codex setup, marketplace registration, and runtime verification
-- [docs/hermes-setup.md](docs/hermes-setup.md) — Hermes Agent setup, explicit registration, and live MCP smoke checks
-- [docs/hermit-variants.md](docs/hermit-variants.md) — the Claude Code `-hermit` skill family
-- [docs/measure-savings.md](docs/measure-savings.md) — cost-savings measurement protocol
-- [docs/open-source-positioning.md](docs/open-source-positioning.md) — short public-facing copy for descriptions, releases, and future social previews
-- [docs/release-notes-template.md](docs/release-notes-template.md) — reusable release-note framing that matches Hermit's planner/executor positioning
-- [docs/social-preview-ops.md](docs/social-preview-ops.md) — how to review, export, and upload the GitHub social-preview image
-- [docs/assets/hermit-readme-hero.svg](docs/assets/hermit-readme-hero.svg) — README hero graphic for the planner/executor split
-- [docs/assets/hermit-social-preview.svg](docs/assets/hermit-social-preview.svg) — final editable social-preview asset for repo cards and launch posts
-- [docs/assets/hermit-social-preview.png](docs/assets/hermit-social-preview.png) — ready-to-upload GitHub social-preview export
-- [docs/assets/hermit-social-preview-review.html](docs/assets/hermit-social-preview-review.html) — local review page for checking the social-preview composition before export
-- [CHANGELOG.md](CHANGELOG.md) — notable release and policy changes
-- [benchmarks/](benchmarks/) — reproducible task specs and community datapoints
+Hermit is MIT licensed and currently in alpha.

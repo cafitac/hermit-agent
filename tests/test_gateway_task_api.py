@@ -36,3 +36,17 @@ def test_task_api_status_payload_for_done_task_includes_result():
         "token_totals": {"prompt_tokens": 0, "completion_tokens": 0},
         "result": "complete",
     }
+
+
+def test_task_api_exposes_orchestration_and_needs_review_result() -> None:
+    api = GatewayTaskAPI()
+    state = GatewayTaskState(task_id="task-3")
+    state.status = "needs_review"
+    state.result = "executor result\n\n[Quality review]\nVERDICT: NEEDS_REVIEW"
+    state.orchestration = {"stages": ["planner", "executor", "reviewer"], "quality_gate": True}
+
+    payload = api.status_payload(state, include_kind=False)
+
+    assert payload["status"] == "needs_review"
+    assert payload["orchestration"]["quality_gate"] is True
+    assert "VERDICT: NEEDS_REVIEW" in str(payload["result"])

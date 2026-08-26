@@ -276,8 +276,6 @@ _HERMIT_TOOL_SUBS: list[tuple[str, str]] = [
     (r'Skill\s*\(\s*"([^"]+)"\s*\)', r'run_skill(name="\1")'),
     # AskUserQuestion → ask_user_question
     (r'\bAskUserQuestion\b', 'ask_user_question'),
-    # Task(subagent_type="...") → sub_agent
-    (r'Task\s*\(\s*subagent_type="[^"]*"[^)]*\)', 'sub_agent'),
     # `Write` tool → `write_file` tool  (spec/file save)
     (r'`Write` tool', '`write_file` tool'),
     # state_write / state_read → implemented under the same name in HermitAgent (no change needed)

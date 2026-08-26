@@ -17,6 +17,7 @@ class TaskLaunch:
     max_turns: int
     task: str
     user: str
+    strategy: str
 
 
 def create_registered_task_state(task_id: str | None = None) -> tuple[str, GatewayTaskState]:
@@ -33,6 +34,7 @@ def prepare_task_launch(
     model: str | None,
     max_turns: int,
     user: str,
+    strategy: str = "",
     parent_session_id: str | None = None,
 ) -> TaskLaunch:
     task_id, state = create_registered_task_state()
@@ -45,4 +47,5 @@ def prepare_task_launch(
         max_turns=max_turns,
         task=task,
         user=user,
+        strategy=strategy,
     )

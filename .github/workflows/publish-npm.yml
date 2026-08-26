@@ -1,19 +1,16 @@
-name: Publish npm + PyPI
+name: Release Hermit
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
     inputs:
-      force_publish:
-        description: "Publish even if this commit only changes release metadata files"
-        required: false
+      confirm_publish:
+        description: "Publish the npm, PyPI, and Claude Desktop artifacts for the committed version"
+        required: true
         default: false
         type: boolean
 
 concurrency:
-  group: publish-main
+  group: release-hermit
   cancel-in-progress: false
 
 permissions:
@@ -21,85 +18,8 @@ permissions:
   id-token: write
 
 jobs:
-  classify_release:
-    runs-on: ubuntu-latest
-    outputs:
-      should_publish: ${{ steps.classify.outputs.should_publish }}
-      reason: ${{ steps.classify.outputs.reason }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Classify release trigger
-        id: classify
-        shell: bash
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          FORCE_PUBLISH: ${{ github.event.inputs.force_publish || 'false' }}
-          COMMIT_MESSAGE: ${{ github.event.head_commit.message || '' }}
-          BEFORE_SHA: ${{ github.event.before }}
-          CURRENT_SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
-            if [[ "$FORCE_PUBLISH" == "true" ]]; then
-              echo "should_publish=true" >> "$GITHUB_OUTPUT"
-              echo "reason=manual workflow_dispatch with force_publish=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "should_publish=false" >> "$GITHUB_OUTPUT"
-              echo "reason=manual workflow_dispatch requires force_publish=true" >> "$GITHUB_OUTPUT"
-            fi
-            exit 0
-          fi
-
-          if [[ "$COMMIT_MESSAGE" == *"[skip release]"* ]]; then
-            echo "should_publish=false" >> "$GITHUB_OUTPUT"
-            echo "reason=commit message requested [skip release]" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          if [[ "$COMMIT_MESSAGE" =~ ^chore:\ release\ v[0-9] ]]; then
-            echo "should_publish=false" >> "$GITHUB_OUTPUT"
-            echo "reason=release write-back commit detected" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          mapfile -t changed_files < <(git diff --name-only "$BEFORE_SHA" "$CURRENT_SHA")
-          printf 'Changed files (%s):\n' "${#changed_files[@]}"
-          printf ' - %s\n' "${changed_files[@]}"
-
-          if [[ ${#changed_files[@]} -eq 0 ]]; then
-            echo "should_publish=false" >> "$GITHUB_OUTPUT"
-            echo "reason=no changed files detected" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          release_only=true
-          for path in "${changed_files[@]}"; do
-            case "$path" in
-              pyproject.toml|hermit-ui/package.json)
-                ;;
-              *)
-                release_only=false
-                break
-                ;;
-            esac
-          done
-
-          if [[ "$release_only" == "true" ]]; then
-            echo "should_publish=false" >> "$GITHUB_OUTPUT"
-            echo "reason=release metadata only change" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          echo "should_publish=true" >> "$GITHUB_OUTPUT"
-          echo "reason=code or package payload changed" >> "$GITHUB_OUTPUT"
-
-  test:
-    needs: classify_release
-    if: needs.classify_release.outputs.should_publish == 'true'
+  verify:
+    if: github.event.inputs.confirm_publish == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -110,335 +30,136 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install package + test dependencies
+      - name: Install package and test dependencies
         run: pip install -e ".[test]"
-      - name: Run pytest suite
+      - name: Run test suite
         run: pytest tests/ -q
 
-  determine_version:
-    needs:
-      - classify_release
-      - test
-    if: needs.classify_release.outputs.should_publish == 'true'
+  build_release_assets:
+    needs: verify
     runs-on: ubuntu-latest
     outputs:
-      next_version: ${{ steps.version.outputs.next_version }}
-      release_tag: ${{ steps.version.outputs.release_tag }}
-      published_version: ${{ steps.version.outputs.published_version }}
-      local_version: ${{ steps.version.outputs.local_version }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v6
-
       - uses: actions/setup-node@v6
         with:
           node-version: "22"
-
-      - name: Determine next patch version from registry
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Read and verify the committed release version
         id: version
         shell: bash
         run: |
           set -euo pipefail
-
-          PUBLISHED=$(npm view @cafitac/hermit-agent version 2>/dev/null || echo "0.0.0")
-          LOCAL=$(node -p "require('./hermit-ui/package.json').version")
-          BASE=$(printf '%s\n%s\n' "$PUBLISHED" "$LOCAL" | sort -V | tail -1)
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
-          NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))"
-
-          echo "published_version=$PUBLISHED" >> "$GITHUB_OUTPUT"
-          echo "local_version=$LOCAL" >> "$GITHUB_OUTPUT"
-          echo "next_version=$NEXT" >> "$GITHUB_OUTPUT"
-          echo "release_tag=v$NEXT" >> "$GITHUB_OUTPUT"
-
-          echo "Next version: $NEXT (registry: $PUBLISHED, local: $LOCAL)"
+          VERSION=$(node -p "require('./package.json').version")
+          PYTHON_VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          test "$VERSION" = "$PYTHON_VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Verify package and source checks
+        run: |
+          python -m pip install --upgrade pip build
+          python -m compileall -q hermit_agent
+          git diff --check
+          npm_config_cache="$(mktemp -d)" npm pack --dry-run
+      - name: Build PyPI distributions and Claude Desktop extension
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python -m build --outdir dist/python
+          python scripts/build_mcpb.py --version "$VERSION" --output "dist/hermit-$VERSION.mcpb"
+      - name: Verify public package contents
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: python scripts/verify_release_artifacts.py --version "$VERSION" --dist-dir dist/python
+      - name: Upload release assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: hermit-release-assets
+          path: dist/
+          if-no-files-found: error
 
   publish_npm:
-    needs:
-      - classify_release
-      - test
-      - determine_version
-    if: needs.classify_release.outputs.should_publish == 'true'
+    needs: build_release_assets
     runs-on: ubuntu-latest
-    env:
-      NEXT: ${{ needs.determine_version.outputs.next_version }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Set up Node
-        uses: actions/setup-node@v6
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
-          cache: npm
-          cache-dependency-path: hermit-ui/package-lock.json
-
-      - name: Install dependencies
-        working-directory: hermit-ui
-        run: npm ci
-
-      - name: Update npm package version for release
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          import os
-
-          path = Path('hermit-ui/package.json')
-          data = json.loads(path.read_text())
-          data['version'] = os.environ['NEXT']
-          path.write_text(json.dumps(data, indent=2) + '\n')
-          PY
-
-      - name: Build
-        working-directory: hermit-ui
-        run: npm run build
-
-      - name: Verify npm package shape
-        working-directory: hermit-ui
-        run: npm_config_cache="$(mktemp -d)" npm pack --dry-run
-
       - name: Publish npm package
-        working-directory: hermit-ui
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          VERSION: ${{ needs.build_release_assets.outputs.version }}
         shell: bash
         run: |
           set -euo pipefail
-          if npm view "@cafitac/hermit-agent@${NEXT}" version >/dev/null 2>&1; then
-            echo "Version ${NEXT} is already present on npm; skipping publish."
+          if npm view "@cafitac/hermit-agent@$VERSION" version >/dev/null 2>&1; then
+            echo "npm version $VERSION is already published."
             exit 0
           fi
           npm publish --access public --provenance
 
   publish_pypi:
-    needs:
-      - classify_release
-      - test
-      - determine_version
-    if: needs.classify_release.outputs.should_publish == 'true'
+    needs: build_release_assets
     runs-on: ubuntu-latest
-    env:
-      NEXT: ${{ needs.determine_version.outputs.next_version }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
+      - uses: actions/download-artifact@v4
         with:
-          python-version: "3.13"
-          cache: pip
-
-      - name: Update Python package version for release
-        shell: bash
-        run: |
-          set -euo pipefail
-          python - <<'PY'
-          import os
-          import re
-          from pathlib import Path
-
-          path = Path('pyproject.toml')
-          text = path.read_text()
-          text, count = re.subn(r'^version\s*=\s*"[^"]+"', f'version = "{os.environ["NEXT"]}"', text, count=1, flags=re.M)
-          if count != 1:
-            raise SystemExit('Failed to update pyproject version')
-          path.write_text(text)
-          PY
-
-      - name: Build Python distributions
-        run: |
-          pip install --upgrade pip build
-          python -m build
-
-      - name: Publish to PyPI
+          name: hermit-release-assets
+          path: dist
+      - name: Publish PyPI package
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: dist/python
           skip-existing: true
 
-  push_release_tag:
-    needs:
-      - classify_release
-      - determine_version
-      - publish_npm
-      - publish_pypi
-    if: needs.classify_release.outputs.should_publish == 'true'
+  publish_github_release:
+    needs: [build_release_assets, publish_npm, publish_pypi]
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
-      RELEASE_TAG: ${{ needs.determine_version.outputs.release_tag }}
+      RELEASE_TAG: ${{ needs.build_release_assets.outputs.tag }}
+      VERSION: ${{ needs.build_release_assets.outputs.version }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-
-      - name: Push release tag
+      - uses: actions/download-artifact@v4
+        with:
+          name: hermit-release-assets
+          path: dist
+      - name: Create release tag
         shell: bash
         run: |
           set -euo pipefail
-
-          if git ls-remote --exit-code --tags origin "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
-            echo "Tag ${RELEASE_TAG} already exists on origin; skipping tag push."
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
             exit 0
           fi
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}"
-          git tag "${RELEASE_TAG}" "${GITHUB_SHA}"
-          git push origin "${RELEASE_TAG}"
-          echo "Pushed release tag ${RELEASE_TAG}."
-
-  publish_github_release:
-    needs:
-      - classify_release
-      - determine_version
-      - push_release_tag
-    if: needs.classify_release.outputs.should_publish == 'true'
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
-      NEXT: ${{ needs.determine_version.outputs.next_version }}
-      RELEASE_TAG: ${{ needs.determine_version.outputs.release_tag }}
-      RELEASE_REASON: ${{ needs.classify_release.outputs.reason }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Create or update GitHub Release
+          git tag "$RELEASE_TAG" "$GITHUB_SHA"
+          git push origin "$RELEASE_TAG"
+      - name: Create or update GitHub Release with all artifacts
         shell: bash
         run: |
           set -euo pipefail
-
           NOTES=$(mktemp)
           python3 scripts/render_release_notes.py \
             --tag "$RELEASE_TAG" \
-            --version "$NEXT" \
+            --version "$VERSION" \
             --repo "${{ github.repository }}" \
-            --reason "$RELEASE_REASON" \
+            --reason "manual approved release" \
             --out "$NOTES"
-
           if gh release view "$RELEASE_TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG" \
-              --repo "${{ github.repository }}" \
-              --title "$RELEASE_TAG" \
-              --notes-file "$NOTES"
-            echo "Updated existing GitHub Release ${RELEASE_TAG}."
-            exit 0
+            gh release edit "$RELEASE_TAG" --repo "${{ github.repository }}" --title "$RELEASE_TAG" --notes-file "$NOTES"
+          else
+            gh release create "$RELEASE_TAG" --repo "${{ github.repository }}" --verify-tag --title "$RELEASE_TAG" --notes-file "$NOTES"
           fi
-
-          gh release create "$RELEASE_TAG" \
-            --repo "${{ github.repository }}" \
-            --verify-tag \
-            --title "$RELEASE_TAG" \
-            --notes-file "$NOTES"
-
-          echo "Created GitHub Release ${RELEASE_TAG}."
-
-  write_back_release_metadata:
-    needs:
-      - classify_release
-      - determine_version
-      - publish_github_release
-    if: needs.classify_release.outputs.should_publish == 'true'
-    runs-on: ubuntu-latest
-    env:
-      NEXT: ${{ needs.determine_version.outputs.next_version }}
-      PUSH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
-      GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Sync version files back to repository
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          python - <<'PY'
-          import json
-          import os
-          import re
-          from pathlib import Path
-
-          next_version = os.environ['NEXT']
-
-          pyproject = Path('pyproject.toml')
-          text = pyproject.read_text()
-          text, count = re.subn(r'^version\s*=\s*"[^"]+"', f'version = "{next_version}"', text, count=1, flags=re.M)
-          if count != 1:
-            raise SystemExit('Failed to update pyproject version')
-          pyproject.write_text(text)
-
-          package_json = Path('hermit-ui/package.json')
-          data = json.loads(package_json.read_text())
-          data['version'] = next_version
-          package_json.write_text(json.dumps(data, indent=2) + '\n')
-          PY
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/${{ github.repository }}"
-
-          git add pyproject.toml hermit-ui/package.json
-          git diff --staged --quiet && {
-            echo "Version files already match ${NEXT}; no write-back needed."
-            exit 0
-          }
-
-          git commit -m "chore: release v${NEXT} [skip ci] [skip release]"
-
-          if git push origin HEAD:main; then
-            echo "Write-back pushed directly to main."
-            exit 0
-          fi
-
-          echo "::warning::Direct write-back to main was blocked; opening a sync PR instead."
-          SYNC_BRANCH="release-sync/v${NEXT}"
-          git push -f origin HEAD:"${SYNC_BRANCH}"
-
-          PR_URL=$(gh pr list \
-            --repo "${{ github.repository }}" \
-            --head "${SYNC_BRANCH}" \
-            --base main \
-            --state open \
-            --json url \
-            --jq '.[0].url // empty')
-
-          if [[ -n "$PR_URL" ]]; then
-            echo "Reusing existing sync PR: $PR_URL"
-            exit 0
-          fi
-
-          PR_BODY=$(mktemp)
-          printf '%s\n' \
-            '## Summary' \
-            "- sync pyproject.toml and hermit-ui/package.json to the already-published release version ${NEXT}" \
-            '- preserve the GitHub Release, tag, and package registry state when protected main blocks workflow write-back' \
-            '' \
-            '## Why' \
-            "- npm, PyPI, and GitHub Release creation already succeeded for ${NEXT}" \
-            '- direct workflow push to main was rejected by the repository ruleset' \
-            '- this PR keeps repository version files aligned without requiring a force-bypass token' \
-            '' \
-            '## Notes' \
-            '- this branch is metadata-only and should not retrigger publish because the release classifier skips version-sync-only changes' \
-            '- generated by the publish workflow after a successful release' \
-            > "$PR_BODY"
-
-          gh pr create \
-            --repo "${{ github.repository }}" \
-            --base main \
-            --head "${SYNC_BRANCH}" \
-            --title "chore: sync released version files for v${NEXT}" \
-            --body-file "$PR_BODY" >/dev/null
-
-          echo "Opened sync PR for protected-main write-back fallback."
+          gh release upload "$RELEASE_TAG" dist/*.mcpb dist/python/* --repo "${{ github.repository }}" --clobber

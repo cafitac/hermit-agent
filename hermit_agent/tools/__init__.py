@@ -24,7 +24,6 @@ from .fs import (
     _format_edit_diff,
     _shorten_path,
 )
-from .agent import SubAgentTool
 from .interaction import AskUserQuestionTool
 from .memory import MemoryReadTool, MemoryWriteTool
 from .search import GlobTool, GrepTool
@@ -48,7 +47,6 @@ __all__ = [
     "WriteFileTool",
     "_format_edit_diff",
     "_shorten_path",
-    "SubAgentTool",
     "AskUserQuestionTool",
     "MemoryReadTool",
     "MemoryWriteTool",
@@ -101,24 +99,5 @@ def create_default_tools(cwd: str = ".", llm_client=None, question_queue=None, r
         StackOverflowSearchTool(),
         GitHubSearchTool(),
     ]
-
-    if llm_client:
-        tools.append(SubAgentTool(
-            llm_client=llm_client,
-            tools_factory=lambda c: create_default_tools(cwd=c),  # prevent recursion: sub-agent does not get sub_agent tool
-            cwd=cwd,
-        ))
-
-        from ..coordinator import CoordinatorTool
-        tools.append(CoordinatorTool(llm=llm_client, cwd=cwd))
-
-    # Load MCP tools (optional — silently skipped if not configured)
-    try:
-        from ..mcp import MCPManager, ensure_default_config
-        ensure_default_config()
-        mcp = MCPManager()
-        tools.extend(mcp.connect_all())
-    except Exception:
-        pass
 
     return tools

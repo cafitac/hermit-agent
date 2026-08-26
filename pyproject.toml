@@ -4,27 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cafitac-hermit-agent"
-version = "0.3.76"
-description = "MCP executor for Claude Code or Codex that offloads repetitive coding work to cheaper local or flat-rate models."
+version = "0.4.0"
+description = "Cost-optimized MCP coding executor for Claude Code and Codex."
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = "MIT"
 keywords = [
     "claude-code",
-    "coding-agent",
     "codex",
     "cost-optimization",
     "developer-tools",
-    "gateway",
-    "interactive",
-    "llm",
-    "llm-routing",
-    "local-llm",
     "mcp",
     "mcp-server",
-    "ollama",
-    "sub-agent",
-    "token-savings",
 ]
 authors = [
     { name = "HermitAgent Contributors" },
@@ -32,7 +23,6 @@ authors = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
@@ -47,10 +37,6 @@ dependencies = [
     "ddgs",
     "httpx",
     "requests",
-    # mcp pin: the channel-notification path uses the private
-    # `ServerSession._write_stream.send(...)` attribute (see
-    # .omc/plans/bun-channel-merge.md ADR). Pin the major version until
-    # `tests/test_mcp_notification_wire.py` is confirmed on the next one.
     "mcp>=1.27,<2.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
@@ -72,10 +58,8 @@ dev = [
 
 [project.scripts]
 hermit = "hermit_agent.__main__:main"
-hermit-agent = "hermit_agent.__main__:main"
 hermit-gateway = "hermit_agent.gateway.__main__:main"
 hermit-mcp-server = "hermit_agent.mcp_launcher:main"
-hermit-setup = "hermit_agent.cli_setup:main"
 
 [project.urls]
 Homepage = "https://github.com/cafitac/hermit-agent"

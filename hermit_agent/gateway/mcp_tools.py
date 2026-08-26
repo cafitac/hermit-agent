@@ -17,6 +17,7 @@ def register_mcp_tools(mcp) -> None:
         cwd: str = "",
         model: str = "",
         max_turns: int = 200,
+        strategy: str = "single",
     ) -> dict:
         """Run a task in the background and return the task_id."""
         from .errors import ErrorCode, mcp_error
@@ -30,6 +31,7 @@ def register_mcp_tools(mcp) -> None:
             model=model,
             max_turns=max_turns,
             user="mcp",
+            strategy=strategy,
         )
 
         asyncio.create_task(run_task_async(
@@ -40,6 +42,7 @@ def register_mcp_tools(mcp) -> None:
             model=launch.model,
             max_turns=launch.max_turns,
             state=launch.state,
+            strategy=launch.strategy,
         ))
 
         return {"status": "running", "task_id": launch.task_id}

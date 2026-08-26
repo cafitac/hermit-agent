@@ -11,6 +11,7 @@ def run_task_request(
     cwd: str,
     model: str,
     max_turns: int,
+    strategy: str = "single",
     proxy,
     result_to_text,
     gateway_health_check,
@@ -25,7 +26,7 @@ def run_task_request(
 
     try:
         resolved_cwd = resolve_git_cwd(cwd)
-        return result_to_text(proxy.run_task(task=task, cwd=resolved_cwd, model=model, max_turns=max_turns))
+        return result_to_text(proxy.run_task(task=task, cwd=resolved_cwd, model=model, max_turns=max_turns, strategy=strategy))
     except httpx.HTTPStatusError as exc:
         log_fn(f'[err] run_task: {exc}')
         return result_to_text({'status': 'error', 'message': f'Gateway HTTP error: {exc.response.status_code}'})
