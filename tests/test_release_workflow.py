@@ -19,6 +19,10 @@ def test_release_workflow_requires_explicit_approval_and_builds_all_public_artif
     assert "python scripts/verify_release_artifacts.py" in workflow
     assert "python -m build --outdir dist/python" in workflow
     assert "npm publish --access public --provenance" in workflow
+    assert "id-token: write" in workflow
+    assert 'node-version: "24"' in workflow
+    assert "NODE_AUTH_TOKEN" not in workflow
+    assert "secrets.NPM_TOKEN" not in workflow
     assert "gh-action-pypi-publish" in workflow
     assert "packages-dir: dist/python" in workflow
     assert "dist/*.mcpb dist/python/*" in workflow
