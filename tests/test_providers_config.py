@@ -23,6 +23,7 @@ import json
 
 from hermit_agent.config import (
     DEFAULTS,
+    configure_openai_compatible_provider,
     get_provider_cred,
     get_routing_priority_models,
     load_settings,
@@ -159,3 +160,23 @@ def test_load_settings_with_fresh_providers_no_regression(tmp_path, monkeypatch)
 
 def test_providers_empty_by_default():
     assert DEFAULTS["providers"] == {}
+
+
+def test_configure_openai_compatible_provider_stores_only_environment_reference(tmp_path, monkeypatch):
+    settings_path = tmp_path / "settings.json"
+    monkeypatch.setattr("hermit_agent.config.GLOBAL_SETTINGS_PATH", settings_path)
+
+    path = configure_openai_compatible_provider(
+        model="coder-small",
+        base_url="https://llm.example.com/v1/",
+        api_key_env="BUDGET_PROVIDER_API_KEY",
+        provider_name="budget",
+    )
+
+    payload = json.loads(path.read_text())
+    assert payload["providers"]["budget"] == {
+        "base_url": "https://llm.example.com/v1",
+        "api_key_env": "BUDGET_PROVIDER_API_KEY",
+    }
+    assert payload["routing"]["priority_models"][0] == {"model": "coder-small", "provider": "budget"}
+    assert '"api_key":' not in json.dumps(payload)

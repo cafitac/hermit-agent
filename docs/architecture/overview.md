@@ -45,6 +45,9 @@ through their own CLIs.
 - The MCP process validates and forwards task-lifecycle requests.
 - The gateway owns task state, cancellation, permissions, and model routing.
   Provider profiles can point at any OpenAI-compatible Chat Completions API.
+- The gateway binds only to loopback. If its default port is occupied, Hermit
+  chooses and persists another available loopback port without touching the
+  process that owns the original port.
 - `AgentLoop` owns LLM/tool iteration and context compaction.
 - Tools operate only in the task's requested working directory under the
   configured permission policy.

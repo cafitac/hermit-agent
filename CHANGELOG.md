@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.4.1
+
+### First-run readiness
+
+- Added executor readiness to `hermit doctor` and `hermit install`: host MCP
+  registration, gateway health, and a usable Ollama or OpenAI-compatible route
+  are reported separately.
+- Added `hermit configure` for OpenAI-compatible endpoints. It stores only an
+  API-key environment-variable name, never the API key itself.
+- The local gateway now binds to loopback by default. If its preferred port is
+  occupied by another process, Hermit leaves that process untouched and safely
+  moves to an available loopback port.
+- Corrected the README: target-specific install commands register only their
+  selected host; bare `hermit install` registers both.
+
 ## v0.4.0
 
 ### Breaking changes

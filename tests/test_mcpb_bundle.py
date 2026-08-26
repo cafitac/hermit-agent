@@ -52,7 +52,7 @@ def test_prepared_mcpb_directory_pins_the_matching_pypi_runtime(tmp_path) -> Non
 def test_readme_documents_the_three_supported_host_install_paths() -> None:
     readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
 
-    assert "### Claude Code" in readme
-    assert "### Codex" in readme
-    assert "### Claude Desktop" in readme
+    assert "Claude Code" in readme
+    assert "Codex" in readme
+    assert "Claude Desktop" in readme
     assert ".mcpb" in readme

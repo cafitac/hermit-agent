@@ -96,3 +96,27 @@ def test_cli_starts_mcp_server(monkeypatch) -> None:
     main_mod.main(["mcp-server"])
 
     assert calls == ["started"]
+
+
+def test_cli_configure_never_accepts_or_prints_an_api_key(monkeypatch, capsys) -> None:
+    from hermit_agent import __main__ as main_mod
+
+    calls: list[dict[str, str]] = []
+    monkeypatch.setattr(main_mod, "configure_openai_compatible_provider", lambda **kwargs: calls.append(kwargs) or "/tmp/settings.json")
+
+    main_mod.main(
+        [
+            "configure",
+            "--model",
+            "coder-small",
+            "--base-url",
+            "https://llm.example.com/v1",
+            "--api-key-env",
+            "BUDGET_KEY",
+        ]
+    )
+
+    assert calls == [{"model": "coder-small", "base_url": "https://llm.example.com/v1", "api_key_env": "BUDGET_KEY", "provider_name": "openai-compatible"}]
+    output = capsys.readouterr().out
+    assert "$BUDGET_KEY" in output
+    assert "--api-key" not in output

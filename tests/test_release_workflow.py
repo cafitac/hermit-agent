@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 
@@ -32,15 +33,17 @@ def test_legacy_duplicate_release_workflows_are_removed() -> None:
 
 def test_release_notes_renderer_does_not_depend_on_retired_docs(tmp_path: Path) -> None:
     output = tmp_path / "notes.md"
+    with (REPO_ROOT / "pyproject.toml").open("rb") as handle:
+        version = tomllib.load(handle)["project"]["version"]
 
     subprocess.run(
         [
             sys.executable,
             "scripts/render_release_notes.py",
             "--tag",
-            "v0.4.0",
+            f"v{version}",
             "--version",
-            "0.4.0",
+            version,
             "--repo",
             "cafitac/hermit-agent",
             "--out",
@@ -52,4 +55,21 @@ def test_release_notes_renderer_does_not_depend_on_retired_docs(tmp_path: Path) 
 
     notes = output.read_text(encoding="utf-8")
     assert "## Summary" in notes
-    assert "@cafitac/hermit-agent@0.4.0" in notes
+    assert f"@cafitac/hermit-agent@{version}" in notes
+
+
+def test_release_metadata_versions_are_aligned() -> None:
+    import json
+
+    with (REPO_ROOT / "pyproject.toml").open("rb") as handle:
+        version = tomllib.load(handle)["project"]["version"]
+    package = json.loads((REPO_ROOT / "package.json").read_text(encoding="utf-8"))
+    manifest = json.loads((REPO_ROOT / "mcpb/manifest.json").read_text(encoding="utf-8"))
+    mcpb_pyproject = (REPO_ROOT / "mcpb/pyproject.toml").read_text(encoding="utf-8")
+    changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+
+    assert package["version"] == version
+    assert manifest["version"] == version
+    assert f'version = "{version}"' in mcpb_pyproject
+    assert f"cafitac-hermit-agent=={version}" in mcpb_pyproject
+    assert f"## v{version}" in changelog

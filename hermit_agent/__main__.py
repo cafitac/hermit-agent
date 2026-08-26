@@ -17,6 +17,7 @@ from .mcp_install import (
     inspect_mcp_install,
     install_mcp_host,
 )
+from .config import configure_openai_compatible_provider
 from .version import VERSION
 
 
@@ -38,6 +39,12 @@ def _build_parser() -> argparse.ArgumentParser:
     doctor.add_argument("--cwd", default=os.getcwd())
     doctor.add_argument("--claude-command", default="claude", help="Claude Code CLI command (default: claude)")
     doctor.add_argument("--codex-command", default="codex", help="Codex CLI command (default: codex)")
+
+    configure = subparsers.add_parser("configure", help="Configure an OpenAI-compatible executor without storing its API key")
+    configure.add_argument("--model", required=True, help="Executor model name")
+    configure.add_argument("--base-url", required=True, help="OpenAI-compatible Chat Completions base URL")
+    configure.add_argument("--api-key-env", required=True, help="Environment variable containing the API key")
+    configure.add_argument("--provider", default="openai-compatible", help="Stable local name for this provider")
 
     subparsers.add_parser("mcp-server", help="Run the Hermit MCP server over stdio")
     return parser
@@ -69,6 +76,18 @@ def main(argv: list[str] | None = None) -> None:
         )
         print(format_doctor_summary(summary))
         raise SystemExit(0 if summary.succeeded and summary.gateway_status == "healthy" else 1)
+    if args.command == "configure":
+        try:
+            path = configure_openai_compatible_provider(
+                model=args.model,
+                base_url=args.base_url,
+                api_key_env=args.api_key_env,
+                provider_name=args.provider,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+        print(f"Configured {args.model} through {args.provider}. API key remains in ${args.api_key_env}; settings: {path}")
+        return
 
     parser.print_help()
 

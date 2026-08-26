@@ -2,7 +2,9 @@
 
 ```bash
 npm install -g @cafitac/hermit-agent
+# Configure Ollama first, or run `hermit configure` for an OpenAI-compatible executor.
 hermit install claude
+hermit doctor
 ```
 
 This uses Claude Code's user-scoped MCP command to register `hermit`
@@ -12,5 +14,5 @@ for every local project as:
 hermit mcp-server
 ```
 
-Restart Claude Code, then delegate a scoped coding task with the
-Hermit's MCP tools. Run `hermit doctor` if the server does not appear.
+`hermit doctor` must report a ready executor before the host delegates work.
+Restart Claude Code, then delegate a scoped coding task with Hermit's MCP tools.

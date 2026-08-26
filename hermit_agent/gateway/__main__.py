@@ -20,7 +20,7 @@ def main() -> None:
 
     import uvicorn
 
-    host = os.environ.get("HERMIT_GATEWAY_HOST", "0.0.0.0")
+    host = os.environ.get("HERMIT_GATEWAY_HOST", "127.0.0.1")
     port = int(os.environ.get("HERMIT_GATEWAY_PORT", "8765"))
 
     uvicorn.run(

@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from urllib.parse import urlparse
 from pathlib import Path
@@ -341,6 +342,49 @@ def init_settings_file(global_: bool = True, cwd: str | None = None) -> Path:
             ) + "\n",
             encoding="utf-8",
         )
+    return path
+
+
+def configure_openai_compatible_provider(
+    *, model: str, base_url: str, api_key_env: str, provider_name: str = "openai-compatible"
+) -> Path:
+    """Store only an environment-variable reference for an executor secret."""
+    model = model.strip()
+    base_url = base_url.strip().rstrip("/")
+    api_key_env = api_key_env.strip()
+    provider_name = provider_name.strip()
+    parsed = urlparse(base_url)
+    if not model:
+        raise ValueError("--model is required")
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("--base-url must be an absolute http(s) URL")
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", api_key_env):
+        raise ValueError("--api-key-env must be a valid environment variable name")
+    if not provider_name:
+        raise ValueError("--provider is required")
+
+    path = init_settings_file()
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Cannot safely update {path}; repair the JSON settings file first.") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"Cannot safely update {path}; settings must be a JSON object.")
+
+    providers = payload.get("providers")
+    providers = dict(providers) if isinstance(providers, dict) else {}
+    providers[provider_name] = {"base_url": base_url, "api_key_env": api_key_env}
+    payload["providers"] = providers
+
+    routing = payload.get("routing")
+    existing = routing.get("priority_models", []) if isinstance(routing, dict) else []
+    preserved = [
+        item
+        for item in existing
+        if not (isinstance(item, dict) and item.get("model") == model and item.get("provider") == provider_name)
+    ]
+    payload["routing"] = {"priority_models": [{"model": model, "provider": provider_name}, *preserved]}
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return path
 
 

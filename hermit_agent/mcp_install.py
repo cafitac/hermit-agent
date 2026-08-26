@@ -6,6 +6,7 @@ import json
 import os
 import secrets
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -13,12 +14,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.error import URLError
 from urllib.request import urlopen
+from urllib.parse import urlparse
 
-from .config import GLOBAL_SETTINGS_PATH, init_settings_file
+from .config import GLOBAL_SETTINGS_PATH, init_settings_file, load_settings
+from .executor_readiness import ExecutorReadiness, inspect_executor_readiness
 
 VALID_INSTALL_TARGETS = ("all", "claude", "codex")
 MCP_SERVER_NAME = "hermit"
-_GATEWAY_URL = "http://127.0.0.1:8765"
+_DEFAULT_GATEWAY_URL = "http://127.0.0.1:8765"
 
 
 @dataclass(frozen=True)
@@ -28,10 +31,11 @@ class MCPInstallSummary:
     gateway_status: str
     claude_status: str = "skipped"
     codex_status: str = "skipped"
+    executor: ExecutorReadiness | None = None
 
     @property
     def succeeded(self) -> bool:
-        return self.gateway_status in {"healthy", "started"} and all(
+        return self.gateway_status in {"healthy", "started"} and (self.executor is None or self.executor.ready) and all(
             status in {"registered", "unchanged", "skipped"}
             for status in (self.claude_status, self.codex_status)
         )
@@ -143,18 +147,60 @@ def ensure_codex_mcp_registered(*, codex_command: str) -> str:
     return "registered"
 
 
-def probe_gateway_health(*, timeout: float = 2.0) -> bool:
+def probe_gateway_health(*, gateway_url: str = _DEFAULT_GATEWAY_URL, timeout: float = 2.0) -> bool:
     try:
-        with urlopen(f"{_GATEWAY_URL}/health", timeout=timeout) as response:
+        with urlopen(f"{gateway_url.rstrip('/')}/health", timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (OSError, URLError, ValueError, json.JSONDecodeError):
         return False
     return payload.get("service") == "hermit_agent-gateway"
 
 
-def ensure_gateway_running(*, wait_seconds: float = 8.0) -> str:
-    if probe_gateway_health():
+def _is_local_gateway_url(gateway_url: str) -> bool:
+    parsed = urlparse(gateway_url)
+    return parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost", "::1"}
+
+
+def _is_port_available(host: str, port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind((host, port))
+        except OSError:
+            return False
+    return True
+
+
+def _find_available_port(host: str) -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind((host, 0))
+        return int(sock.getsockname()[1])
+
+
+def _persist_gateway_url(settings_path: Path, gateway_url: str) -> None:
+    payload = _read_json(settings_path)
+    payload["gateway_url"] = gateway_url
+    _write_json(settings_path, payload)
+
+
+def ensure_gateway_running(*, settings_path: Path | None = None, gateway_url: str | None = None, wait_seconds: float = 8.0) -> str:
+    settings_path = settings_path or GLOBAL_SETTINGS_PATH
+    gateway_url = gateway_url or str(load_settings().get("gateway_url", _DEFAULT_GATEWAY_URL))
+    if probe_gateway_health(gateway_url=gateway_url):
         return "healthy"
+    if not _is_local_gateway_url(gateway_url):
+        return "unreachable-external"
+
+    parsed = urlparse(gateway_url)
+    port = parsed.port or 8765
+    host = "127.0.0.1"
+    if not _is_port_available(host, port):
+        # Another process owns the port. Do not stop or modify it; persist a
+        # new loopback port before launching Hermit so future MCP processes use it.
+        port = _find_available_port(host)
+        gateway_url = f"http://{host}:{port}"
+        _persist_gateway_url(settings_path, gateway_url)
+
     bin_dir = Path(sys.executable).resolve().parent
     launcher = bin_dir / ("hermit-gateway.exe" if os.name == "nt" else "hermit-gateway")
     if not launcher.exists():
@@ -162,16 +208,19 @@ def ensure_gateway_running(*, wait_seconds: float = 8.0) -> str:
         if not found:
             return "missing-launcher"
         launcher = Path(found)
+    environment = os.environ.copy()
+    environment.update({"HERMIT_GATEWAY_HOST": host, "HERMIT_GATEWAY_PORT": str(port)})
     subprocess.Popen(
         [str(launcher)],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
+        env=environment,
     )
     deadline = time.monotonic() + wait_seconds
     while time.monotonic() < deadline:
-        if probe_gateway_health():
+        if probe_gateway_health(gateway_url=gateway_url):
             return "started"
         time.sleep(0.25)
     return "not-running"
@@ -184,10 +233,11 @@ def install_mcp_host(
         raise ValueError(f"Unknown install target: {target}")
     settings_path = init_settings_file()
     ensure_gateway_api_key(settings_path=settings_path)
-    gateway_status = ensure_gateway_running()
+    gateway_status = ensure_gateway_running(settings_path=settings_path)
     claude_status = register_claude_mcp(claude_command=claude_command) if target in {"all", "claude"} else "skipped"
     codex_status = ensure_codex_mcp_registered(codex_command=codex_command) if target in {"all", "codex"} else "skipped"
-    return MCPInstallSummary(target, str(settings_path), gateway_status, claude_status, codex_status)
+    executor = inspect_executor_readiness(load_settings(cwd=cwd))
+    return MCPInstallSummary(target, str(settings_path), gateway_status, claude_status, codex_status, executor)
 
 
 def inspect_mcp_install(
@@ -201,9 +251,10 @@ def inspect_mcp_install(
     return MCPInstallSummary(
         "all",
         str(GLOBAL_SETTINGS_PATH),
-        "healthy" if probe_gateway_health() else "not-running",
+        "healthy" if probe_gateway_health(gateway_url=str(load_settings(cwd=cwd).get("gateway_url", _DEFAULT_GATEWAY_URL))) else "not-running",
         inspect_claude_mcp_registration(claude_command=claude_command),
         codex_status,
+        inspect_executor_readiness(load_settings(cwd=cwd)),
     )
 
 
@@ -214,12 +265,23 @@ def format_install_summary(summary: MCPInstallSummary) -> str:
         lines.append(f"- Claude Code MCP: {summary.claude_status}")
     if summary.target in {"all", "codex"}:
         lines.append(f"- Codex MCP: {summary.codex_status}")
-    lines.append("Restart the selected host, then delegate a coding task to Hermit.")
+    if summary.executor:
+        lines.append(f"- Executor: {summary.executor.status}")
+        lines.extend(f"  - {detail}" for detail in summary.executor.routes)
+        lines.extend(f"  - Next: {hint}" for hint in summary.executor.guidance)
+    if summary.succeeded:
+        lines.append("Restart the selected host, then delegate a coding task to Hermit.")
+    else:
+        lines.append("MCP registration may be complete, but Hermit will not accept work until the items above are ready.")
     return "\n".join(lines)
 
 
 def format_doctor_summary(summary: MCPInstallSummary) -> str:
     lines = ["Hermit MCP readiness", f"- Gateway: {summary.gateway_status}", f"- Claude Code MCP: {summary.claude_status}", f"- Codex MCP: {summary.codex_status}"]
+    if summary.executor:
+        lines.append(f"- Executor: {summary.executor.status}")
+        lines.extend(f"  - {detail}" for detail in summary.executor.routes)
+        lines.extend(f"  - Next: {hint}" for hint in summary.executor.guidance)
     if not summary.succeeded or summary.gateway_status != "healthy":
         lines.append("Run `hermit install claude` or `hermit install codex` to repair the selected host.")
     return "\n".join(lines)

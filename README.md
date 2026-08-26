@@ -20,43 +20,83 @@ Hermit: execute with a local or lower-cost model
 Claude Code or Codex: verify and continue
 ```
 
-## Install
+## Install and run your first task
 
 Requires Node.js 20+ and Python 3.11+.
 
-### Claude Code
+Hermit deliberately does not use the Claude or Codex subscription as its
+executor. Before delegating work, configure either a local Ollama model or one
+OpenAI-compatible endpoint. `hermit doctor` verifies this explicitly, so a
+host registration alone is never presented as a working executor.
+
+### 1. Install Hermit
 
 ```bash
 npm install -g @cafitac/hermit-agent
+```
+
+### 2. Choose an executor
+
+For a local, no-per-token-cost executor:
+
+```bash
+ollama pull qwen3-coder:30b
+```
+
+For any OpenAI-compatible Chat Completions API, keep the secret in your shell
+or operating-system secret store and register only its environment-variable
+name:
+
+```bash
+export BUDGET_PROVIDER_API_KEY="…"
+hermit configure \
+  --model coder-small \
+  --base-url https://llm.example.com/v1 \
+  --api-key-env BUDGET_PROVIDER_API_KEY
+```
+
+`hermit configure` never accepts or writes an API key. It stores the endpoint,
+model, and environment-variable reference in `~/.hermit/settings.json`.
+
+### 3. Register the host
+
+#### Claude Code
+
+```bash
 hermit install claude
 ```
 
-### Codex
+#### Codex
 
 ```bash
-npm install -g @cafitac/hermit-agent
 hermit install codex
 ```
 
-`hermit install` registers both hosts. Each command creates the local Hermit
-settings if needed, starts the local gateway when necessary, and registers this
-stable stdio command with the selected host:
+`hermit install claude` registers only Claude Code, and `hermit install codex`
+registers only Codex. Bare `hermit install` registers both hosts. Each command
+creates local Hermit settings if needed, starts or recovers the local gateway,
+and registers this stable stdio command with the selected host:
 
 ```text
 hermit mcp-server
 ```
 
-Restart the selected host after installation. Check the result at any time:
+The gateway binds to loopback only. If another process owns its default port,
+Hermit leaves that process untouched and selects a free local port for its own
+gateway.
+
+### 4. Verify readiness
 
 ```bash
 hermit doctor
 ```
 
-`hermit install codex` writes the shared Codex MCP configuration, so the same
-registration is available to the Codex CLI, desktop app, and IDE extension
-after they restart.
+Only delegate work after it reports a ready executor. Restart the selected host
+after installation. `hermit install codex` writes the shared Codex MCP
+configuration, so the same registration is available to the Codex CLI, desktop
+app, and IDE extension after they restart.
 
-### Claude Desktop
+#### Claude Desktop
 
 Download `hermit-<version>.mcpb` from the matching GitHub Release and either
 double-click it or choose **Settings → Extensions → Advanced settings → Install
@@ -110,7 +150,10 @@ local default in `~/.hermit/settings.json`:
 
 ## Configuration
 
-Settings live at `~/.hermit/settings.json`. The default executor routing is:
+Settings live at `~/.hermit/settings.json`. `hermit configure` is the preferred
+way to configure a remote executor because it persists an environment-variable
+reference rather than an API key. The default routing tries a configured GLM
+provider first, then a locally installed Ollama model:
 
 ```json
 {
@@ -157,7 +200,7 @@ Claude Code or Codex
   hermit mcp-server
         │ REST + task status
         ▼
- FastAPI gateway (:8765)
+ FastAPI gateway (loopback)
         ▼
  AgentLoop → repository tools → local/flat-rate LLM
 ```

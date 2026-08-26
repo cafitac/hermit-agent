@@ -21,17 +21,18 @@ def test_readme_starts_with_supported_install_paths() -> None:
     assert "hermit install claude" in readme
     assert "hermit install codex" in readme
     assert "hermit mcp-server" in readme
-    assert "### Claude Desktop" in readme
+    assert "Claude Desktop" in readme
     assert ".mcpb" in readme
     assert "React" not in readme
     assert "Hermes" not in readme
+    assert "`hermit install claude` registers only Claude Code" in readme
+    assert "hermit configure" in readme
 
 
 def test_docs_contain_only_the_supported_user_guides() -> None:
     docs = sorted(path.relative_to(REPO_ROOT / "docs").as_posix() for path in (REPO_ROOT / "docs").rglob("*.md"))
 
-    assert {"architecture/overview.md", "cc-setup.md", "codex-setup.md"}.issubset(docs)
-    assert not any("hermes" in path or "notification" in path or "variants" in path for path in docs)
+    assert docs == ["architecture/overview.md", "cc-setup.md", "codex-setup.md"]
 
 
 def test_legacy_cli_and_host_channel_modules_are_not_shipped() -> None:
