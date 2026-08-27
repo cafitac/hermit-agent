@@ -101,7 +101,7 @@ jobs:
             echo "npm version $VERSION is already published."
             exit 0
           fi
-          npm publish --access public --provenance
+          env -u NODE_AUTH_TOKEN npm publish --access public --provenance
 
   publish_pypi:
     needs: build_release_assets
