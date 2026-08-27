@@ -24,6 +24,10 @@ def test_release_workflow_requires_explicit_approval_and_builds_all_public_artif
     assert "secrets.NPM_TOKEN" not in workflow
     assert "gh-action-pypi-publish" in workflow
     assert "packages-dir: dist/python" in workflow
+    assert "verify_public_install:" in workflow
+    assert '"@cafitac/hermit-agent@$VERSION"' in workflow
+    assert "Verify clean public npm install and MCP stdio handshake" in workflow
+    assert '["run_task", "reply_task", "check_task", "cancel_task"]' in workflow
     assert "dist/*.mcpb dist/python/*" in workflow
 
 

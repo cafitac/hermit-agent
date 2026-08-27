@@ -119,8 +119,57 @@ jobs:
           packages-dir: dist/python
           skip-existing: true
 
-  publish_github_release:
+  verify_public_install:
     needs: [build_release_assets, publish_npm, publish_pypi]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.build_release_assets.outputs.version }}
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          package-manager-cache: false
+      - name: Verify clean public npm install and MCP stdio handshake
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERIFY_ROOT="$(mktemp -d)"
+          export HERMIT_HOME="$VERIFY_ROOT/home"
+          mkdir -p "$HERMIT_HOME" "$VERIFY_ROOT/work"
+          npm install --prefix "$VERIFY_ROOT/npm" "@cafitac/hermit-agent@$VERSION"
+          set +e
+          "$VERIFY_ROOT/npm/node_modules/.bin/hermit" doctor --cwd "$VERIFY_ROOT/work"
+          doctor_status=$?
+          set -e
+          test "$doctor_status" -eq 1
+          HERMIT_MCP_AUTO_GATEWAY=0 "$HERMIT_HOME/.hermit/npm-runtime/venv/bin/python3" - <<'PY'
+          import anyio
+          import os
+          from mcp import ClientSession
+          from mcp.client.stdio import StdioServerParameters, stdio_client
+
+          root = os.environ["HERMIT_HOME"].removesuffix("/home")
+
+          async def verify() -> None:
+              parameters = StdioServerParameters(
+                  command=f"{root}/npm/node_modules/.bin/hermit",
+                  args=["mcp-server"],
+                  cwd=f"{root}/work",
+                  env={**os.environ, "HERMIT_MCP_AUTO_GATEWAY": "0", "HERMIT_LOG_PATH": os.devnull},
+              )
+              async with stdio_client(parameters) as (read_stream, write_stream):
+                  async with ClientSession(read_stream, write_stream) as session:
+                      initialized = await session.initialize()
+                      tools = await session.list_tools()
+              assert initialized.serverInfo.name == "hermit"
+              assert [tool.name for tool in tools.tools] == ["run_task", "reply_task", "check_task", "cancel_task"]
+
+          anyio.run(verify)
+          PY
+
+  publish_github_release:
+    needs: [build_release_assets, publish_npm, publish_pypi, verify_public_install]
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
