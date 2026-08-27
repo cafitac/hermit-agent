@@ -7,11 +7,13 @@ into Claude Code or Codex and used from the host agent through MCP.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 
 from .mcp_install import (
     VALID_INSTALL_TARGETS,
+    doctor_report,
     format_doctor_summary,
     format_install_summary,
     inspect_mcp_install,
@@ -39,6 +41,7 @@ def _build_parser() -> argparse.ArgumentParser:
     doctor.add_argument("--cwd", default=os.getcwd())
     doctor.add_argument("--claude-command", default="claude", help="Claude Code CLI command (default: claude)")
     doctor.add_argument("--codex-command", default="codex", help="Codex CLI command (default: codex)")
+    doctor.add_argument("--json", action="store_true", dest="json_output", help="Emit a paste-safe machine-readable readiness report")
 
     configure = subparsers.add_parser("configure", help="Configure an OpenAI-compatible executor without storing its API key")
     configure.add_argument("--model", required=True, help="Executor model name")
@@ -74,7 +77,10 @@ def main(argv: list[str] | None = None) -> None:
             claude_command=args.claude_command,
             codex_command=args.codex_command,
         )
-        print(format_doctor_summary(summary))
+        if args.json_output:
+            print(json.dumps(doctor_report(summary), ensure_ascii=False, indent=2))
+        else:
+            print(format_doctor_summary(summary))
         raise SystemExit(0 if summary.succeeded and summary.gateway_status == "healthy" else 1)
     if args.command == "configure":
         try:

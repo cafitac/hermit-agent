@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 
 
@@ -85,6 +87,37 @@ def test_cli_doctor_is_read_only(monkeypatch, capsys) -> None:
     assert exc.value.code == 0
     assert calls == [{"cwd": "/tmp/workspace", "claude_command": "claude", "codex_command": "codex"}]
     assert "Hermit MCP readiness" in capsys.readouterr().out
+
+
+def test_cli_doctor_json_is_machine_readable_and_paste_safe(monkeypatch, capsys) -> None:
+    from hermit_agent import __main__ as main_mod
+    from hermit_agent.executor_readiness import ExecutorReadiness
+    from hermit_agent.mcp_install import MCPInstallSummary
+
+    monkeypatch.setattr(
+        main_mod,
+        "inspect_mcp_install",
+        lambda **_kwargs: MCPInstallSummary(
+            target="all",
+            settings_path="/tmp/settings.json",
+            gateway_status="failed (Bearer super-secret-token)",
+            claude_status="registered",
+            codex_status="failed (https://alice:password@example.com)",
+            executor=ExecutorReadiness("needs-configuration", ("token=top-secret",), ("Run `ollama pull qwen3-coder:30b`.",)),
+        ),
+    )
+
+    with pytest.raises(SystemExit) as exc:
+        main_mod.main(["doctor", "--json"])
+
+    report = json.loads(capsys.readouterr().out)
+    assert exc.value.code == 1
+    assert report["schema_version"] == 1
+    assert report["hosts"] == {"claude_code": "registered", "codex": "failed (https://[REDACTED]@example.com)"}
+    assert report["gateway"] == {"status": "failed (Bearer [REDACTED])"}
+    assert report["executor"]["details"] == ["token=[REDACTED]"]
+    assert "super-secret-token" not in json.dumps(report)
+    assert "top-secret" not in json.dumps(report)
 
 
 def test_cli_starts_mcp_server(monkeypatch) -> None:

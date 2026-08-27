@@ -76,7 +76,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: python scripts/verify_release_artifacts.py --version "$VERSION" --dist-dir dist/python
       - name: Upload release assets
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: hermit-release-assets
           path: dist/
@@ -106,16 +106,16 @@ jobs:
   publish_pypi:
     needs: build_release_assets
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: hermit-release-assets
           path: dist
       - name: Publish PyPI package
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
           packages-dir: dist/python
           skip-existing: true
 
@@ -179,7 +179,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           name: hermit-release-assets
           path: dist

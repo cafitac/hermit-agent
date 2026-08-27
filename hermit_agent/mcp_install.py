@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -22,6 +23,13 @@ from .executor_readiness import ExecutorReadiness, inspect_executor_readiness
 VALID_INSTALL_TARGETS = ("all", "claude", "codex")
 MCP_SERVER_NAME = "hermit"
 _DEFAULT_GATEWAY_URL = "http://127.0.0.1:8765"
+_URL_CREDENTIALS = re.compile(r"(?i)((?:https?|wss?)://)[^/@\s]+@")
+_BEARER_TOKEN = re.compile(r"(?i)\bbearer\s+[^\s,;\)\]\}]+")
+_SECRET_ASSIGNMENT = re.compile(
+    r"(?i)\b(api[_-]?key|gateway[_-]?api[_-]?key|token|secret|password|passwd)\b\s*([:=])\s*(?:\"[^\"]*\"|'[^']*'|[^\s,;]+)"
+)
+_SECRET_QUERY = re.compile(r"(?i)([?&](?:api[_-]?key|token|secret|password|passwd)=[^&#\s]*)")
+_KNOWN_SECRET = re.compile(r"\b(?:sk|rk|pk|ghp|gho|pypi)-[A-Za-z0-9_-]{8,}\b|\bhermit-mcp-[a-f0-9]{16,}\b", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -43,6 +51,34 @@ class MCPInstallSummary:
 
 def resolve_hermit_mcp_stdio_entry() -> dict[str, object]:
     return {"type": "stdio", "command": "hermit", "args": ["mcp-server"]}
+
+
+def redact_diagnostic_text(value: str) -> str:
+    """Remove credentials from diagnostics that users may paste into an issue."""
+    redacted = _URL_CREDENTIALS.sub(r"\1[REDACTED]@", value)
+    redacted = _BEARER_TOKEN.sub("Bearer [REDACTED]", redacted)
+    redacted = _SECRET_ASSIGNMENT.sub(lambda match: f"{match.group(1)}{match.group(2)}[REDACTED]", redacted)
+    redacted = _SECRET_QUERY.sub(lambda match: match.group(1).split("=", 1)[0] + "=[REDACTED]", redacted)
+    return _KNOWN_SECRET.sub("[REDACTED]", redacted)
+
+
+def doctor_report(summary: MCPInstallSummary) -> dict[str, object]:
+    """Return the stable, paste-safe report used by ``hermit doctor --json``."""
+    executor = summary.executor
+    return {
+        "schema_version": 1,
+        "ready": summary.succeeded and summary.gateway_status == "healthy",
+        "hosts": {
+            "claude_code": redact_diagnostic_text(summary.claude_status),
+            "codex": redact_diagnostic_text(summary.codex_status),
+        },
+        "gateway": {"status": redact_diagnostic_text(summary.gateway_status)},
+        "executor": {
+            "status": redact_diagnostic_text(executor.status if executor else "unknown"),
+            "details": [redact_diagnostic_text(detail) for detail in (executor.routes if executor else ())],
+            "guidance": [redact_diagnostic_text(hint) for hint in (executor.guidance if executor else ())],
+        },
+    }
 
 
 def _read_json(path: Path) -> dict:
@@ -260,15 +296,15 @@ def inspect_mcp_install(
 
 def format_install_summary(summary: MCPInstallSummary) -> str:
     title = "Hermit MCP installation complete." if summary.succeeded else "Hermit MCP installation needs attention."
-    lines = [title, f"- Gateway: {summary.gateway_status}"]
+    lines = [title, f"- Gateway: {redact_diagnostic_text(summary.gateway_status)}"]
     if summary.target in {"all", "claude"}:
-        lines.append(f"- Claude Code MCP: {summary.claude_status}")
+        lines.append(f"- Claude Code MCP: {redact_diagnostic_text(summary.claude_status)}")
     if summary.target in {"all", "codex"}:
-        lines.append(f"- Codex MCP: {summary.codex_status}")
+        lines.append(f"- Codex MCP: {redact_diagnostic_text(summary.codex_status)}")
     if summary.executor:
-        lines.append(f"- Executor: {summary.executor.status}")
-        lines.extend(f"  - {detail}" for detail in summary.executor.routes)
-        lines.extend(f"  - Next: {hint}" for hint in summary.executor.guidance)
+        lines.append(f"- Executor: {redact_diagnostic_text(summary.executor.status)}")
+        lines.extend(f"  - {redact_diagnostic_text(detail)}" for detail in summary.executor.routes)
+        lines.extend(f"  - Next: {redact_diagnostic_text(hint)}" for hint in summary.executor.guidance)
     if summary.succeeded:
         lines.append("Restart the selected host, then delegate a coding task to Hermit.")
     else:
@@ -277,11 +313,19 @@ def format_install_summary(summary: MCPInstallSummary) -> str:
 
 
 def format_doctor_summary(summary: MCPInstallSummary) -> str:
-    lines = ["Hermit MCP readiness", f"- Gateway: {summary.gateway_status}", f"- Claude Code MCP: {summary.claude_status}", f"- Codex MCP: {summary.codex_status}"]
-    if summary.executor:
-        lines.append(f"- Executor: {summary.executor.status}")
-        lines.extend(f"  - {detail}" for detail in summary.executor.routes)
-        lines.extend(f"  - Next: {hint}" for hint in summary.executor.guidance)
+    report = doctor_report(summary)
+    hosts = report["hosts"]
+    gateway = report["gateway"]
+    executor = report["executor"]
+    lines = [
+        "Hermit MCP readiness",
+        f"- Gateway: {gateway['status']}",
+        f"- Claude Code MCP: {hosts['claude_code']}",
+        f"- Codex MCP: {hosts['codex']}",
+        f"- Executor: {executor['status']}",
+    ]
+    lines.extend(f"  - {detail}" for detail in executor["details"])
+    lines.extend(f"  - Next: {hint}" for hint in executor["guidance"])
     if not summary.succeeded or summary.gateway_status != "healthy":
         lines.append("Run `hermit install claude` or `hermit install codex` to repair the selected host.")
     return "\n".join(lines)

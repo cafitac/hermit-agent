@@ -21,6 +21,19 @@ Output (trim to the relevant part):
 ...
 ```
 
+## Safe Hermit diagnosis
+
+For installation, MCP registration, gateway, or executor problems, run this
+from the affected repository and paste its output here:
+
+```bash
+hermit doctor --json
+```
+
+The report masks API keys, gateway keys, Bearer tokens, and URL credentials.
+Still do **not** attach `~/.hermit/settings.json`, `.env` files, terminal
+history, or any original key/token value.
+
 ## Expected
 
 What you thought would happen.

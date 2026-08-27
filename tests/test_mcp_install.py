@@ -118,6 +118,25 @@ def test_doctor_reports_missing_host_registration(monkeypatch, tmp_path) -> None
     assert summary.codex_status == "missing"
 
 
+def test_doctor_text_summary_redacts_diagnostic_credentials() -> None:
+    from hermit_agent.mcp_install import MCPInstallSummary, format_doctor_summary
+
+    text = format_doctor_summary(
+        MCPInstallSummary(
+            target="all",
+            settings_path="/tmp/settings.json",
+            gateway_status="failed (gateway_api_key=hermit-mcp-abcdef0123456789)",
+            claude_status="failed (Bearer gho_very-secret-token)",
+            codex_status="failed (https://user:password@example.com?api_key=super-secret)",
+            executor=ExecutorReadiness("needs-configuration", ("pypi-very-secret-token",), ()),
+        )
+    )
+
+    assert "[REDACTED]" in text
+    for secret in ("abcdef0123456789", "gho_very-secret-token", "user:password", "super-secret", "pypi-very-secret-token"):
+        assert secret not in text
+
+
 def test_gateway_port_conflict_moves_hermit_without_touching_the_other_process(monkeypatch, tmp_path) -> None:
     from hermit_agent import mcp_install
 

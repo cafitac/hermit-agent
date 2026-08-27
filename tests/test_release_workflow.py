@@ -20,9 +20,13 @@ def test_release_workflow_requires_explicit_approval_and_builds_all_public_artif
     assert "python -m build --outdir dist/python" in workflow
     assert "env -u NODE_AUTH_TOKEN npm publish --access public --provenance" in workflow
     assert "id-token: write" in workflow
+    assert "publish_pypi:\n    needs: build_release_assets\n    runs-on: ubuntu-latest\n    permissions:\n      id-token: write" in workflow
     assert 'node-version: "24"' in workflow
     assert "secrets.NPM_TOKEN" not in workflow
     assert "gh-action-pypi-publish" in workflow
+    assert "actions/upload-artifact@v7" in workflow
+    assert "actions/download-artifact@v7" in workflow
+    assert "secrets.PYPI_API_TOKEN" not in workflow
     assert "packages-dir: dist/python" in workflow
     assert "verify_public_install:" in workflow
     assert '"@cafitac/hermit-agent@$VERSION"' in workflow

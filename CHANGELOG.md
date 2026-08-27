@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.4.3
+
+### Safe diagnosis and tokenless publishing
+
+- Added `hermit doctor --json`, a stable paste-safe readiness report that keeps
+  Claude Code, Codex, gateway, and executor diagnostics separate while
+  redacting credentials from both JSON and human-readable output.
+- Added a dedicated maintainer host-acceptance checklist and a safe GitHub
+  issue-reporting path for installation diagnostics.
+- Updated release artifact actions and changed PyPI publishing to GitHub OIDC
+  Trusted Publishing. The legacy PyPI token remains available only until the
+  first successful OIDC release is independently verified.
+
 ## v0.4.2
 
 ### First-task reliability

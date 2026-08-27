@@ -32,10 +32,22 @@ def test_readme_starts_with_supported_install_paths() -> None:
     assert "does not create a task" in readme
 
 
-def test_docs_contain_only_the_supported_user_guides() -> None:
+def test_docs_contain_supported_user_guides_and_the_maintainer_checklist() -> None:
     docs = sorted(path.relative_to(REPO_ROOT / "docs").as_posix() for path in (REPO_ROOT / "docs").rglob("*.md"))
 
-    assert docs == ["architecture/overview.md", "cc-setup.md", "codex-setup.md"]
+    assert docs == [
+        "architecture/overview.md",
+        "cc-setup.md",
+        "codex-setup.md",
+        "maintainer/release-checklist.md",
+    ]
+
+
+def test_bug_template_requests_only_paste_safe_doctor_output() -> None:
+    template = (REPO_ROOT / ".github/ISSUE_TEMPLATE/bug_report.md").read_text(encoding="utf-8")
+
+    assert "hermit doctor --json" in template
+    assert "do **not** attach `~/.hermit/settings.json`" in template
 
 
 def test_legacy_cli_and_host_channel_modules_are_not_shipped() -> None:
