@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.4.2
+
+### First-task reliability
+
+- `run_task` now checks executor readiness before it creates a background task.
+  Missing OpenAI-compatible configuration, an unavailable Ollama service, or a
+  missing Ollama model returns the same actionable diagnosis shown by
+  `hermit doctor` and `hermit install`.
+- Clarified the README's Claude Code, Codex, and Claude Desktop first-task
+  flow, including the cost-optimization role and safe recovery path.
+- Switched npm publishing to GitHub Actions Trusted Publishing with OIDC; the
+  release workflow no longer reads an npm token.
+
 ## v0.4.1
 
 ### First-run readiness

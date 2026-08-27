@@ -5,6 +5,7 @@ from unittest.mock import Mock
 
 import httpx
 
+from hermit_agent.executor_readiness import ExecutorReadiness
 from hermit_agent.mcp_tool_handlers import (
     cancel_task_request,
     check_task_request,
@@ -57,6 +58,34 @@ def test_run_task_request_resolves_cwd_and_formats_http_errors():
     assert parsed == {'status': 'error', 'message': 'Gateway HTTP error: 503'}
     proxy.run_task.assert_called_once_with(task='hello', cwd='/tmp/resolved', model='m', max_turns=5, strategy='single')
     assert logs and '[err] run_task:' in logs[0]
+
+
+def test_run_task_request_refuses_to_start_when_executor_is_not_ready():
+    proxy = Mock()
+
+    text = run_task_request(
+        task="hello",
+        cwd="/tmp",
+        model="",
+        max_turns=5,
+        proxy=proxy,
+        result_to_text=_result_to_text,
+        gateway_health_check=lambda: True,
+        resolve_git_cwd=lambda cwd: cwd,
+        log_fn=lambda _: None,
+        executor_readiness_check=lambda: ExecutorReadiness(
+            "needs-configuration",
+            ("Ollama model missing: qwen3-coder:30b",),
+            ("Run `ollama pull qwen3-coder:30b`.",),
+        ),
+    )
+
+    parsed = json.loads(text)
+    assert parsed["status"] == "needs_configuration"
+    assert "did not start a task" in parsed["message"]
+    assert "Ollama model missing: qwen3-coder:30b" in parsed["message"]
+    assert "ollama pull qwen3-coder:30b" in parsed["message"]
+    proxy.run_task.assert_not_called()
 
 
 def test_reply_check_cancel_task_requests_map_404_to_not_found():

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import httpx
 
+from .executor_readiness import executor_not_ready_message
+
 
 def run_task_request(
     *,
@@ -17,7 +19,16 @@ def run_task_request(
     gateway_health_check,
     resolve_git_cwd,
     log_fn,
+    executor_readiness_check=None,
 ) -> str:
+    if executor_readiness_check is not None:
+        readiness = executor_readiness_check()
+        if not readiness.ready:
+            return result_to_text({
+                "status": "needs_configuration",
+                "message": executor_not_ready_message(readiness),
+            })
+
     if not gateway_health_check():
         return result_to_text({
             'status': 'error',

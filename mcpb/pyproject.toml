@@ -1,8 +1,8 @@
 [project]
 name = "hermit-desktop-extension"
-version = "0.4.1"
+version = "0.4.2"
 description = "Claude Desktop MCPB launcher for Hermit"
 requires-python = ">=3.11"
 dependencies = [
-    "cafitac-hermit-agent==0.4.1",
+    "cafitac-hermit-agent==0.4.2",
 ]

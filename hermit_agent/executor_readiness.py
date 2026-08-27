@@ -24,6 +24,14 @@ class ExecutorReadiness:
         return self.status == "ready"
 
 
+def executor_not_ready_message(readiness: ExecutorReadiness) -> str:
+    """Return the safe, actionable failure text shared by every entry point."""
+    details = "; ".join(readiness.routes) or "No executor route configured"
+    next_steps = " ".join(readiness.guidance)
+    suffix = f" Next: {next_steps}" if next_steps else " Run `hermit doctor` for setup guidance."
+    return f"Executor is not ready; Hermit did not start a task. {details}.{suffix}"
+
+
 def _ollama_tags_url(base_url: str) -> str:
     parsed = urlparse(base_url)
     path = parsed.path.rstrip("/")

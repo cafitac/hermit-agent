@@ -2,10 +2,10 @@
 
 **Spend premium agent tokens on judgment, not on routine execution.**
 
-Hermit is a small MCP coding executor for Claude Code and Codex. Your paid host
-agent plans, reviews, and makes the important calls; Hermit delegates bounded
-repository work—reading and editing files, running commands, and tests—to a
-local or lower-cost executor model.
+Hermit is a cost-optimized MCP coding executor for Claude Code, Codex, and
+Claude Desktop. Your paid host agent plans, reviews, and makes the important
+calls; Hermit delegates bounded repository work—reading and editing files,
+running commands, and tests—to a local or lower-cost executor model.
 
 It is a cost-optimization layer for agentic coding, not another chat UI and not
 a replacement for Claude Code or Codex.
@@ -96,6 +96,19 @@ after installation. `hermit install codex` writes the shared Codex MCP
 configuration, so the same registration is available to the Codex CLI, desktop
 app, and IDE extension after they restart.
 
+### 5. Delegate one bounded task
+
+In Claude Code, Codex, or Claude Desktop, ask the host agent:
+
+```text
+Use Hermit's run_task tool to add a focused test for <change> in this repository.
+```
+
+Hermit returns a task ID immediately. The host polls it with `check_task`, and
+uses `reply_task` only if Hermit asks a question or permission decision. If the
+executor is not ready, `run_task` does not create a task; it returns the same
+specific diagnosis and setup command shown by `hermit doctor`.
+
 #### Claude Desktop
 
 Download `hermit-<version>.mcpb` from the matching GitHub Release and either
@@ -111,8 +124,8 @@ to `settings.json`. Leave them blank to keep existing Hermit/Ollama settings.
 
 ## Use
 
-Ask Claude Code or Codex to delegate a scoped repository task to Hermit. The
-MCP server exposes four task-lifecycle tools:
+Ask Claude Code, Codex, or Claude Desktop to delegate a scoped repository task
+to Hermit. The MCP server exposes four task-lifecycle tools:
 
 - `run_task(task, cwd, model?, max_turns?)`
 - `check_task(task_id)`

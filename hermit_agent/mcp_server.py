@@ -11,6 +11,7 @@ import atexit
 import sys
 
 from .config import load_settings
+from .executor_readiness import inspect_executor_readiness
 from .mcp_gateway import gateway_headers, gateway_health_check, init_gateway_client
 from .mcp_paths import resolve_git_cwd
 from .mcp_results import HEAD_SIZE, RESULT_CAP, TAIL_SIZE
@@ -68,6 +69,10 @@ def _resolve_git_cwd(cwd: str) -> str:
     return resolve_git_cwd(cwd, log_fn=_log)
 
 
+def _executor_readiness():
+    return inspect_executor_readiness(load_settings())
+
+
 def _noop(*_args, **_kwargs) -> None:
     return None
 
@@ -109,6 +114,7 @@ def _build_mcp_app():
             gateway_health_check=_gateway_health_check,
             resolve_git_cwd=_resolve_git_cwd,
             log_fn=_log,
+            executor_readiness_check=_executor_readiness,
         )
 
     @mcp_app.tool(description=TOOLS[1]["description"])

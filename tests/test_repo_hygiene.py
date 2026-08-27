@@ -22,11 +22,14 @@ def test_readme_starts_with_supported_install_paths() -> None:
     assert "hermit install codex" in readme
     assert "hermit mcp-server" in readme
     assert "Claude Desktop" in readme
+    assert "Claude Code, Codex, and\nClaude Desktop" in readme
     assert ".mcpb" in readme
     assert "React" not in readme
     assert "Hermes" not in readme
     assert "`hermit install claude` registers only Claude Code" in readme
     assert "hermit configure" in readme
+    assert "Delegate one bounded task" in readme
+    assert "does not create a task" in readme
 
 
 def test_docs_contain_only_the_supported_user_guides() -> None:

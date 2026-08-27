@@ -45,6 +45,21 @@ def test_readiness_reports_missing_ollama_model(monkeypatch) -> None:
     assert "ollama pull qwen3-coder:30b" in "\n".join(readiness.guidance)
 
 
+def test_readiness_distinguishes_an_unavailable_ollama_service(monkeypatch) -> None:
+    def unavailable(*_args, **_kwargs):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr("hermit_agent.executor_readiness.httpx.get", unavailable)
+
+    readiness = inspect_executor_readiness(
+        {"ollama_url": "http://localhost:11434/v1", "routing": {"priority_models": [{"model": "qwen3-coder:30b"}]}}
+    )
+
+    assert readiness.status == "needs-configuration"
+    assert "Ollama unavailable" in "\n".join(readiness.routes)
+    assert "Start Ollama" in "\n".join(readiness.guidance)
+
+
 def test_readiness_accepts_installed_ollama_model(monkeypatch) -> None:
     response = MagicMock(status_code=200)
     response.json.return_value = {"models": [{"name": "qwen3-coder:30b:latest"}]}
